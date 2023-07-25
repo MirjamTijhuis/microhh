@@ -1895,9 +1895,21 @@ void Radiation_rrtmgp_rt<TF>::exec(Thermo<TF>& thermo, double time, Timeloop<TF>
 
         // get aerosol mixing ratios
         if (sw_aerosol && sw_aerosol_timedep)
+        {
             aerosol.get_radiation_fields(aerosol_concs);
-        this->aerosol_concs_gpu = std::make_unique<Gas_concs_gpu>(aerosol_concs);
-
+//            this->aerosol_concs_gpu = std::make_unique<Gas_concs_gpu>(aerosol_concs);
+            aerosol_concs_gpu->set_vmr("aermr01", aerosol_concs.get_vmr("aermr01"));
+            aerosol_concs_gpu->set_vmr("aermr02", aerosol_concs.get_vmr("aermr02"));
+            aerosol_concs_gpu->set_vmr("aermr03", aerosol_concs.get_vmr("aermr03"));
+            aerosol_concs_gpu->set_vmr("aermr04", aerosol_concs.get_vmr("aermr04"));
+            aerosol_concs_gpu->set_vmr("aermr05", aerosol_concs.get_vmr("aermr05"));
+            aerosol_concs_gpu->set_vmr("aermr06", aerosol_concs.get_vmr("aermr06"));
+            aerosol_concs_gpu->set_vmr("aermr07", aerosol_concs.get_vmr("aermr07"));
+            aerosol_concs_gpu->set_vmr("aermr08", aerosol_concs.get_vmr("aermr08"));
+            aerosol_concs_gpu->set_vmr("aermr09", aerosol_concs.get_vmr("aermr09"));
+            aerosol_concs_gpu->set_vmr("aermr10", aerosol_concs.get_vmr("aermr10"));
+            aerosol_concs_gpu->set_vmr("aermr11", aerosol_concs.get_vmr("aermr11"));
+        }
         try
         {
             if (sw_update_background)

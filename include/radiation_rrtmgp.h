@@ -324,6 +324,8 @@ class Radiation_rrtmgp : public Radiation<TF>
         std::unique_ptr<Cloud_optics_gpu> cloud_sw_gpu;
         std::unique_ptr<Aerosol_optics_gpu> aerosol_sw_gpu;
 
+        Float* aod550_g;
+
         Rte_lw_gpu rte_lw_gpu;
         Rte_sw_gpu rte_sw_gpu;
         #endif

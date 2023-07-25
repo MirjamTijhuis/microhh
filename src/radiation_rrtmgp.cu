@@ -544,6 +544,42 @@ namespace
         Memory_pool_gpu::init_instance(pool_queues);
         #endif
     }
+
+    __global__
+    void sum_tau_kernel(
+            const int ncol, const int nlev, const int col_s_in,
+            const Float* __restrict__ tau, Float* __restrict__ aod)
+    {
+        const int icol = blockIdx.x*blockDim.x + threadIdx.x;
+        int ibnd = 11;
+
+        if ( icol < ncol)
+        {
+            Float aod_s = 0;
+            for (int ilev=0; ilev < nlev; ++ilev)
+            {
+                const int idx_in = icol + ilev*ncol + ibnd*nlev*ncol;
+                aod_s += tau[idx_in];
+            }
+            aod[col_s_in + icol - 1] = aod_s;
+        }
+    }
+
+    void sum_tau(
+            int ncol, int nlev, int col_s_in,
+            const Float* tau, Float* aod)
+    {
+        const int block_lev = 16;
+        const int block_col = 16;
+
+        const int grid_col = ncol/block_col + (ncol%block_col > 0);
+        const int grid_lev = nlev/block_lev + (nlev%block_lev > 0);
+
+        dim3 grid_gpu(grid_col);
+        dim3 block_gpu(block_col);
+
+        sum_tau_kernel<<<grid_gpu, block_gpu>>>(ncol, nlev, col_s_in, tau, aod);
+    }
 }
 
 
@@ -611,9 +647,12 @@ void Radiation_rrtmgp<TF>::prepare_device()
         this->cloud_sw_gpu = std::make_unique<Cloud_optics_gpu>(
                 load_and_init_cloud_optics(master, "cloud_coefficients_sw.nc"));
 
-        if (sw_aerosol)
+        if (sw_aerosol) {
             this->aerosol_sw_gpu = std::make_unique<Aerosol_optics_gpu>(
                     load_and_init_aerosol_optics(master, "aerosol_optics.nc"));
+//            cuda_safe_call(cudaMalloc(&aod550_g, n_col*sizeof(Float)));
+            //cuda_safe_call(cudaMemcpy(aod550_g, aod550.ptr(), n_col*sizeof(Float), cudaMemcpyHostToDevice));
+        }
 
         const int nsfcsize = gd.ijcells*sizeof(Float);
         cuda_safe_call(cudaMalloc(&sw_flux_dn_sfc_g, nsfcsize));
@@ -991,6 +1030,13 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
                     dynamic_cast<Optical_props_2str_gpu&>(*optical_props_subset_in),
                     dynamic_cast<Optical_props_2str_gpu&>(*aerosol_optical_props_subset_in));
 
+//	    if (do_radiation_stats)
+//            sum_tau(n_col_in, n_lay, col_s_in, aerosol_optical_props_subset_in->get_tau().ptr(), aod550_g);
+            
+	    //const int nmemsize = n_col * sizeof(TF);
+            //cuda_safe_call(cudaMemcpy(aod550.ptr(), aod550_g, nmemsize, cudaMemcpyDeviceToHost));
+	   
+
 //            int ibnd = 11;
 //            for (int ilay = 1; ilay <= n_lay; ++ilay)
 //                for (int icol = 1; icol <= n_col_in; ++icol)
@@ -1091,6 +1137,10 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
                 *fluxes_residual,
                 *bnd_fluxes_residual);
     }
+//
+//    const int nmemsize = n_col * sizeof(TF); ncol -> imax*jmax
+//    cuda_safe_call(cudaMemcpy(aod550.ptr(), aod550_g, nmemsize, cudaMemcpyDeviceToHost));
+
 }
 #endif
 
@@ -1551,6 +1601,9 @@ void Radiation_rrtmgp<TF>::clear_device()
 
     for (auto& it : gasprofs_g)
         cuda_safe_call(cudaFree(it.second));
+
+//    if (sw_aerosol)
+//        cuda_safe_call(cudaFree(aod550_g));
 }
 
 

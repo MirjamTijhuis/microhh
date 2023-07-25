@@ -194,15 +194,6 @@ void Background<TF>::create(Input& inputin, Netcdf_handle& input_nc, Stats<TF>& 
 
 #ifndef USECUDA
 template <typename TF>
-void Background<TF>::exec(Thermo<TF>& thermo)
-{
-    if (!sw_update_background)
-        return;
-
-    auto& gd = grid.get_grid_data();
-}
-
-template <typename TF>
 void Background<TF>::update_time_dependent(Timeloop<TF>& timeloop)
 {
     if (!sw_update_background)
