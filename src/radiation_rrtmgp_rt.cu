@@ -2570,6 +2570,19 @@ void Radiation_rrtmgp_rt<TF>::exec_all_stats(
                 }
                 Float mean_aod = total_aod/ncol;
                 stats.set_time_series("AOD550", mean_aod);
+
+                bool cross_aod = std::find(crosslist.begin(), crosslist.end(), "aod550") != crosslist.end();
+                if (do_cross && cross_aod)
+                {
+                    std::vector<Float> aod_vec;
+                    aod_vec.resize(gd.imax*gd.jmax);
+                    for (int icol = 1; icol <= ncol; ++icol)
+                    {
+                        aod_vec[icol-1] = aod550({icol});
+                    }
+                    constexpr TF no_offset = TF(0);
+                    cross.cross_plane_nogc(aod_vec.data(), no_offset, "aod550", iotime);
+                }
             }
 
             if ((sw_update_background || !sw_fixed_sza))
