@@ -496,6 +496,7 @@ Radiation_rrtmgp_rt<TF>::Radiation_rrtmgp_rt(
     sw_update_background = inputin.get_item<bool>("radiation", "swupdatecolumn", "", false);
     sw_aerosol      = inputin.get_item<bool>("aerosol", "swaerosol", "", false);
     sw_aerosol_timedep = inputin.get_item<bool>("aerosol", "swtimedep", "", false);
+    sw_homogenize_rh = inputin.get_item<bool>("aerosol", "swhomogenize_rh", "", false);
     sw_delta_cloud   = inputin.get_item<bool>("radiation", "swdeltacloud", "", false);
     sw_delta_aer     = inputin.get_item<bool>("radiation", "swdeltaaer", "", false);
     sw_2str_when_no_clouds = inputin.get_item<bool>("radiation", "sw2strwhennoclouds", "", false);
@@ -748,6 +749,9 @@ void Radiation_rrtmgp_rt<TF>::create(
             allowed_crossvars_radiation.push_back("lw_flux_dn_clear");
         }
     }
+
+    if(sw_aerosol)
+        allowed_crossvars_radiation.push_back("aod550");
 
     crosslist = cross.get_enabled_variables(allowed_crossvars_radiation);
 }

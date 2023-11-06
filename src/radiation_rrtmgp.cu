@@ -1014,11 +1014,32 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
         if (sw_aerosol)
         {
             Aerosol_concs_gpu aerosol_concs_subset(*aerosol_concs_gpu, col_s_in, n_col_in);
-            aerosol_sw_gpu->aerosol_optics(
-                    aerosol_concs_subset,
-                    rh.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}),
-                    p_lev_subset,
-                    *aerosol_optical_props_subset_in);
+
+            if (sw_homogenize_rh)
+            {
+                Array<Float,2> rh_min({1, n_lay});
+                for (int ilay = 1; ilay <= n_lay; ++ilay)
+                {
+                    const int nlay = 1;
+                    Array<Float,2> rh_lay({n_col, nlay});
+                    rh_lay = rh.subset({{ {1, n_col}, {ilay, ilay} }});
+                    rh_min({1, ilay}) = rh_lay.min();
+                }
+                Array_gpu<Float,2> rh_min_gpu = rh_min;
+
+                aerosol_sw_gpu->aerosol_optics(
+                        aerosol_concs_subset,
+                        rh_min_gpu.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}),
+                        p_lev_subset,
+                        *aerosol_optical_props_subset_in);
+            }
+            else{
+                aerosol_sw_gpu->aerosol_optics(
+                        aerosol_concs_subset,
+                        rh.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}),
+                        p_lev_subset,
+                        *aerosol_optical_props_subset_in);
+            }
 
             if (sw_delta_aer)
                 aerosol_optical_props_subset_in->delta_scale();

@@ -223,6 +223,7 @@ class Radiation_rrtmgp_rt : public Radiation<TF>
         bool sw_update_background;
         bool sw_aerosol;
         bool sw_aerosol_timedep;
+        bool sw_homogenize_rh;
         bool sw_delta_cloud;
         bool sw_delta_aer;
         bool sw_2str_when_no_clouds;
