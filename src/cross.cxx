@@ -661,6 +661,21 @@ int Cross<TF>::cross_plane(TF* restrict data, TF restrict offset, std::string na
 }
 
 template<typename TF>
+int Cross<TF>::cross_plane_nogc(TF* restrict data, TF restrict offset, std::string name, int iotime)
+{
+    int nerror = 0;
+    char filename[256];
+
+    auto tmpfld = fields.get_tmp();
+    auto tmp = tmpfld->fld.data();
+
+    std::sprintf(filename, "%s.%s.%07d", name.c_str(), "xy.000", iotime);
+    nerror += check_save(field3d_io.save_xy_slice_nogc(data, offset, tmp, filename), filename);
+    fields.release_tmp(tmpfld);
+    return nerror;
+}
+
+template<typename TF>
 int Cross<TF>::cross_lngrad(TF* restrict a, std::string name, int iotime)
 {
     auto& gd = grid.get_grid_data();

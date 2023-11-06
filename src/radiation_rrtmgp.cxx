@@ -665,6 +665,7 @@ Radiation_rrtmgp<TF>::Radiation_rrtmgp(
     sw_update_background = inputin.get_item<bool>("radiation", "swupdatecolumn", "", false);
     sw_aerosol = inputin.get_item<bool>("aerosol", "swaerosol", "", false);
     sw_aerosol_timedep = inputin.get_item<bool>("aerosol", "swtimedep", "", false);
+    sw_homogenize_rh = inputin.get_item<bool>("aerosol", "swhomogenize_rh", "", false);
     sw_delta_cloud = inputin.get_item<bool>("radiation", "swdeltacloud", "", false);
     sw_delta_aer = inputin.get_item<bool>("radiation", "swdeltaaer", "", false);
 
@@ -906,6 +907,9 @@ void Radiation_rrtmgp<TF>::create(
             allowed_crossvars_radiation.push_back("lw_flux_dn_clear");
         }
     }
+
+    if(sw_aerosol)
+        allowed_crossvars_radiation.push_back("aod550");
 
     crosslist = cross.get_enabled_variables(allowed_crossvars_radiation);
 
@@ -2019,6 +2023,19 @@ void Radiation_rrtmgp<TF>::exec_all_stats(
                 }
                 Float mean_aod = total_aod/ncol;
                 stats.set_time_series("AOD550", mean_aod);
+
+                bool cross_aod = std::find(crosslist.begin(), crosslist.end(), "aod550") != crosslist.end();
+                if (do_cross && cross_aod)
+                {
+                    std::vector<Float> aod_vec;
+                    aod_vec.resize(gd.imax*gd.jmax);
+                    for (int icol = 1; icol <= ncol; ++icol)
+                    {
+                        aod_vec[icol-1] = aod550({icol});
+                    }
+                    constexpr TF no_offset = TF(0);
+                    cross.cross_plane_nogc(aod_vec.data(), no_offset, "aod550", iotime);
+                }
             }
             if (sw_update_background || !sw_fixed_sza)
             {
@@ -2632,11 +2649,32 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
         if (sw_aerosol)
         {
             Aerosol_concs aerosol_concs_subset(aerosol_concs, col_s_in, n_col_in);
-            aerosol_sw->aerosol_optics(
-                    aerosol_concs_subset,
-                    rh.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}),
-                    p_lev.subset({{ {col_s_in, col_e_in}, {1, n_lev} }}),
-                    *aerosol_optical_props_in);
+
+            if (sw_homogenize_rh)
+            {
+                Array<Float,2> rh_min({1, n_lay});
+                for (int ilay = 1; ilay <= n_lay; ++ilay)
+                {
+                    const int nlay = 1;
+                    Array<Float,2> rh_lay({n_col, nlay});
+                    rh_lay = rh.subset({{ {1, n_col}, {ilay, ilay} }});
+                    rh_min({1, ilay}) = rh_lay.min();
+                }
+
+                aerosol_sw->aerosol_optics(
+                        aerosol_concs_subset,
+                        rh_min.subset({ {{col_s_in,col_e_in}, {1,n_lay}}}),
+                        p_lev.subset({{ {col_s_in, col_e_in}, {1, n_lev} }}),
+                        *aerosol_optical_props_in);
+            }
+            else
+            {
+                aerosol_sw->aerosol_optics(
+                        aerosol_concs_subset,
+                        rh.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}),
+                        p_lev.subset({{ {col_s_in, col_e_in}, {1, n_lev} }}),
+                        *aerosol_optical_props_in);
+            }
 
             if (sw_delta_aer)
                 aerosol_optical_props_in->delta_scale();

@@ -861,6 +861,41 @@ int Field3d_io<TF>::save_xy_slice(
 }
 
 template<typename TF>
+int Field3d_io<TF>::save_xy_slice_nogc(
+        TF* const restrict data, TF const restrict data0, TF* const restrict tmp,
+        const char* filename, const int kslice)
+{
+    auto& gd = grid.get_grid_data();
+
+    // extract the data from the 3d field without the ghost cells
+    const int jj  = gd.imax;
+    const int kk  = gd.imax*gd.jmax;
+    const int jjb = gd.imax;
+
+    const int count = gd.imax*gd.jmax;
+
+    for (int j=0; j<gd.jmax; j++)
+#pragma ivdep
+            for (int i=0; i<gd.imax; i++)
+            {
+                // Take the modulus of jslice and jmax to have the right offset within proc
+                const int ijk  = i + j*jj + kslice*kk;
+                const int ijkb = i + j*jjb;
+                tmp[ijkb] = data[ijk] + data0;
+            }
+
+    FILE *pFile;
+    pFile = fopen(filename, "wbx");
+    if (pFile == NULL)
+        return 1;
+
+    fwrite(tmp, sizeof(TF), count, pFile);
+    fclose(pFile);
+
+    return 0;
+}
+
+template<typename TF>
 int Field3d_io<TF>::load_xy_slice(
         TF* const restrict data, TF* const restrict tmp,
         const char* filename, int kslice)

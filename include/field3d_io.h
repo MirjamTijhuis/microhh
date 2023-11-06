@@ -41,6 +41,7 @@ class Field3d_io
         int save_xz_slice(TF*, TF, TF*, const char*, int, int, int); // Saves a xz-slice from a 3d field.
         int save_yz_slice(TF*, TF, TF*, const char*, int, int, int); // Saves a yz-slice from a 3d field.
         int save_xy_slice(TF*, TF, TF*, const char*, int kslice=0);  // Saves a xy-slice from a 3d field.
+        int save_xy_slice_nogc(TF*, TF, TF*, const char*, int kslice=0);  // saves a surface field that has no ghostcells
         int load_xy_slice(TF*, TF*, const char*, int kslice=-1); // Loads a xy-slice.
 
     private:
