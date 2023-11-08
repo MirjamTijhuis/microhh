@@ -1960,9 +1960,14 @@ void Radiation_rrtmgp_rt<TF>::exec(
         Array_gpu<Float, 2> rh_min;
         if (sw_homogenize_rh)
         {
-            field3d_operators.calc_min_profile_g(rh->fld_mean_g, rh->fld_g);    //misuse fld_mean to store the minimum
-            Array_gpu<Float, 2> rh_min_profile(rh->fld_mean_g, {1, gd.ktot});
+            auto rht = fields.get_tmp_g();
+            cudaMemset(rht->fld_g, 0, gd.ncells*sizeof(Float));
+
+            field3d_operators.calc_min_profile_g(rht->fld_mean_g, rh->fld_g);    //misuse fld_mean to store the minimum
+            Array_gpu<Float, 2> rh_min_profile(rht->fld_mean_g, {1, gd.ktot});
             rh_min = rh_min_profile.subset({{{1, gd.imax*gd.jmax}, {1, gd.ktot}}});
+
+            fields.release_tmp_g(rht);
         }
 
         const bool compute_clouds = true;
