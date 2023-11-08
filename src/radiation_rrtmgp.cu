@@ -1015,31 +1015,31 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
         {
             Aerosol_concs_gpu aerosol_concs_subset(*aerosol_concs_gpu, col_s_in, n_col_in);
 
-            if (sw_homogenize_rh)
-            {
-                Array<Float,2> rh_min({1, n_lay});
-                for (int ilay = 1; ilay <= n_lay; ++ilay)
-                {
-                    const int nlay = 1;
-                    Array<Float,2> rh_lay({n_col, nlay});
-                    rh_lay = rh.subset({{ {1, n_col}, {ilay, ilay} }});
-                    rh_min({1, ilay}) = rh_lay.min();
-                }
-                Array_gpu<Float,2> rh_min_gpu = rh_min;
-
-                aerosol_sw_gpu->aerosol_optics(
-                        aerosol_concs_subset,
-                        rh_min_gpu.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}),
-                        p_lev_subset,
-                        *aerosol_optical_props_subset_in);
-            }
-            else{
+//            if (sw_homogenize_rh)
+//            {
+//                Array<Float,2> rh_min({1, n_lay});
+//                for (int ilay = 1; ilay <= n_lay; ++ilay)
+//                {
+//                    const int nlay = 1;
+//                    Array<Float,2> rh_lay({n_col, nlay});
+//                    rh_lay = rh.subset({{ {1, n_col}, {ilay, ilay} }});
+//                    rh_min({1, ilay}) = rh_lay.min();
+//                }
+//                Array_gpu<Float,2> rh_min_gpu = rh_min;
+//
+//                aerosol_sw_gpu->aerosol_optics(
+//                        aerosol_concs_subset,
+//                        rh_min_gpu.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}),
+//                        p_lev_subset,
+//                        *aerosol_optical_props_subset_in);
+//            }
+//            else{
                 aerosol_sw_gpu->aerosol_optics(
                         aerosol_concs_subset,
                         rh.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}),
                         p_lev_subset,
                         *aerosol_optical_props_subset_in);
-            }
+//            }
 
             if (sw_delta_aer)
                 aerosol_optical_props_subset_in->delta_scale();
@@ -1209,6 +1209,10 @@ void Radiation_rrtmgp<TF>::exec(
         Array_gpu<Float,2> flux_up ({gd.imax*gd.jmax, gd.ktot+1});
         Array_gpu<Float,2> flux_dn ({gd.imax*gd.jmax, gd.ktot+1});
         Array_gpu<Float,2> flux_net({gd.imax*gd.jmax, gd.ktot+1});
+
+//        TF max_rh = field3d_operators.calc_max_g(rh->fld_g);
+        field3d_operators.calc_min_profile_g(rh->fld_mean_g, rh->fld_g);    //misuse fld_mean to store the minimum
+        Array_gpu<Float, 2> rh_min_profile(rh->fld_mean_g, {1, gd.ktot});
 
         const bool compute_clouds = true;
 
@@ -1387,12 +1391,24 @@ void Radiation_rrtmgp<TF>::exec(
                 if (is_day(this->mu0) || !sw_is_tuned)
                 {
                     const int n_col = gd.imax*gd.jmax;
-                    exec_shortwave(
-                            thermo, microphys, timeloop, stats,
-                            flux_up, flux_dn, flux_dn_dir, flux_net,
-                            aod550,
-                            t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a,
-                            compute_clouds, n_col);
+                    if (sw_homogenize_rh)
+                    {
+                        exec_shortwave(
+                                thermo, microphys, timeloop, stats,
+                                flux_up, flux_dn, flux_dn_dir, flux_net,
+                                aod550,
+                                t_lay_a, t_lev_a, h2o_a, rh_min_profile, clwp_a, ciwp_a,
+                                compute_clouds, n_col);
+                    }
+                    else
+                    {
+                        exec_shortwave(
+                                thermo, microphys, timeloop, stats,
+                                flux_up, flux_dn, flux_dn_dir, flux_net,
+                                aod550,
+                                t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a,
+                                compute_clouds, n_col);
+                    }
 
                     if (sw_homogenize_hr_sw)
                     {

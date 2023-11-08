@@ -1443,32 +1443,32 @@ void Radiation_rrtmgp_rt<TF>::exec_shortwave(
         {
             Aerosol_concs_gpu aerosol_concs_subset(*aerosol_concs_gpu, col_s_in, n_col_in);
 
-            if (sw_homogenize_rh)
-            {
-                Array<Float,2> rh_min({1, n_lay});
-                for (int ilay = 1; ilay <= n_lay; ++ilay)
-                {
-                    const int nlay = 1;
-                    Array<Float,2> rh_lay({n_col, nlay});
-                    rh_lay = rh.subset({{ {1, n_col}, {ilay, ilay} }});
-                    rh_min({1, ilay}) = rh_lay.min();
-                }
-                Array_gpu<Float,2> rh_min_gpu = rh_min;
-
-                aerosol_sw_gpu->aerosol_optics(
-                        aerosol_concs_subset,
-                        rh_min_gpu.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}),
-                        p_lev_subset,
-                        *aerosol_optical_props_subset_in);
-            }
-            else
-            {
+//            if (sw_homogenize_rh)
+//            {
+//                Array<Float,2> rh_min({1, n_lay});
+//                for (int ilay = 1; ilay <= n_lay; ++ilay)
+//                {
+//                    const int nlay = 1;
+//                    Array<Float,2> rh_lay({n_col, nlay});
+//                    rh_lay = rh.subset({{ {1, n_col}, {ilay, ilay} }});
+//                    rh_min({1, ilay}) = rh_lay.min();
+//                }
+//                Array_gpu<Float,2> rh_min_gpu = rh_min;
+//
+//                aerosol_sw_gpu->aerosol_optics(
+//                        aerosol_concs_subset,
+//                        rh_min_gpu.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}),
+//                        p_lev_subset,
+//                        *aerosol_optical_props_subset_in);
+//            }
+//            else
+//            {
                 aerosol_sw_gpu->aerosol_optics(
                         aerosol_concs_subset,
                         rh.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}),
                         p_lev_subset,
                         *aerosol_optical_props_subset_in);
-            }
+//            }
 
             if (sw_delta_aer)
                 aerosol_optical_props_subset_in->delta_scale();
@@ -1957,6 +1957,13 @@ void Radiation_rrtmgp_rt<TF>::exec(
         Array_gpu<Float,2> clwp_a(clwp->fld_g, {gd.imax*gd.jmax, gd.ktot});
         Array_gpu<Float,2> ciwp_a(ciwp->fld_g, {gd.imax*gd.jmax, gd.ktot});
 
+        Array_gpu<Float, 2> rh_min;
+        if (sw_homogenize_rh)
+        {
+            field3d_operators.calc_min_profile_g(rh->fld_mean_g, rh->fld_g);    //misuse fld_mean to store the minimum
+            Array_gpu<Float, 2> rh_min_profile(rh->fld_mean_g, {1, gd.ktot});
+            rh_min = rh_min_profile.subset({{{1, gd.imax*gd.jmax}, {1, gd.ktot}}});
+        }
 
         const bool compute_clouds = true;
 
@@ -2172,13 +2179,26 @@ void Radiation_rrtmgp_rt<TF>::exec(
 
                 if (is_day(this->mu0) || !sw_is_tuned)
                 {
-                    exec_shortwave_rt(
-                            thermo, microphys, timeloop, stats,
-                            flux_up, flux_dn, flux_dn_dir, flux_net,
-                            rt_flux_tod_dn, rt_flux_tod_up, rt_flux_sfc_dir, rt_flux_sfc_dif,
-                            rt_flux_sfc_up, rt_flux_abs_dir, rt_flux_abs_dif,
-                            t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a,
-                            compute_clouds, run_raytracer);
+                    if (sw_homogenize_rh)
+                    {
+                        exec_shortwave_rt(
+                                thermo, microphys, timeloop, stats,
+                                flux_up, flux_dn, flux_dn_dir, flux_net,
+                                rt_flux_tod_dn, rt_flux_tod_up, rt_flux_sfc_dir, rt_flux_sfc_dif,
+                                rt_flux_sfc_up, rt_flux_abs_dir, rt_flux_abs_dif,
+                                t_lay_a, t_lev_a, h2o_a, rh_min, clwp_a, ciwp_a,
+                                compute_clouds, run_raytracer);
+                    }
+                    else
+                    {
+                        exec_shortwave_rt(
+                                thermo, microphys, timeloop, stats,
+                                flux_up, flux_dn, flux_dn_dir, flux_net,
+                                rt_flux_tod_dn, rt_flux_tod_up, rt_flux_sfc_dir, rt_flux_sfc_dif,
+                                rt_flux_sfc_up, rt_flux_abs_dir, rt_flux_abs_dif,
+                                t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a,
+                                compute_clouds, run_raytracer);
+                    }
                     cuda_check_error();
 
                     if (sw_homogenize_hr_sw)
@@ -2375,11 +2395,22 @@ void Radiation_rrtmgp_rt<TF>::exec(
                     {
                         if (is_day(this->mu0))
                         {
-                            exec_shortwave(
-                                    thermo, microphys, timeloop, stats,
-                                    flux_up, flux_dn, flux_dn_dir, flux_net,
-                                    t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a,
-                                    !compute_clouds);
+                            if (sw_homogenize_rh)
+                            {
+                                exec_shortwave(
+                                        thermo, microphys, timeloop, stats,
+                                        flux_up, flux_dn, flux_dn_dir, flux_net,
+                                        t_lay_a, t_lev_a, h2o_a, rh_min, clwp_a, ciwp_a,
+                                        !compute_clouds);
+                            }
+                            else
+                            {
+                                exec_shortwave(
+                                        thermo, microphys, timeloop, stats,
+                                        flux_up, flux_dn, flux_dn_dir, flux_net,
+                                        t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a,
+                                        !compute_clouds);
+                            }
                         }
                         do_gcs(*fields.sd.at("sw_flux_up_clear"), flux_up);
                         do_gcs(*fields.sd.at("sw_flux_dn_clear"), flux_dn);

@@ -36,7 +36,7 @@
 
 namespace Tools_g
 {
-    enum Reduce_type {Sum_type, Max_type}; ///< Enumerator holding the different reduction types
+    enum Reduce_type {Sum_type, Max_type, Min_type}; ///< Enumerator holding the different reduction types
     const int reduce_max_threads = 512;    ///< Maximum number of threads used in reduce algorithms
 
     template<typename TF>
