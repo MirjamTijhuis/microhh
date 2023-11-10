@@ -1965,10 +1965,20 @@ void Radiation_rrtmgp_rt<TF>::exec(
 
             field3d_operators.calc_min_profile_g(rht->fld_mean_g, rh->fld_g);    //misuse fld_mean to store the minimum
             Array_gpu<Float, 2> rh_min_profile(rht->fld_mean_g, {1, gd.ktot});
+            rh_min_profile.dump("rh_prof");
             rh_min = rh_min_profile.subset({{{1, gd.imax*gd.jmax}, {1, gd.ktot}}});
 
             fields.release_tmp_g(rht);
         }
+
+        rh_min.dump("rh");
+
+//        field3d_operators.calc_min_profile_g(rh->fld_mean_g, rh->fld_g);    //misuse fld_mean to store the minimum
+//        Array_gpu<Float, 2> rh_min(rh->fld_mean_g, {1, gd.ktot});
+//        rh_min.dump("rh_prof");
+//
+//        Array_gpu<Float,2> rh_test(rh->fld_g, {gd.imax*gd.jmax, gd.ktot});
+//        rh_test.dump("rh_test");
 
         const bool compute_clouds = true;
 
@@ -2593,6 +2603,23 @@ void Radiation_rrtmgp_rt<TF>::exec_all_stats(
             save_stats_and_cross(*fields.sd.at("sw_flux_dn_dir_clear"), "sw_flux_dn_dir_clear", gd.wloc);
         }
 
+        if (sw_aerosol)
+        {
+            bool cross_aod = std::find(crosslist.begin(), crosslist.end(), "aod550") != crosslist.end();
+            int ncol = gd.imax*gd.jmax;
+            if (do_cross && cross_aod)
+            {
+                std::vector<Float> aod_vec;
+                aod_vec.resize(gd.imax*gd.jmax);
+                for (int icol = 1; icol <= ncol; ++icol)
+                {
+                    aod_vec[icol-1] = aod550({icol});
+                }
+                constexpr TF no_offset = TF(0);
+                cross.cross_plane_nogc(aod_vec.data(), no_offset, "aod550", iotime);
+            }
+        }
+
         if (do_stats)
         {
             if (sw_aerosol)
@@ -2606,19 +2633,6 @@ void Radiation_rrtmgp_rt<TF>::exec_all_stats(
                 }
                 Float mean_aod = total_aod/ncol;
                 stats.set_time_series("AOD550", mean_aod);
-
-                bool cross_aod = std::find(crosslist.begin(), crosslist.end(), "aod550") != crosslist.end();
-                if (do_cross && cross_aod)
-                {
-                    std::vector<Float> aod_vec;
-                    aod_vec.resize(gd.imax*gd.jmax);
-                    for (int icol = 1; icol <= ncol; ++icol)
-                    {
-                        aod_vec[icol-1] = aod550({icol});
-                    }
-                    constexpr TF no_offset = TF(0);
-                    cross.cross_plane_nogc(aod_vec.data(), no_offset, "aod550", iotime);
-                }
             }
 
             if ((sw_update_background || !sw_fixed_sza))

@@ -134,13 +134,21 @@ void Field3d_operators<TF>::calc_min_profile_g(TF* const restrict prof, const TF
     // Reduce 3D field excluding ghost cells and padding to jtot*kcells values
     auto tmp = fields.get_tmp_g();
 
+//    reduce_interior<TF>(
+//            fld, tmp->fld_g, gd.itot, gd.istart, gd.iend, gd.jtot,
+//            gd.jstart, gd.jend, gd.kcells, 0, gd.icells, gd.ijcells, Min_type);
+//
+//    // Reduce jtot*kcells to kcells values
+//    reduce_all<TF>(
+//            tmp->fld_g, prof, gd.jtot*gd.kcells, gd.kcells, gd.jtot, Min_type, scalefac);
+
     reduce_interior<TF>(
-            fld, tmp->fld_g, gd.itot, gd.istart, gd.iend, gd.jtot,
-            gd.jstart, gd.jend, gd.kcells, 0, gd.icells, gd.ijcells, Min_type);
+            fld, tmp->fld_g, gd.itot, 0, gd.itot, gd.jtot,
+            0, gd.jtot, gd.ktot, 0, gd.itot, gd.itot*gd.jtot, Min_type);
 
     // Reduce jtot*kcells to kcells values
     reduce_all<TF>(
-            tmp->fld_g, prof, gd.jtot*gd.kcells, gd.kcells, gd.jtot, Min_type, scalefac);
+            tmp->fld_g, prof, gd.jtot*gd.ktot, gd.ktot, gd.jtot, Min_type, scalefac);
 
     fields.release_tmp_g(tmp);
 }
