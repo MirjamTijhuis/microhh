@@ -1005,7 +1005,7 @@ namespace Sb_cold
             {
                 const int ij = i + j*jstride;
 
-                if (T[ij] > Constants::T0<TF>)
+                if (T[ij] < Constants::T0<TF>)
                 {
                     const TF e_d  = qv[ij] * Constants::Rv<TF> * T[ij];
                     const TF e_si = tmf::esat_ice(T[ij]);    // e_es(T_a) in ICON = sat_pres_ice
@@ -1074,7 +1074,7 @@ namespace Sb_cold
 
                 // Deposition only below T_3, evaporation of melting
                 // particles at warmer T is treated elsewhere
-                if(T[ij] > Constants::T0<TF>)
+                if(T[ij] < Constants::T0<TF>)
                 {
                     // Depositional growth with relaxation time-scale approach based on:
                     // "A New Double-Moment Microphysics Parameterization for Application in Cloud and
@@ -1809,7 +1809,6 @@ namespace Sb_cold
                         // Ice multiplication;
                         if (Ta[ij] < Constants::T0<TF> && ice_multiplication)
                         {
-                            std::cout << "2.1" << std::endl;
                             TF mult_1 = (Ta[ij] - T_mult_min<TF>) * const3;
                             TF mult_2 = (Ta[ij] - T_mult_max<TF>) * const4;
 
@@ -2986,7 +2985,7 @@ namespace Sb_cold
                     qit[ij] += nuc_q;
                     nit[ij] += nuc_n;
                     qvt[ij] -= nuc_q;
-                    n_inact[ij] += nuc_n;
+                    n_inact[ij] += nuc_n / zdt;
 
                     //lwrite_n_inpot = use_prog_in && ndiag .GT. 1.0e-12_wp;
                     //ndiag_mask(i, k) = lwrite_n_inpot;
