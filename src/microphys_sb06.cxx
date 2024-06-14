@@ -1468,7 +1468,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                         (*nc_fld).data(),
                         hydro_types.at("ni").slice,
                         &T->fld.data()[k * gd.ijcells],
-                        nuc_c_typ, dt,
+                        nuc_c_typ, TF(dt),
                         cloud, cloud_coeffs,
                         gd.istart, gd.iend,
                         gd.jstart, gd.jend,
