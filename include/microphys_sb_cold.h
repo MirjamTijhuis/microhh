@@ -711,8 +711,8 @@ namespace Sb_cold
                     // Mean velocity using the mean diameter: (mue+1)/D
                     // This is more exact than the exponential (Chebychev) approximation for small droplets,
                     // and not too bad for large droplets
-                    const TF vm = std::max(aa - bb * exp(-cc * D_m ), TF(0.0));
-                    // ! Ventilation coeffcient using an averaged velocity
+                    const TF vm = std::max(TF(aa - bb * exp(-cc * D_m)), TF(0.0));
+		    // ! Ventilation coeffcient using an averaged velocity
                     const TF f_v = rain.a_ven + rain.b_ven * pow(N_sc<TF>, n_f<TF>) * gfak *
                             sqrt(vm/nu_l<TF> * rain_rho_v / lam);
 
