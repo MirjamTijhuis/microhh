@@ -421,7 +421,8 @@ namespace Sb_cold
                             d_m * std::exp(TF(-1. / 3.) * std::log((mue + TF(3)) * (mue + TF(2)) * (mue + TF(1))));
                     vn[ij] = coeffs.alfa - coeffs.beta * std::exp(-(mue + TF(1)) * std::log(TF(1) + coeffs.gama * d_p));
                     vq[ij] = coeffs.alfa - coeffs.beta * std::exp(-(mue + TF(4)) * std::log(TF(1) + coeffs.gama * d_p));
-
+                    vn[ij] = std::max(vn[ij], rain.vsedi_min);
+                    vq[ij] = std::max(vq[ij], rain.vsedi_min);
                     vn[ij] *= rho_corr;
                     vq[ij] *= rho_corr;
                 }
@@ -620,7 +621,7 @@ namespace Sb_cold
                     // Breakup as in Seifert (2008, JAS), Eq. (A13)
                     TF br = TF(0);
                     if (Dr > TF(0.30e-3))
-                        br = (k_br * (Dr - D_br) + TF(1)) * sc;
+                        br = std::min(k_br * (Dr - D_br) + TF(1), TF(1.05)) * sc; // Limit of rain breakup from Saleeby et al. JAS 2022
 
                     nrt[ij] -= (sc-br);
                     //rain%n(i,k) = n_r - MIN(n_r,sc-br)
@@ -686,12 +687,15 @@ namespace Sb_cold
 
                     // Eq. (20) of Seifert (2008)
                     TF mue;
-                    if (D_m <= rain_coeffs.cmu3)
-                       mue = rain_coeffs.cmu0 * tanh(
-                        pow(TF(4) * rain_coeffs.cmu2 * (D_m - rain_coeffs.cmu3), rain_coeffs.cmu5)) + rain_coeffs.cmu4;
-                    else
-                        mue = rain_coeffs.cmu1 * tanh(
-                        pow(TF(1) * rain_coeffs.cmu2 * (D_m - rain_coeffs.cmu3), rain_coeffs.cmu5)) + rain_coeffs.cmu4;
+                    mue = rain_mue_dm_relation(rain_coeffs, D_m);
+
+//                    TF mue;
+//                    if (D_m <= rain_coeffs.cmu3)
+//                       mue = rain_coeffs.cmu0 * tanh(
+//                        pow(TF(4) * rain_coeffs.cmu2 * (D_m - rain_coeffs.cmu3), rain_coeffs.cmu5)) + rain_coeffs.cmu4;
+//                    else
+//                        mue = rain_coeffs.cmu1 * tanh(
+//                        pow(TF(1) * rain_coeffs.cmu2 * (D_m - rain_coeffs.cmu3), rain_coeffs.cmu5)) + rain_coeffs.cmu4;
 
                     // Eq. (A8)
                     const TF lam = exp(TF(1)/TF(3) * log(pi6<TF> * rho_w<TF>*(mue+3.0)*(mue+2.0)*(mue+1.0)/x_r));
@@ -704,20 +708,41 @@ namespace Sb_cold
                         + mue * ( +TF(0.4002257774E-03)
                         - mue *    TF(0.4856703981E-05) ) ) );
 
-                    const TF mm = mue + TF(5)/TF(2);
+                    // Mean velocity using the mean diameter: (mue+1)/D
+                    // This is more exact than the exponential (Chebychev) approximation for small droplets,
+                    // and not too bad for large droplets
+                    const TF vm = std::max(aa - bb * exp(-cc * D_m ), TF(0.0));
+                    // ! Ventilation coeffcient using an averaged velocity
+                    const TF f_v = rain.a_ven + rain.b_ven * pow(N_sc<TF>, n_f<TF>) * gfak *
+                            sqrt(vm/nu_l<TF> * rain_rho_v / lam);
 
-                    // Eq. (A7) rewritten with (A5) and (A9)
-                    const TF f_v  =
-                        rain.a_ven + rain.b_ven * pow(N_sc<TF>, n_f<TF>) * gfak *
-                        sqrt(aa/nu_l<TF> * rain_rho_v / lam) *
-                        (TF(1) - TF(1)/TF(2)   * (bb/aa)         * exp(mm*log(lam/(TF(1)*cc+lam)))
-                               - TF(1)/TF(8)   * fm::pow2(bb/aa) * exp(mm*log(lam/(TF(2)*cc+lam)))
-                               - TF(1)/TF(16)  * fm::pow3(bb/aa) * exp(mm*log(lam/(TF(3)*cc+lam)))
-                               - TF(5)/TF(127) * fm::pow4(bb/aa) * exp(mm*log(lam/(TF(4)*cc+lam))) );
+                    // This has been the previous Chebychev Approximation (kept for reference):
+//                    const TF mm = mue + TF(5)/TF(2);
+//
+//                    // Eq. (A7) rewritten with (A5) and (A9)
+//                    const TF f_v  =
+//                        rain.a_ven + rain.b_ven * pow(N_sc<TF>, n_f<TF>) * gfak *
+//                        sqrt(aa/nu_l<TF> * rain_rho_v / lam) *
+//                        (TF(1) - TF(1)/TF(2)   * (bb/aa)         * exp(mm*log(lam/(TF(1)*cc+lam)))
+//                               - TF(1)/TF(8)   * fm::pow2(bb/aa) * exp(mm*log(lam/(TF(2)*cc+lam)))
+//                               - TF(1)/TF(16)  * fm::pow3(bb/aa) * exp(mm*log(lam/(TF(3)*cc+lam)))
+//                               - TF(5)/TF(127) * fm::pow4(bb/aa) * exp(mm*log(lam/(TF(4)*cc+lam))) );
 
                     TF gamma_eva;
                     if (rain_gfak > TF(0))
-                       gamma_eva = rain_gfak * (D_br/D_m) * exp(-TF(0.2)*mue); // Eq. (23)
+                    {
+                        // Eq. (20) of Seifert (2008) for fixed parameters (needed for rain_gfak)
+                        // The reason of fixing cmu0=6.0 is that the relation can provide strange values for other mue values
+                        TF mue6;
+                        if (D_m <= TF(1.1e-3))
+                            mue6 = TF(6.0)*std::tanh(fm::pow2(TF(4.0e3)*(D_m-TF(1.1e-3)))) + TF(1.0);
+                        else
+                            mue6 = TF(30.0)*std::tanh(fm::pow2(TF(1.0e3)*(D_m-TF(1.1e-3)))) + TF(1.0);
+
+                        // ! Eq. (23)
+                        gamma_eva = rain_gfak * (D_br/D_m) * exp(-TF(0.2)*mue6);
+                        // gamma_eva = rain_gfak * (D_br/D_m) * exp(-TF(0.2)*mue); // Eq. (23)
+                    }
                     else
                        gamma_eva = TF(1);
 
@@ -3255,6 +3280,8 @@ namespace Sb_cold
                             TF mi_hom  = (TF(4)/TF(3) * pi<TF> * Constants::rho_i<TF>) * ni_hom * fm::pow3(ri_hom);
                             mi_hom  = std::max(mi_hom, ice.x_min);
 
+                            // MT suggestion of alberto to reduce the nucleation if it is too much:
+                            // TF nuc_n = std::max(std::min(ni_hom-ni, ni_hom_max<TF>-ni), TF(0));
                             TF nuc_n = std::max(std::min(ni_hom, ni_hom_max<TF>), TF(0));
                             nuc_n = std::min(nuc_n * mi_hom, qv[ij]);
                             TF nuc_q = nuc_n * mi_hom;
