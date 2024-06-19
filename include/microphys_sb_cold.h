@@ -655,7 +655,7 @@ namespace Sb_cold
            Evaporation of rain based on Seifert (2008, J. Atmos. Sci.)
         */
         const TF D_br = TF(1.1e-3);
-        const bool reduce_evaporation = true;
+        const bool reduce_evaporation = false;
 
         const TF aa = rain_coeffs.alfa;
         const TF bb = rain_coeffs.beta;
