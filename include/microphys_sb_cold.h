@@ -856,6 +856,7 @@ namespace Sb_cold
             const TF* const restrict ni,
             const TF* const restrict np,
             const TF* const restrict Ta,
+            const TF dt,
             Particle_frozen<TF>& itype,
             Particle_frozen<TF>& ptype,
             Collection_coeffs<TF>& coeffs,
@@ -896,7 +897,7 @@ namespace Sb_cold
                     const TF vi = particle_velocity(itype, xi) * rho_v;
 
                     // Both these terms have a `* dt` in ICON; left out since we need the tendency.
-                    const TF coll_n = pi4<TF> * np[ij] * ni[ij] * e_coll
+                    TF coll_n = pi4<TF> * np[ij] * ni[ij] * e_coll
                                       * (coeffs.delta_n_aa * fm::pow2(dp)
                                        + coeffs.delta_n_ab * dp * di
                                        + coeffs.delta_n_bb * fm::pow2(di))
@@ -905,7 +906,7 @@ namespace Sb_cold
                                        + coeffs.theta_n_bb * fm::pow2(vi)
                                        + fm::pow2(itype.s_vel));
 
-                    const TF coll_q = pi4<TF> * np[ij] * qi[ij] * e_coll
+                    TF coll_q = pi4<TF> * np[ij] * qi[ij] * e_coll
                                       * (coeffs.delta_q_aa * fm::pow2(dp)
                                        + coeffs.delta_q_ab * dp * di
                                        + coeffs.delta_q_bb * fm::pow2(di))
@@ -915,6 +916,9 @@ namespace Sb_cold
                                        + fm::pow2(itype.s_vel));
 
                     // Gain by the destination.
+                    coll_n = std::max(coll_n, -ni[ij]/dt);
+                    coll_q = std::max(coll_q, -qi[ij]/dt);
+
                     qpt[ij] += coll_q;
 
                     // Loss by the source.
@@ -1192,6 +1196,7 @@ namespace Sb_cold
             const TF* const restrict qi,
             const TF* const restrict ni,
             const TF* const restrict T,
+            const TF dt,
             Particle_frozen<TF>& ice,
             Particle_frozen<TF>& snow,
             Particle_ice_coeffs<TF>& ice_coeffs,
@@ -1223,11 +1228,14 @@ namespace Sb_cold
 
                     const TF v_i = ice.a_vel * pow(x_i, ice.b_vel) * rho_v;
 
-                    const TF self_n = pi4<TF> * e_coll * ice_coeffs.sc_delta_n * ni[ij] * ni[ij] * D_i * D_i *
+                    TF self_n = pi4<TF> * e_coll * ice_coeffs.sc_delta_n * ni[ij] * ni[ij] * D_i * D_i *
                          sqrt( ice_coeffs.sc_theta_n * v_i * v_i + TF(2) * pow(ice.s_vel, TF(2)) ); // * dt in ICON
 
-                    const TF self_q = pi4<TF> * e_coll * ice_coeffs.sc_delta_q * ni[ij] * qi[ij] * D_i * D_i *
+                    TF self_q = pi4<TF> * e_coll * ice_coeffs.sc_delta_q * ni[ij] * qi[ij] * D_i * D_i *
                          sqrt( ice_coeffs.sc_theta_q * v_i * v_i + TF(2) * pow(ice.s_vel, TF(2)) ); // * dt in ICON
+
+                    self_q = std::max(self_q, -qi[ij]/dt);
+                    self_n = std::max(std::min(self_n, self_q/x_conv_ii), -ni[ij]/dt);
 
                     qit[ij] -= self_q;
                     qst[ij] += self_q;
