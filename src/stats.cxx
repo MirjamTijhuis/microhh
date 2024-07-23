@@ -474,6 +474,50 @@ namespace
     }
 
     template<typename TF>
+    std::pair<TF, int> calc_max(
+            const TF* const restrict data, const TF* const restrict dz, const TF* const restrict rho,
+            const unsigned int* const mask, const unsigned int flag, const int* const nmask,
+            const int istart, const int iend, const int jstart, const int jend, const int kstart, const int kend,
+            const int jj, const int kk)
+    {
+        int nmask_proj = 0;
+        TF max = TF(0.);
+
+        for (int j=jstart; j<jend; ++j)
+                #pragma ivdep
+                for (int i=istart; i<iend; ++i)
+                {
+                    for (int k=kstart; k<kend; ++k)
+                    {
+                        const int ijk = i + j*jj + k*kk;
+                        if (in_mask<bool>(mask[ijk], flag))
+                        {
+                            ++nmask_proj;
+                            break;
+                        }
+                    }
+
+                    if (nmask_proj > 0)
+                    {
+                        for (int k=kstart; k<kend; ++k)
+                        {
+                            const int ijk = i + j*jj + k*kk;
+
+                            if (in_mask<bool>(mask[ijk], flag))
+                            {
+                                if (j==jstart && i==istart && k==kstart)
+                                    max = data[ijk];
+                                else
+                                    max = std::max(data[ijk], max);
+                            }
+                        }
+                    }
+                }
+
+        return std::make_pair(max, nmask_proj);
+    }
+
+    template<typename TF>
     std::pair<int, int> calc_cover(
             const TF* const restrict fld, const TF offset, const TF threshold,
             const unsigned int* const mask, const unsigned int flag, const int* const nmask,
@@ -906,6 +950,10 @@ void Stats<TF>::add_profs(
         else if (it == "path")
         {
             add_time_series(var.name+"_path", var.longname + " path", fields.simplify_unit(var.unit, "kg m-2"), group_name);
+        }
+        else if (it == "max")
+        {
+            add_time_series(var.name+"_max", var.longname + " maximum", var.unit, group_name);
         }
         else if (it == "cover")
         {
@@ -1445,6 +1493,7 @@ void Stats<TF>::calc_stats(
     calc_stats_flux(varname, fld, offset);
     calc_stats_grad(varname, fld);
     calc_stats_path(varname, fld);
+    calc_stats_max(varname, fld);
     calc_stats_cover(varname, fld, offset, threshold);
     calc_stats_frac(varname, fld, offset, threshold);        
 }
@@ -1710,6 +1759,41 @@ void Stats<TF>::calc_stats_path(
             master.sum(&path.second, 1);
 
             m.second.tseries.at(name).data = path.first / path.second;
+        }
+    }
+}
+
+template<typename TF>
+void Stats<TF>::calc_stats_max(
+        const std::string& varname, const Field3d<TF>& fld)
+{
+    auto& gd = grid.get_grid_data();
+
+    unsigned int flag;
+    const int* nmask;
+    std::string name;
+
+    // Calc Integrated Path
+    name = varname + "_max";
+    if (std::find(varlist.begin(), varlist.end(), name) != varlist.end())
+    {
+        for (auto& m : masks)
+        {
+            set_flag(flag, nmask, m.second, fld.loc[2]);
+
+            std::pair<TF, int> max = calc_max(
+                    fld.fld.data(), gd.dz.data(),
+                    fields.rhoref.data(),
+                    mfield.data(), flag, nmask,
+                    gd.istart, gd.iend,
+                    gd.jstart, gd.jend,
+                    gd.kstart, gd.kend,
+                    gd.icells, gd.ijcells);
+
+            master.max(&max.first, 1);
+            master.sum(&max.second, 1);
+
+            m.second.tseries.at(name).data = max.first;
         }
     }
 }
