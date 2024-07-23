@@ -165,6 +165,28 @@ namespace Sb_common
             }
     }
 
+    template<typename TF>
+    void integrate_process_reset_tend(
+            TF* const restrict val,
+            TF* const restrict tend,
+            const double dt,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int jstride)
+    {
+        for (int j = jstart; j < jend; j++)
+            #pragma ivdep
+            for (int i = istart; i < iend; i++)
+            {
+                const int ij = i + j * jstride;
+
+                // Time integration
+                val[ij] += tend[ij] * TF(dt);
+
+                // reset tendency
+                tend[ij] = TF(0);
+            }
+    }
 
     template<typename TF>
     void implicit_time(
