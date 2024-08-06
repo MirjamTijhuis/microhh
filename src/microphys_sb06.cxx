@@ -2420,6 +2420,17 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qr_auto");
             check("autoconversionSB", k);
             tendencies("autoconversion_rain", {"qc", "qr", "nr"}, k);
+            for (auto& it : hydro_types)
+            {
+                // Integrate conversion tendencies into qr/Nr slices before implicit step.
+                Sb_common::integrate_process_reset_tend(
+                        it.second.slice,
+                        it.second.conversion_tend,
+                        dt,
+                        gd.istart, gd.iend,
+                        gd.jstart, gd.jend,
+                        gd.icells);
+            }
 
             timer.start("qr_accr");
             Sb_cold::accretionSB(
@@ -2434,6 +2445,17 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qr_accr");
             check("accretionSB", k);
             tendencies("accretion_rain", {"qc", "qr"}, k);
+            for (auto& it : hydro_types)
+            {
+                // Integrate conversion tendencies into qr/Nr slices before implicit step.
+                Sb_common::integrate_process_reset_tend(
+                        it.second.slice,
+                        it.second.conversion_tend,
+                        dt,
+                        gd.istart, gd.iend,
+                        gd.jstart, gd.jend,
+                        gd.icells);
+            }
 
             timer.start("qr_selfc");
             Sb_cold::rain_selfcollectionSB(
@@ -2449,6 +2471,17 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qr_selfc");
             check("rain_selfcollectionSB", k);
             tendencies("selfcollection_rain", {"nr"}, k);
+            for (auto& it : hydro_types)
+            {
+                // Integrate conversion tendencies into qr/Nr slices before implicit step.
+                Sb_common::integrate_process_reset_tend(
+                        it.second.slice,
+                        it.second.conversion_tend,
+                        dt,
+                        gd.istart, gd.iend,
+                        gd.jstart, gd.jend,
+                        gd.icells);
+            }
         }
 
         // Evaporation of rain following Seifert (2008)
@@ -2476,6 +2509,17 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         timer.stop("qr_evap");
         check("rain_evaporation", k);
         tendencies("evaporation_rain", {"qv", "qr", "nr"}, k);
+        for (auto& it : hydro_types)
+        {
+            // Integrate conversion tendencies into qr/Nr slices before implicit step.
+            Sb_common::integrate_process_reset_tend(
+                    it.second.slice,
+                    it.second.conversion_tend,
+                    dt,
+                    gd.istart, gd.iend,
+                    gd.jstart, gd.jend,
+                    gd.icells);
+        }
 
 
         for (auto& it : hydro_types)
