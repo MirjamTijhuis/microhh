@@ -2425,6 +2425,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     cloud, rain,
                     rho_corr,
                     Nc0,
+                    TF(dt),
                     gd.istart, gd.iend,
                     gd.jstart, gd.jend,
                     gd.icells, gd.ijcells,
@@ -2450,6 +2451,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("qr").conversion_tend,
                     hydro_types.at("qr").slice,
                     &ql->fld.data()[k * gd.ijcells],
+                    TF(dt),
                     gd.istart, gd.iend,
                     gd.jstart, gd.jend,
                     gd.icells, gd.ijcells,
@@ -2476,6 +2478,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("nr").slice,
                     rain,
                     rho_corr,
+                    TF(dt),
                     gd.istart, gd.iend,
                     gd.jstart, gd.jend,
                     gd.icells, gd.ijcells,
@@ -2514,6 +2517,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 t_cfg_2mom,
                 rain_gfak,
                 rho_corr,
+                TF(dt),
                 gd.istart, gd.iend,
                 gd.jstart, gd.jend,
                 gd.icells, gd.ijcells,
@@ -2521,29 +2525,29 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         timer.stop("qr_evap");
         check("rain_evaporation", k);
         tendencies("evaporation_rain", {"qv", "qr", "nr"}, k);
-        for (auto& it : hydro_types)
-        {
-            // Integrate conversion tendencies into qr/Nr slices before implicit step.
-            Sb_common::integrate_process_reset_tend(
-                    it.second.slice,
-                    it.second.conversion_tend,
-                    dt,
-                    gd.istart, gd.iend,
-                    gd.jstart, gd.jend,
-                    gd.icells);
-        }
+//        for (auto& it : hydro_types)
+//        {
+//            // Integrate conversion tendencies into qr/Nr slices before implicit step.
+//            Sb_common::integrate_process_reset_tend(
+//                    it.second.slice,
+//                    it.second.conversion_tend,
+//                    dt,
+//                    gd.istart, gd.iend,
+//                    gd.jstart, gd.jend,
+//                    gd.icells);
+//        }
 
 
         for (auto& it : hydro_types)
         {
             // Integrate conversion tendencies into qr/Nr slices before implicit step.
-            Sb_common::integrate_process(
-                    it.second.slice,
-                    it.second.conversion_tend,
-                    dt,
-                    gd.istart, gd.iend,
-                    gd.jstart, gd.jend,
-                    gd.icells);
+//            Sb_common::integrate_process(
+//                    it.second.slice,
+//                    it.second.conversion_tend,
+//                    dt,
+//                    gd.istart, gd.iend,
+//                    gd.jstart, gd.jend,
+//                    gd.icells);
 
             // Implicit sedimentation step
             Sb_common::implicit_time(

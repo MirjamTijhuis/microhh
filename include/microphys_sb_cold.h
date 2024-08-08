@@ -485,14 +485,15 @@ namespace Sb_cold
             TF* const restrict qct,
             TF* const restrict qrt,
             TF* const restrict nrt,
-            const TF* const restrict qr,
-            const TF* const restrict nr,
-            const TF* const restrict qc,
+            TF* const restrict qr,
+            TF* const restrict nr,
+            TF* const restrict qc,
             Particle_cloud_coeffs<TF>& cloud_coeffs,
             Particle<TF>& cloud,
             Particle<TF>& rain,
             const TF cloud_rho_v,  // cloud%rho_v(i,k) in ICON, constant per layer in uHH.
             const TF Nc0,
+            const TF dt,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int jstride, const int kstride,
@@ -518,21 +519,23 @@ namespace Sb_cold
                     const TF n_c = Nc0; // cloud%n(i,k) in ICON
                     const TF x_c = particle_meanmass(cloud, qc[ij], n_c);
 
-                    TF au = cloud_coeffs.k_au * fm::pow2(qc[ij]) * fm::pow2(x_c) * cloud_rho_v;    // NOTE `*dt` in ICON..
+                    TF au = cloud_coeffs.k_au * fm::pow2(qc[ij]) * fm::pow2(x_c) * cloud_rho_v * dt;
                     const TF tau = std::min(std::max(TF(1) - qc[ij] / (qc[ij] + qr[ij] + eps), eps), TF(0.9));
                     const TF phi = k_1 * std::pow(tau, k_2) * fm::pow3(TF(1) - std::pow(tau, k_2));
                     au = au * (TF(1) + phi / fm::pow2(TF(1) - tau));
 
-                    nrt[ij] += au * x_s_i;
-                    qrt[ij] += au;
-                    qct[ij] -= au;
+                    au = std::max(std::min(qc[ij], au), TF(0));
+                    nr[ij] += au * x_s_i;
+                    qr[ij] += au;
+                    qc[ij] -= au;
 
-                    //au  = MAX(MIN(q_c,au),0.0_wp)
+//                    nrt[ij] += au * x_s_i;
+//                    qrt[ij] += au;
+//                    qct[ij] -= au;
+
                     //sc  = cloud_coeffs%k_sc * q_c**2 * dt * cloud%rho_v(i,k)
-                    //rain%n(i,k)  = rain%n(i,k)  + au * x_s_i
-                    //rain%q(i,k)  = rain%q(i,k)  + au
                     //cloud%n(i,k) = cloud%n(i,k) - MIN(n_c,sc)
-                    //cloud%q(i,k) = cloud%q(i,k) - au
+
                 }
             }
     }
@@ -542,8 +545,9 @@ namespace Sb_cold
     void accretionSB(
             TF* const restrict qct,
             TF* const restrict qrt,
-            const TF* const restrict qr,
-            const TF* const restrict qc,
+            TF* const restrict qr,
+            TF* const restrict qc,
+            const TF dt,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int jstride, const int kstride,
@@ -568,15 +572,16 @@ namespace Sb_cold
                     // ..accretion rate of SB2001
                     const TF tau = std::min(std::max(TF(1) - qc[ij] / (qc[ij] + qr[ij] + eps), eps), TF(1));
                     const TF phi = fm::pow4(tau/(tau+k_1));
-                    const TF ac  = k_r *  qc[ij] * qr[ij] * phi;  // NOTE: `*dt` in ICON..
+                    TF ac  = k_r *  qc[ij] * qr[ij] * phi * dt;
 
-                    qrt[ij] += ac;
-                    qct[ij] -= ac;
+                    ac = std::min(qc[ij], ac);
+                    qr[ij] += ac;
+                    qc[ij] -= ac;
 
-                    //ac = MIN(q_c,ac)
+//                    qrt[ij] += ac;
+//                    qct[ij] -= ac;
+
                     //x_c = particle_meanmass(cloud, q_c,n_c)
-                    //rain%q(i,k)  = rain%q(i,k)  + ac
-                    //cloud%q(i,k) = cloud%q(i,k) - ac
                     //cloud%n(i,k) = cloud%n(i,k) - MIN(n_c,ac/x_c)
                 }
             }
@@ -587,9 +592,10 @@ namespace Sb_cold
     void rain_selfcollectionSB(
             TF* const restrict nrt,
             const TF* const restrict qr,
-            const TF* const restrict nr,
+            TF* const restrict nr,
             Particle<TF>& rain,
             const TF rain_rho_v,  // rain%rho_v(i,k) in ICON, constant per layer in uHH.
+            const TF dt,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int jstride, const int kstride,
@@ -616,15 +622,15 @@ namespace Sb_cold
                     const TF Dr = particle_diameter(rain, xr);
 
                     // Selfcollection as in SB2001
-                    const TF sc = k_rr * nr[ij] * qr[ij] * rain_rho_v;  // `*dt` in ICON
+                    const TF sc = k_rr * nr[ij] * qr[ij] * rain_rho_v * dt;
 
                     // Breakup as in Seifert (2008, JAS), Eq. (A13)
                     TF br = TF(0);
                     if (Dr > TF(0.30e-3))
                         br = std::min(k_br * (Dr - D_br) + TF(1), TF(1.05)) * sc; // Limit of rain breakup from Saleeby et al. JAS 2022
 
-                    nrt[ij] -= (sc-br);
-                    //rain%n(i,k) = n_r - MIN(n_r,sc-br)
+                    nr[ij] -= nr[ij] - std::min(nr[ij], sc-br);
+                    // nrt[ij] -= (sc-br);
                 }
             }
     }
@@ -634,9 +640,9 @@ namespace Sb_cold
             TF* const restrict qvt,
             TF* const restrict qrt,
             TF* const restrict nrt,
-            const TF* const restrict qr,
-            const TF* const restrict nr,
-            const TF* const restrict qv,
+            TF* const restrict qr,
+            TF* const restrict nr,
+            TF* const restrict qv,
             const TF* const restrict ql,
             const TF* const restrict T,
             const TF* const restrict p,
@@ -646,6 +652,7 @@ namespace Sb_cold
             const T_cfg_2mom<TF>& cfg_params,
             const TF rain_gfak,
             const TF rain_rho_v,  // rain%rho_v(i,k) in ICON, constant per layer in uHH.
+            const TF dt,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int jstride, const int kstride,
@@ -747,7 +754,7 @@ namespace Sb_cold
                        gamma_eva = TF(1);
 
                     // Eq (A5) with (A9) and Gamma(mue+2) from (A7)
-                    TF eva_q = g_d * nr[ij] * (mue + TF(1.0)) / lam * f_v * s_sw; // * dt in ICON
+                    TF eva_q = g_d * nr[ij] * (mue + TF(1.0)) / lam * f_v * s_sw * dt;
 
                     // UB: empirical correction factor to reduce evaporation of drizzle-like rain (D_m < D_br):
                     if (reduce_evaporation)
@@ -765,23 +772,24 @@ namespace Sb_cold
                         eva_q *= eva_q_fak;
                     }
 
+                    TF eva_n = gamma_eva * eva_q / x_r;
+                    eva_q = std::max(-eva_q, TF(0));
+                    eva_n = std::max(-eva_n, TF(0));
+
+                    eva_q = std::min(eva_q, qr[ij]);
+                    eva_n = std::min(eva_n, nr[ij]);
+
+                    qv[ij] += eva_q;
+                    qr[ij] -= eva_q;
+                    nr[ij] -= eva_n;
+
                     // Note to self: `eva_q` is a negative number at this point.
                     // Sign diff compared to ICON is caused by their `eva_q = MAX(-eva_q,0.0_wp)`.
-                    eva_q = -eva_q;
+                    // eva_q = -eva_q;
 
-                    qrt[ij] -= eva_q;
-                    nrt[ij] -= gamma_eva * eva_q / x_r;
-                    qvt[ij] += eva_q;
-
-                    //const TF eva_q = MAX(-eva_q,0.0_wp)
-                    //const TF eva_n = MAX(-eva_n,0.0_wp)
-
-                    //const TF eva_q = MIN(eva_q,q_r)
-                    //const TF eva_n = MIN(eva_n,n_r)
-
-                    //const TF atmo%qv(i,k)     = atmo%qv(i,k)     + eva_q
-                    //const TF rain%q(i,k) = rain%q(i,k) - eva_q
-                    //const TF rain%n(i,k) = rain%n(i,k) - eva_n
+                    // qrt[ij] -= eva_q;
+                    // nrt[ij] -= gamma_eva * eva_q / x_r;
+                    // qvt[ij] += eva_q;
                 }
             }
     }
