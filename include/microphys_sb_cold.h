@@ -529,9 +529,9 @@ namespace Sb_cold
                     qr[ij] += au;
                     qc[ij] -= au;
 
-//                    nrt[ij] += au * x_s_i;
-//                    qrt[ij] += au;
-//                    qct[ij] -= au;
+                    // also update the tendencies of qr, qi, qv, and/or qc as these are used for the calculation of the thermodynamic tendencies `thlt` and `qtt`
+                    qrt[ij] += au/dt;
+                    qct[ij] -= au/dt;
 
                     //sc  = cloud_coeffs%k_sc * q_c**2 * dt * cloud%rho_v(i,k)
                     //cloud%n(i,k) = cloud%n(i,k) - MIN(n_c,sc)
@@ -578,8 +578,9 @@ namespace Sb_cold
                     qr[ij] += ac;
                     qc[ij] -= ac;
 
-//                    qrt[ij] += ac;
-//                    qct[ij] -= ac;
+                    // also update the tendencies of qr, qi, qv, and/or qc as these are used for the calculation of the thermodynamic tendencies `thlt` and `qtt`
+                    qrt[ij] += ac/dt;
+                    qct[ij] -= ac/dt;
 
                     //x_c = particle_meanmass(cloud, q_c,n_c)
                     //cloud%n(i,k) = cloud%n(i,k) - MIN(n_c,ac/x_c)
@@ -630,7 +631,6 @@ namespace Sb_cold
                         br = std::min(k_br * (Dr - D_br) + TF(1), TF(1.05)) * sc; // Limit of rain breakup from Saleeby et al. JAS 2022
 
                     nr[ij] -= std::min(nr[ij], sc-br);
-                    // nrt[ij] -= (sc-br);
                 }
             }
     }
@@ -783,13 +783,9 @@ namespace Sb_cold
                     qr[ij] -= eva_q;
                     nr[ij] -= eva_n;
 
-                    // Note to self: `eva_q` is a negative number at this point.
-                    // Sign diff compared to ICON is caused by their `eva_q = MAX(-eva_q,0.0_wp)`.
-                    // eva_q = -eva_q;
-
-                    // qrt[ij] -= eva_q;
-                    // nrt[ij] -= gamma_eva * eva_q / x_r;
-                    // qvt[ij] += eva_q;
+                    // also update the tendencies of qr, qi, qv, and/or qc as these are used for the calculation of the thermodynamic tendencies `thlt` and `qtt`
+                     qrt[ij] -= eva_q/dt;
+                     qvt[ij] += eva_q/dt;
                 }
             }
     }
