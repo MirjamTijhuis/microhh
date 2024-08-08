@@ -629,7 +629,7 @@ namespace Sb_cold
                     if (Dr > TF(0.30e-3))
                         br = std::min(k_br * (Dr - D_br) + TF(1), TF(1.05)) * sc; // Limit of rain breakup from Saleeby et al. JAS 2022
 
-                    nr[ij] -= nr[ij] - std::min(nr[ij], sc-br);
+                    nr[ij] -= std::min(nr[ij], sc-br);
                     // nrt[ij] -= (sc-br);
                 }
             }
