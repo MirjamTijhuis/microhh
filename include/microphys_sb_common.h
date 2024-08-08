@@ -277,7 +277,8 @@ namespace Sb_common
                         qtt_mcr += qit[ij];
 
                     qtt[ijk] += rho_i * qtt_mcr;
-                    thlt[ijk] += - Ls_cp_rho_i * qtt_mcr - Lf_cp_rho_i * qrt[ij];
+                    // thlt[ijk] += - Ls_cp_rho_i * qtt_mcr - Lf_cp_rho_i * qrt[ij];
+                    thlt[ijk] += - Ls_cp_rho_i * qvt[ij] + Lf_cp_rho_i * (qct[ij] + qrt[ij]);
 
                     // Old manual method (which was likely incorrect).
                     //if (sw_prognostic_ice)
