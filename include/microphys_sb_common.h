@@ -261,8 +261,10 @@ namespace Sb_common
             const int k)
     {
         const TF rho_i = TF(1) / rho[k];
-        const TF Ls_cp_rho_i = Ls<TF>/(cp<TF>*exner[k]) * rho_i;
-        const TF Lf_cp_rho_i = Lf<TF>/(cp<TF>*exner[k]) * rho_i;
+//        const TF Ls_cp_rho_i = Ls<TF>/(cp<TF>*exner[k]) * rho_i;
+//        const TF Lf_cp_rho_i = Lf<TF>/(cp<TF>*exner[k]) * rho_i;
+        const TF Ls_cp_rho_i = Ls<TF>/cp<TF> * rho_i;
+        const TF Lf_cp_rho_i = Lf<TF>/cp<TF> * rho_i;
 
         for (int j = jstart; j < jend; j++)
                 #pragma ivdep
@@ -278,7 +280,10 @@ namespace Sb_common
 
                     qtt[ijk] += rho_i * qtt_mcr;
                     // thlt[ijk] += - Ls_cp_rho_i * qtt_mcr - Lf_cp_rho_i * qrt[ij];
-                    thlt[ijk] += - Ls_cp_rho_i * qvt[ij] + Lf_cp_rho_i * (qct[ij] + qrt[ij]);
+                    TF Tt = - Ls_cp_rho_i * qvt[ij] + Lf_cp_rho_i * (qct[ij] + qrt[ij]);
+                    TF ql_correction = Lv<TF> / (Tt * cp<TF>) * qct[ij];
+                    thlt[ijk] +=  Tt * 1/exner[k] * (1 - ql_correction);
+//                    thlt[ijk] += - Ls_cp_rho_i * qvt[ij] + Lf_cp_rho_i * (qct[ij] + qrt[ij]);
 
                     // Old manual method (which was likely incorrect).
                     //if (sw_prognostic_ice)
