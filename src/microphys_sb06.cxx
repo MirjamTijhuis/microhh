@@ -2580,41 +2580,25 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         // from microphysics tendencies excluding sedimentation.
         auto thermo_tendency_wrapper = [&]<bool sw_prognostic_ice, bool sw_ice>()
         {
-            if (!sw_ice)
-            {
-                Sb_common::calc_thermo_tendencies_cloud(
-                        fields.st.at("thl")->fld.data(),
-                        fields.st.at("qt")->fld.data(),
-                        hydro_types.at("qr").conversion_tend,
-                        rho.data(),
-                        exner.data(),
-                        gd.istart, gd.iend,
-                        gd.jstart, gd.jend,
-                        gd.icells, gd.ijcells,
-                        k);
-            }
-            
-            else {
-                TF *qi_tend;
-                if (sw_ice)
-                    qi_tend = hydro_types.at("qi").conversion_tend;
-                else
-                    qi_tend = nullptr;
+            TF *qi_tend;
+            if (sw_ice)
+                qi_tend = hydro_types.at("qi").conversion_tend;
+            else
+                qi_tend = nullptr;
 
-                Sb_common::calc_thermo_tendencies_cloud_ice<TF, sw_prognostic_ice, sw_ice>(
-                        fields.st.at("thl")->fld.data(),
-                        fields.st.at("qt")->fld.data(),
-                        hydro_types.at("qr").conversion_tend,
-                        qi_tend,
-                        (*qv_conversion_tend).data(),
-                        (*qc_conversion_tend).data(),
-                        rho.data(),
-                        exner.data(),
-                        gd.istart, gd.iend,
-                        gd.jstart, gd.jend,
-                        gd.icells, gd.ijcells,
-                        k);
-            }
+            Sb_common::calc_thermo_tendencies_cloud_ice<TF, sw_prognostic_ice, sw_ice>(
+                    fields.st.at("thl")->fld.data(),
+                    fields.st.at("qt")->fld.data(),
+                    hydro_types.at("qr").conversion_tend,
+                    qi_tend,
+                    (*qv_conversion_tend).data(),
+                    (*qc_conversion_tend).data(),
+                    rho.data(),
+                    exner.data(),
+                    gd.istart, gd.iend,
+                    gd.jstart, gd.jend,
+                    gd.icells, gd.ijcells,
+                    k);
         };
 
         if (sw_ice && sw_prognostic_ice)

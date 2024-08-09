@@ -280,9 +280,10 @@ namespace Sb_common
 
                     qtt[ijk] += rho_i * qtt_mcr;
                     // thlt[ijk] += - Ls_cp_rho_i * qtt_mcr - Lf_cp_rho_i * qrt[ij];
-                    TF Tt = - Ls_cp_rho_i * qvt[ij] + Lf_cp_rho_i * (qct[ij] + qrt[ij]);
-                    TF ql_correction = Lv<TF> / (Tt * cp<TF>) * qct[ij];
-                    thlt[ijk] +=  Tt * 1/exner[k] * (1 - ql_correction);
+                     thlt[ijk] += - Ls_cp_rho_i * qtt_mcr - Lf_cp_rho_i * qrt[ij] + TF(2) * Lf_cp_rho_i * (qrt[ij] + qct[ij]);
+//                    TF Tt = - Ls_cp_rho_i * qvt[ij] + Lf_cp_rho_i * (qct[ij] + qrt[ij]);
+//                    TF ql_correction = Lv<TF> / (Tt * cp<TF>) * qct[ij];
+//                    thlt[ijk] +=  Tt * 1/exner[k] * (1 - ql_correction);
 //                    thlt[ijk] += - Ls_cp_rho_i * qvt[ij] + Lf_cp_rho_i * (qct[ij] + qrt[ij]);
 
                     // Old manual method (which was likely incorrect).
