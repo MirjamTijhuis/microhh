@@ -295,7 +295,7 @@ namespace Sb_common
     template<typename TF>
     void diagnose_tendency(
             TF* const restrict tend,
-            const TF* const restrict fld_old,
+            TF* const restrict fld_old,
             const TF* const restrict fld_new,
             const TF* const restrict rho,
             const double dt,
@@ -319,6 +319,9 @@ namespace Sb_common
                     // Evaluate tendencies. This includes the tendencies from both conversions and implicit sedimentation.
                     // `Old` versions are integrated first with only the dynamics tendencies to avoid double counting.
                     tend[ijk] += rho_i * (fld_new[ij] - (fld_old[ijk] + fac*dt*rho[k]*tend[ijk])) * dt_i;
+
+                    // copy slice back to 3D field as starting point for the next time step
+                    fld_old[ijk] = fld_new[ij];
                 }
     }
 }
