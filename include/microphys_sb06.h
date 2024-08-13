@@ -363,7 +363,8 @@ class Microphys_sb06 : public Microphys<TF>
 
         // NOTE: this switch is set to True in ICON, but produces discontinuities in Nr and qr profiles.
         // Disable the feature for now, and discuss later with the ICON people.
-        bool use_ql_sedi_rain = false;
+        // bool use_ql_sedi_rain = false;
+        bool use_ql_sedi_rain = true;
 
         std::vector<std::string> crosslist;     // Cross-sections handled by this class
         std::vector<std::string> crosslist_dBZ; // dBZ cross-sections handled by this class

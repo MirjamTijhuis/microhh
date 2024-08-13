@@ -320,8 +320,6 @@ namespace Sb_common
                     // `Old` versions are integrated first with only the dynamics tendencies to avoid double counting.
                     tend[ijk] += rho_i * (fld_new[ij] - (fld_old[ijk] + fac*dt*rho[k]*tend[ijk])) * dt_i;
 
-                    // copy slice back to 3D field as starting point for the next time step
-                    fld_old[ijk] = fld_new[ij];
                 }
     }
 }
