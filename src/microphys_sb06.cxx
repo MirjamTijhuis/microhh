@@ -2729,7 +2729,9 @@ void Microphys_sb06<TF>::exec_stats(Stats<TF>& stats, Thermo<TF>& thermo, const 
     // Profiles
     auto vq = fields.get_tmp();
     auto vn = fields.get_tmp();
-
+    auto ql = fields.get_tmp();
+    thermo.get_thermo_field(*ql, "ql", cyclic, is_stat);
+    
     for (int k=gd.kend-1; k>=gd.kstart; --k)
     {
         // Sedimentation rain
@@ -2742,7 +2744,7 @@ void Microphys_sb06<TF>::exec_stats(Stats<TF>& stats, Thermo<TF>& thermo, const 
                 &vn->fld.data()[k * gd.ijcells],
                 &fields.sp.at("qr")->fld.data()[k*gd.ijcells],
                 &fields.sp.at("nr")->fld.data()[k*gd.ijcells],
-                nullptr,
+                ql->fld.data(),
                 rho.data(),
                 rain, rain_coeffs,
                 rho_corr,
