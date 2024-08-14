@@ -261,8 +261,8 @@ namespace Sb_common
             const int k)
     {
         const TF rho_i = TF(1) / rho[k];
-        const TF Ls_cp_rho_i = Ls<TF>/cp<TF> * rho_i;
-        const TF Lf_cp_rho_i = Lf<TF>/cp<TF> * rho_i;
+        const TF Ls_cp = Ls<TF>/cp<TF>;
+        const TF Lf_cp = Lf<TF>/cp<TF>;
 
         for (int j = jstart; j < jend; j++)
                 #pragma ivdep
@@ -276,8 +276,8 @@ namespace Sb_common
                     if (sw_ice && !sw_prognostic_ice)
                         qtt_mcr += qit[ij];
 
-                    qtt[ijk] += rho_i * qtt_mcr;
-                    thlt[ijk] += - Ls_cp_rho_i * qtt_mcr - Lf_cp_rho_i * qrt[ij];
+                    qtt[ijk] += qtt_mcr;
+                    thlt[ijk] += - Ls_cp * qtt_mcr - Lf_cp * qrt[ij];
 
                     // Old manual method (which was likely incorrect).
                     //if (sw_prognostic_ice)

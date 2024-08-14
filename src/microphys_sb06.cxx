@@ -2281,7 +2281,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 k
                 );
 
-        // diagnose also the tendencies in qc and qv
         Sb_common::diagnose_tendency_2d(
                 (*qc_conversion_tend).data(),
                 (*ql_old).data(),
