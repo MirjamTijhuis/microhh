@@ -2168,9 +2168,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             // Autoconversion; formation of rain drop by coagulating cloud droplets.
             timer.start("qr_auto");
             Sb_cold::autoconversionSB(
-                    (*qc_conversion_tend).data(),
-                    hydro_types.at("qr").conversion_tend,
-                    hydro_types.at("nr").conversion_tend,
                     hydro_types.at("qr").slice,
                     hydro_types.at("nr").slice,
                     (*ql_new).data(),
@@ -2189,8 +2186,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
             timer.start("qr_accr");
             Sb_cold::accretionSB(
-                    (*qc_conversion_tend).data(),
-                    hydro_types.at("qr").conversion_tend,
                     hydro_types.at("qr").slice,
                     (*ql_new).data(),
                     TF(dt),
@@ -2204,7 +2199,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
             timer.start("qr_selfc");
             Sb_cold::rain_selfcollectionSB(
-                    hydro_types.at("nr").conversion_tend,
                     hydro_types.at("qr").slice,
                     hydro_types.at("nr").slice,
                     rain,
@@ -2222,9 +2216,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         // Evaporation of rain following Seifert (2008)
         timer.start("qr_evap");
         Sb_cold::rain_evaporation(
-                (*qv_conversion_tend).data(),
-                hydro_types.at("qr").conversion_tend,
-                hydro_types.at("nr").conversion_tend,
                 hydro_types.at("qr").slice,
                 hydro_types.at("nr").slice,
                 (*qv).data(),
@@ -2249,15 +2240,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
         for (auto& it : hydro_types)
         {
-            // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//            Sb_common::integrate_process(
-//                    it.second.slice,
-//                    it.second.conversion_tend,
-//                    dt,
-//                    gd.istart, gd.iend,
-//                    gd.jstart, gd.jend,
-//                    gd.icells);
-
             // Implicit sedimentation step
             Sb_common::implicit_time(
                     it.second.slice,

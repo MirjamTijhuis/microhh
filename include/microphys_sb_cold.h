@@ -482,9 +482,6 @@ namespace Sb_cold
 
     template<typename TF>
     void autoconversionSB(
-            TF* const restrict qct,
-            TF* const restrict qrt,
-            TF* const restrict nrt,
             TF* const restrict qr,
             TF* const restrict nr,
             TF* const restrict qc,
@@ -529,13 +526,8 @@ namespace Sb_cold
                     qr[ij] += au;
                     qc[ij] -= au;
 
-                    // also update the tendencies of qr, qi, qv, and/or qc as these are used for the calculation of the thermodynamic tendencies `thlt` and `qtt`
-//                    qrt[ij] += au/dt;
-//                    qct[ij] -= au/dt;
-
                     //sc  = cloud_coeffs%k_sc * q_c**2 * dt * cloud%rho_v(i,k)
                     //cloud%n(i,k) = cloud%n(i,k) - MIN(n_c,sc)
-
                 }
             }
     }
@@ -543,8 +535,6 @@ namespace Sb_cold
 
     template<typename TF>
     void accretionSB(
-            TF* const restrict qct,
-            TF* const restrict qrt,
             TF* const restrict qr,
             TF* const restrict qc,
             const TF dt,
@@ -578,10 +568,6 @@ namespace Sb_cold
                     qr[ij] += ac;
                     qc[ij] -= ac;
 
-                    // also update the tendencies of qr, qi, qv, and/or qc as these are used for the calculation of the thermodynamic tendencies `thlt` and `qtt`
-//                    qrt[ij] += ac/dt;
-//                    qct[ij] -= ac/dt;
-
                     //x_c = particle_meanmass(cloud, q_c,n_c)
                     //cloud%n(i,k) = cloud%n(i,k) - MIN(n_c,ac/x_c)
                 }
@@ -591,7 +577,6 @@ namespace Sb_cold
 
     template<typename TF>
     void rain_selfcollectionSB(
-            TF* const restrict nrt,
             const TF* const restrict qr,
             TF* const restrict nr,
             Particle<TF>& rain,
@@ -637,9 +622,6 @@ namespace Sb_cold
 
     template<typename TF>
     void rain_evaporation(
-            TF* const restrict qvt,
-            TF* const restrict qrt,
-            TF* const restrict nrt,
             TF* const restrict qr,
             TF* const restrict nr,
             TF* const restrict qv,
@@ -782,10 +764,6 @@ namespace Sb_cold
                     qv[ij] += eva_q;
                     qr[ij] -= eva_q;
                     nr[ij] -= eva_n;
-
-                    // also update the tendencies of qr, qi, qv, and/or qc as these are used for the calculation of the thermodynamic tendencies `thlt` and `qtt`
-                     //qrt[ij] -= eva_q/dt;
-                     //qvt[ij] += eva_q/dt;
                 }
             }
     }
