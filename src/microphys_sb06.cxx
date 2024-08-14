@@ -1009,6 +1009,11 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
     // qv is diagnosed as qv=qt-ql (prognostic ice), or qv=qt-ql-qi (satadjust ice).
     auto qv = fields.get_tmp_xy();
+    auto qv_old = fields.get_tmp_xy();
+    // slices of ql to determine the tendency at the end
+    auto ql_new = fields.get_tmp_xy();
+    auto ql_old = fields.get_tmp_xy();
+
 
     const std::vector<TF>& p = thermo.get_basestate_vector("p");
     const std::vector<TF>& exner = thermo.get_basestate_vector("exner");
@@ -1297,6 +1302,18 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             for (int n=0; n<gd.ijcells; ++n)
                 it.second.conversion_tend[n] = TF(0);
         }
+
+        // fill slices of qv_old, ql_new and ql_old
+        for (int j = gd.jstart; j < gd.jend; j++)
+        #pragma ivdep
+                for (int i = gd.istart; i < gd.iend; i++)
+                {
+                    const int ij = i + j * gd.jstride;
+                    (*qv_old).data()[ij] = (*qv).data()[ij];
+
+                    (*ql_old).data()[ij] = ql->fld.data()[k*gd.ijcells];
+                    (*ql_new).data()[ij] = ql->fld.data()[k*gd.ijcells];
+                }
 
         // Zero diagnostic qx tendencies.
         zero_tmp_xy(qv_conversion_tend);
@@ -2156,7 +2173,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("nr").conversion_tend,
                     hydro_types.at("qr").slice,
                     hydro_types.at("nr").slice,
-                    &ql->fld.data()[k * gd.ijcells],
+                    (*ql_new).data(),
                     cloud_coeffs,
                     cloud, rain,
                     rho_corr,
@@ -2175,7 +2192,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     (*qc_conversion_tend).data(),
                     hydro_types.at("qr").conversion_tend,
                     hydro_types.at("qr").slice,
-                    &ql->fld.data()[k * gd.ijcells],
+                    (*ql_new).data(),
                     TF(dt),
                     gd.istart, gd.iend,
                     gd.jstart, gd.jend,
@@ -2211,7 +2228,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 hydro_types.at("qr").slice,
                 hydro_types.at("nr").slice,
                 (*qv).data(),
-                &ql->fld.data()[k*gd.ijcells],
+                (*ql_new).data(),
                 &T->fld.data()[k*gd.ijcells],
                 p.data(),
                 rain_coeffs,
@@ -2268,20 +2285,48 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     k);
         }
 
+        // diagnose also the tendencies in qc and qv
+        Sb_common::diagnose_tendency_2d(
+                (*qv_conversion_tend).data(),
+                (*qv_old).data(),
+                (*qv).data(),
+                rho.data(),
+                dt,
+                sw_integrate,
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.icells, gd.ijcells,
+                k
+                );
+
+        // diagnose also the tendencies in qc and qv
+        Sb_common::diagnose_tendency_2d(
+                (*qc_conversion_tend).data(),
+                (*ql_old).data(),
+                (*ql_new).data(),
+                rho.data(),
+                dt,
+                sw_integrate,
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.icells, gd.ijcells,
+                k
+        );
+
         // Calculate thermodynamic tendencies `thl` and `qt`,
         // from microphysics tendencies excluding sedimentation.
         auto thermo_tendency_wrapper = [&]<bool sw_prognostic_ice, bool sw_ice>()
         {
             TF *qi_tend;
             if (sw_ice)
-                qi_tend = hydro_types.at("qi").conversion_tend;
+                qi_tend = fields.st.at("qi")->fld.data();
             else
                 qi_tend = nullptr;
 
             Sb_common::calc_thermo_tendencies_cloud_ice<TF, sw_prognostic_ice, sw_ice>(
                     fields.st.at("thl")->fld.data(),
                     fields.st.at("qt")->fld.data(),
-                    hydro_types.at("qr").conversion_tend,
+                    fields.st.at("qr")->fld.data(),
                     qi_tend,
                     (*qv_conversion_tend).data(),
                     (*qc_conversion_tend).data(),

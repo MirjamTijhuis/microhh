@@ -322,4 +322,30 @@ namespace Sb_common
 
                 }
     }
+
+    template<typename TF>
+    void diagnose_tendency_2d(
+            TF* const restrict tend,
+            TF* const restrict fld_old,
+            const TF* const restrict fld_new,
+            const TF* const restrict rho,
+            const double dt,
+            bool do_integration,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int jstride, const int kstride,
+            const int k)
+    {
+        const TF dt_i = TF(1) / dt;
+        const TF rho_i = TF(1) / rho[k];
+
+        for (int j = jstart; j < jend; j++)
+        #pragma ivdep
+                for (int i = istart; i < iend; i++)
+                {
+                    const int ij = i + j * jstride;
+                    tend[ij] += rho_i * (fld_new[ij] - fld_old[ij]) * dt_i;
+
+                }
+    }
 }

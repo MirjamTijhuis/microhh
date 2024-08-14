@@ -530,8 +530,8 @@ namespace Sb_cold
                     qc[ij] -= au;
 
                     // also update the tendencies of qr, qi, qv, and/or qc as these are used for the calculation of the thermodynamic tendencies `thlt` and `qtt`
-                    qrt[ij] += au/dt;
-                    qct[ij] -= au/dt;
+//                    qrt[ij] += au/dt;
+//                    qct[ij] -= au/dt;
 
                     //sc  = cloud_coeffs%k_sc * q_c**2 * dt * cloud%rho_v(i,k)
                     //cloud%n(i,k) = cloud%n(i,k) - MIN(n_c,sc)
@@ -579,8 +579,8 @@ namespace Sb_cold
                     qc[ij] -= ac;
 
                     // also update the tendencies of qr, qi, qv, and/or qc as these are used for the calculation of the thermodynamic tendencies `thlt` and `qtt`
-                    qrt[ij] += ac/dt;
-                    qct[ij] -= ac/dt;
+//                    qrt[ij] += ac/dt;
+//                    qct[ij] -= ac/dt;
 
                     //x_c = particle_meanmass(cloud, q_c,n_c)
                     //cloud%n(i,k) = cloud%n(i,k) - MIN(n_c,ac/x_c)
@@ -784,8 +784,8 @@ namespace Sb_cold
                     nr[ij] -= eva_n;
 
                     // also update the tendencies of qr, qi, qv, and/or qc as these are used for the calculation of the thermodynamic tendencies `thlt` and `qtt`
-                     qrt[ij] -= eva_q/dt;
-                     qvt[ij] += eva_q/dt;
+                     //qrt[ij] -= eva_q/dt;
+                     //qvt[ij] += eva_q/dt;
                 }
             }
     }
