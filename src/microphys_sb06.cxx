@@ -1562,17 +1562,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("vapor_dep");
             check("vapor_dep_relaxation", k);
             tendencies("vapor_deposition", {"qv", "qi", "ni", "qs", "ns", "qg", "ng", "qh", "nh"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Ice-ice collisions -> forms snow.
             timer.start("qi_selfc");
@@ -1596,17 +1585,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qi_selfc");
             check("ice_selfcollection", k);
             tendencies("selfcollection_ice", {"qi", "ni", "qs", "ns"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Selfcollection of snow
             timer.start("qs_selfc");
@@ -1624,17 +1602,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qs_selfc");
             check("snow_selfcollection", k);
             tendencies("selfcollection_snow", {"ns"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Selfcollection of graupel.
             timer.start("qg_selfc");
@@ -1652,17 +1619,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qg_selfc");
             check("graupel_selfcollection", k);
             tendencies("selfcollection_graupel", {"ng"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Collection of ice by snow.
             timer.start("qiqs_coll");
@@ -1685,17 +1641,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qiqs_coll");
             check("particle_particle_collection snow-ice", k);
             tendencies("pp_collection_ice_to_snow", {"qs", "qi", "ni"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Collection of ice by graupel.
             timer.start("qiqg_coll");
@@ -1718,17 +1663,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qiqg_coll");
             check("particle_particle_collection graupel-ice", k);
             tendencies("pp_collection_ice_to_graupel", {"qg", "qi", "ni"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Collection of snow by graupel.
             timer.start("qsqg_coll");
@@ -1751,17 +1685,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qsqg_coll");
             check("particle_particle_collection graupel-snow", k);
             tendencies("pp_collection_snow_to_graupel", {"qg", "qs", "ns"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Collection of ice by hail.
             timer.start("qiqh_coll");
@@ -1784,17 +1707,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qiqh_coll");
             check("particle_particle_collection hail-ice", k);
             tendencies("pp_collection_ice_to_hail", {"qh", "qi", "ni"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Collection of snow by hail.
             timer.start("qsqh_coll");
@@ -1817,17 +1729,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qsqh_coll");
             check("particle_particle_collection hail-snow", k);
             tendencies("pp_collection_snow_to_hail", {"qh", "qs", "ns"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Conversion of graupel to hail in wet growth regime
             timer.start("qgqh_conv");
@@ -1858,17 +1759,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qgqh_conv");
             check("graupel_hail_conv_wet_gamlook", k);
             tendencies("conversion_graupel_to_hail", {"qg", "ng", "qh", "nh"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Riming of ice with cloud droplets and rain drops, and conversion to graupel
             timer.start("qi_riming");
@@ -1905,17 +1795,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qi_riming");
             check("ice_riming", k);
             tendencies("riming_ice", {"qc", "nc", "qi", "ni", "qr", "nr", "qg", "ng"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Riming of snow with cloud droplets and rain drops, and conversion to graupel
             timer.start("qs_riming");
@@ -1954,17 +1833,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qs_riming");
             check("snow_riming", k);
             tendencies("riming_snow", {"qc", "nc", "qs", "ns", "qi", "ni", "qr", "nr", "qg", "ng"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Hail-cloud riming
             timer.start("qhqc_riming");
@@ -1993,17 +1861,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qhqc_riming");
             check("particle_cloud_riming hail-cloud", k);
             tendencies("riming_hail_cloud", {"qh", "nh", "qc", "nc", "qi", "ni", "qr", "nr"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Hail-rain riming
             timer.start("qhqr_riming");
@@ -2030,17 +1887,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qhqr_riming");
             check("particle_rain_riming hail-rain", k);
             tendencies("riming_hail_rain", {"qh", "nh", "qr", "nr", "qi", "ni"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Graupel-cloud riming
             timer.start("qgqc_riming");
@@ -2069,17 +1915,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qgqc_riming");
             check("particle_cloud_riming graupel-cloud", k);
             tendencies("riming_graupel_cloud", {"qg", "ng", "qc", "nc", "qi", "ni", "qr", "nr"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Graupel-rain riming
             timer.start("qgqr_riming");
@@ -2106,17 +1941,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qgqr_riming");
             check("particle_rain_riming graupel-rain", k);
             tendencies("riming_graupel_rain", {"qg", "ng", "qr", "nr", "qi", "ni"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Freezing of rain and conversion to ice/graupel/hail
             timer.start("qr_freeze");
@@ -2150,17 +1974,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qr_freeze");
             check("rain_freeze_gamlook", k);
             tendencies("freezing_rain", {"qi", "ni", "qr", "nr", "qg", "ng", "qh", "nh"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Melting of ice
             timer.start("qi_melt");
@@ -2182,17 +1995,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qi_melt");
             check("ice_melting", k);
             tendencies("melting_ice", {"qi", "ni", "qr", "nr"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             timer.start("qs_melt");
             Sb_cold::snow_melting(
@@ -2213,17 +2015,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qs_melt");
             check("snow_melting", k);
             tendencies("melting_snow", {"qs", "ns", "qr", "nr"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             // Melting of graupel and hail can be simple or LWF-based
             //SELECT TYPE (graupel)
@@ -2248,17 +2039,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qg_melt");
             check("graupel_melting", k);
             tendencies("melting_graupel", {"qg", "ng", "qr", "nr"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             //TYPE IS (particle_lwf)
             //  CALL prepare_melting_lwf(ik_slice, atmo, gmelting)
@@ -2288,17 +2068,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qh_melt");
             check("hail_melting", k);
             tendencies("melting_hail", {"qh", "nh", "qr", "nr"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             //TYPE IS (particle_lwf)
             //  CALL particle_melting_lwf(ik_slice, dt, hail, rain, gmelting)
@@ -2323,17 +2092,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qi_evap");
             check("evaporation of snow", k);
             tendencies("evaporation_ice", {"qv", "qs", "ns"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             timer.start("qg_evap");
             Sb_cold::evaporation(
@@ -2353,17 +2111,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qg_evap");
             check("evaporation of graupel", k);
             tendencies("evaporation_graupel", {"qv", "qg", "ng"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             timer.start("qh_evap");
             Sb_cold::evaporation(
@@ -2383,17 +2130,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qh_evap");
             check("evaporation of hail", k);
             tendencies("evaporation_hail", {"qv", "qh", "nh"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
         }
 
         // Warm rain processes
@@ -2433,17 +2169,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qr_auto");
             check("autoconversionSB", k);
             tendencies("autoconversion_rain", {"qc", "qr", "nr"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             timer.start("qr_accr");
             Sb_cold::accretionSB(
@@ -2459,17 +2184,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qr_accr");
             check("accretionSB", k);
             tendencies("accretion_rain", {"qc", "qr"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
 
             timer.start("qr_selfc");
             Sb_cold::rain_selfcollectionSB(
@@ -2486,17 +2200,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             timer.stop("qr_selfc");
             check("rain_selfcollectionSB", k);
             tendencies("selfcollection_rain", {"nr"}, k);
-//            for (auto& it : hydro_types)
-//            {
-//                // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//                Sb_common::integrate_process_reset_tend(
-//                        it.second.slice,
-//                        it.second.conversion_tend,
-//                        dt,
-//                        gd.istart, gd.iend,
-//                        gd.jstart, gd.jend,
-//                        gd.icells);
-//            }
         }
 
         // Evaporation of rain following Seifert (2008)
@@ -2525,17 +2228,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         timer.stop("qr_evap");
         check("rain_evaporation", k);
         tendencies("evaporation_rain", {"qv", "qr", "nr"}, k);
-//        for (auto& it : hydro_types)
-//        {
-//            // Integrate conversion tendencies into qr/Nr slices before implicit step.
-//            Sb_common::integrate_process_reset_tend(
-//                    it.second.slice,
-//                    it.second.conversion_tend,
-//                    dt,
-//                    gd.istart, gd.iend,
-//                    gd.jstart, gd.jend,
-//                    gd.icells);
-//        }
 
 
         for (auto& it : hydro_types)
