@@ -1311,8 +1311,8 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     const int ij = i + j * gd.jstride;
                     (*qv_old).data()[ij] = (*qv).data()[ij];
 
-                    (*ql_old).data()[ij] = ql->fld.data()[k*gd.ijcells];
-                    (*ql_new).data()[ij] = ql->fld.data()[k*gd.ijcells];
+                    (*ql_old).data()[ij] = ql->fld.data()[k*gd.ijcells + ij];
+                    (*ql_new).data()[ij] = ql->fld.data()[k*gd.ijcells + ij];
                 }
 
         // Zero diagnostic qx tendencies.
