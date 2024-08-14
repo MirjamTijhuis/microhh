@@ -2371,6 +2371,9 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
     fields.release_tmp_xy(nc_fld);
 
     fields.release_tmp_xy(qv);
+    fields.release_tmp_xy(qv_old);
+    fields.release_tmp_xy(ql_new);
+    fields.release_tmp_xy(ql_old);
 
     fields.release_tmp_xy(tmpxy1);
     fields.release_tmp_xy(tmpxy2);
