@@ -443,7 +443,7 @@ class Microphys_sb06 : public Microphys<TF>
                 "rainSBB", // name
                 0.000000,  // nu
                 0.333333,  // mu
-                3.00E-06,  // x_max
+                6.50E-05,  // x_max
                 2.60E-10,  // x_min
                 1.24E-01,  // a_geo
                 0.333333,  // b_geo
