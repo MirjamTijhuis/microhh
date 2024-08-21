@@ -163,6 +163,7 @@ class Stats
         void calc_stats_flux(const std::string&, const Field3d<TF>&, const TF);
         void calc_stats_grad(const std::string&, const Field3d<TF>&);
         void calc_stats_path(const std::string&, const Field3d<TF>&);
+        void calc_stats_max(const std::string&, const Field3d<TF>&);
         void calc_stats_cover(const std::string&, const Field3d<TF>&, const TF, const TF);
         void calc_stats_frac(const std::string&, const Field3d<TF>&, const TF, const TF);
 
