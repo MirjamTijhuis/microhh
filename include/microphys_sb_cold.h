@@ -47,6 +47,7 @@ namespace Sb_cold
     template<typename TF> constexpr TF rho_0 = 1.225;                  // SB06, p48
     template<typename TF> constexpr TF pirhow = pi<TF>*rho_w<TF>/6.;
     template<typename TF> constexpr TF rho_vel = 0.4;                  // Exponent for density correction
+    template<typename TF> constexpr TF rho_vel_c  = 0.2;                // ..for cloud droplets (in exact terms, this would be the ratio of dyn. visc. as function of T)
     template<typename TF> constexpr TF kc_autocon = 9.44e+9;           // Long-Kernel
     template<typename TF> constexpr TF K_T = 2.40e-2;                  // Thermal/heat conductivity of dry air (J/m/s/K)
     template<typename TF> constexpr TF N_sc = 0.710;                   // Schmidt-Zahl (PK, S.541)
@@ -1337,6 +1338,7 @@ namespace Sb_cold
             const TF* const restrict qc,
             const TF* const restrict nc,
             const TF rho_v,
+            const TF rho_v_cld,
             Particle_frozen<TF>& ptype,
             Particle<TF>& cloud,
             Collection_coeffs<TF>& coeffs,
@@ -1363,7 +1365,7 @@ namespace Sb_cold
                     D_p    > ptype.D_crit_c &&
                     D_c    > D_crit_c<TF> )
                 {
-                    const TF v_c = particle_velocity(cloud, x_c) * rho_v;
+                    const TF v_c = particle_velocity(cloud, x_c) * rho_v_cld;
                     const TF v_p = particle_velocity(ptype, x_p) * rho_v;
 
                     const TF e_coll = std::min(
@@ -1505,6 +1507,7 @@ namespace Sb_cold
             Rain_riming_coeffs<TF>& irr_coeffs,
             const T_cfg_2mom<TF>& cfg_params,
             const TF rho_v,
+            const TF rho_v_cld,
             const bool ice_multiplication,
             const int istart, const int iend,
             const int jstart, const int jend,
@@ -1528,6 +1531,7 @@ namespace Sb_cold
                 qi, ni,
                 qc, nc,
                 rho_v,
+                rho_v_cld,
                 ice, cloud,
                 icr_coeffs,
                 istart, iend,
@@ -1745,6 +1749,7 @@ namespace Sb_cold
             Rain_riming_coeffs<TF>& srr_coeffs,
             const T_cfg_2mom<TF>& cfg_params,
             const TF rho_v,
+            const TF rho_v_cld,
             const bool ice_multiplication,
             const int istart, const int iend,
             const int jstart, const int jend,
@@ -1767,6 +1772,7 @@ namespace Sb_cold
                 qs, ns,
                 qc, nc,
                 rho_v,
+                rho_v_cld,
                 snow, cloud,
                 scr_coeffs,
                 istart, iend,
@@ -1986,6 +1992,7 @@ namespace Sb_cold
             Particle<TF>& rain,
             Collection_coeffs<TF>& coeffs,
             const TF rho_v,
+            const TF rho_v_cld,
             const bool ice_multiplication,
             const bool enhanced_melting,
             const int istart, const int iend,
@@ -2015,7 +2022,7 @@ namespace Sb_cold
                 if (qc[ij] > q_crit_c<TF> && qp[ij] > ptype.q_crit_c && D_p > ptype.D_crit_c && D_c > D_crit_c<TF>)
                 {
                     const TF v_p = particle_velocity(ptype, x_p) * rho_v;
-                    const TF v_c = particle_velocity(cloud, x_c) * rho_v;
+                    const TF v_c = particle_velocity(cloud, x_c) * rho_v_cld;
 
                     const TF e_coll_n = std::min(ptype.ecoll_c, std::max(const1*(D_c - D_crit_c<TF>), ecoll_min<TF>));
                     const TF e_coll_q = e_coll_n;

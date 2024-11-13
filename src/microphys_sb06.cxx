@@ -1297,8 +1297,10 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
         // Density correction fall speeds
         // In ICON, `rhocorr` is written into the cloud/rain/etc particle types as `rho_v`.
+        // MT: NOTE: cloud%rho_v is not the same as rain/ice/graupel/snow/hail rho_v!
         const TF hlp = std::log(std::max(rho[k], TF(1e-6)) / Sb_cold::rho_0<TF>);
         const TF rho_corr = std::exp(-Sb_cold::rho_vel<TF>*hlp);
+        const TF rho_corr_cld = std::exp(-Sb_cold::rho_vel_c<TF>*hlp);
 
         // Sedimentation velocity rain species.
         timer.start("qr_sedi_vel");
@@ -1748,6 +1750,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     icr_coeffs, irr_coeffs,
                     t_cfg_2mom,
                     rho_corr,
+                    rho_corr_cld,
                     this->ice_multiplication,
                     gd.istart, gd.iend,
                     gd.jstart, gd.jend,
@@ -1786,6 +1789,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     scr_coeffs, srr_coeffs,
                     t_cfg_2mom,
                     rho_corr,
+                    rho_corr_cld,
                     this->ice_multiplication,
                     gd.istart, gd.iend,
                     gd.jstart, gd.jend,
@@ -1813,6 +1817,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     ice, hail, cloud, rain,
                     hcr_coeffs,
                     rho_corr,
+                    rho_corr_cld,
                     this->ice_multiplication,
                     this->enhanced_melting,
                     gd.istart, gd.iend,
@@ -1867,6 +1872,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     ice, graupel, cloud, rain,
                     gcr_coeffs,
                     rho_corr,
+                    rho_corr_cld,
                     this->ice_multiplication,
                     this->enhanced_melting,
                     gd.istart, gd.iend,
@@ -2119,7 +2125,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     &ql->fld.data()[k * gd.ijcells],
                     cloud_coeffs,
                     cloud, rain,
-                    rho_corr,
+                    rho_corr_cld,
                     Nc0,
                     gd.istart, gd.iend,
                     gd.jstart, gd.jend,
