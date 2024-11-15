@@ -36,6 +36,7 @@
 #include "microphys.h"
 #include "field3d_operators.h"
 #include "microphys_sb_budget.h"
+#include "thermo_moist.h"
 
 class Master;
 class Input;
@@ -346,6 +347,7 @@ class Microphys_sb06 : public Microphys<TF>
         bool sw_microbudget;    // Output full microphysics budget terms
         bool sw_debug;          // Print debug info.
         bool sw_integrate;      // Pre-integrate water species in implicit solver.
+        Satadjust_type sw_satadjust;      // satadjust liquid, ice or both
 
         //const int cloud_type = 2673;
         const int cloud_type = 2603;

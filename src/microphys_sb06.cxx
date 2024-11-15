@@ -164,6 +164,19 @@ Microphys_sb06<TF>::Microphys_sb06(
             dim1_afrac,
             phillips_file_name,
             master);
+
+    // Option to disable saturation adjustment ql and qi
+    bool sw_satadjust_ql = inputin.get_item<bool>("thermo", "swsatadjust_ql", "", true);
+    bool sw_satadjust_qi = inputin.get_item<bool>("thermo", "swsatadjust_qi", "", true);
+
+    // Option to disable saturation adjustment ql and qi (new).
+    if (sw_satadjust_ql && sw_satadjust_qi)
+        sw_satadjust = Satadjust_type::Liquid_ice;
+    else if (sw_satadjust_ql)
+        sw_satadjust = Satadjust_type::Liquid;
+    else
+        sw_satadjust = Satadjust_type::Disabled;
+
 }
 
 template<typename TF>
@@ -990,12 +1003,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
     bool cyclic = false;
     bool is_stat = false;
 
-    auto ql = fields.get_tmp();
-    auto T = fields.get_tmp();
-
-    thermo.get_thermo_field(*ql, "ql", cyclic, is_stat);
-    thermo.get_thermo_field(*T, "T", cyclic, is_stat);
-
     if (sw_ice && !sw_prognostic_ice)
     {
         // Overwrite prognostic ice field with sat_adjust values from thermodynamics.
@@ -1006,14 +1013,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 fields.ap.at("ni")->fld.begin(),
                 fields.ap.at("ni")->fld.end(), Ni0);
     }
-
-    // qv is diagnosed as qv=qt-ql (prognostic ice), or qv=qt-ql-qi (satadjust ice).
-    auto qv = fields.get_tmp_xy();
-    auto qv_old = fields.get_tmp_xy();
-    // slices of ql to determine the tendency at the end
-    auto ql_new = fields.get_tmp_xy();
-    auto ql_old = fields.get_tmp_xy();
-
 
     const std::vector<TF>& p = thermo.get_basestate_vector("p");
     const std::vector<TF>& exner = thermo.get_basestate_vector("exner");
@@ -1183,8 +1182,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
     };
 
     const bool to_kgm3 = true;
-    convert_units_short(ql->fld.data(), to_kgm3);
-    convert_units_short(fields.ap.at("qt")->fld.data(), to_kgm3);
 
     if (sw_prognostic_ice)
         convert_units_short(fields.ap.at("ina")->fld.data(), to_kgm3);
@@ -1252,9 +1249,77 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
     }
     timer.stop("limit_sizes");
 
+    // auto ql = fields.get_tmp();
+    // auto T = fields.get_tmp();
+
+    // thermo.get_thermo_field(*ql, "ql", cyclic, is_stat);
+    // thermo.get_thermo_field(*T, "T", cyclic, is_stat);
+
+    // qv is diagnosed as qv=qt-ql (prognostic ice), or qv=qt-ql-qi (satadjust ice).
+    auto qv = fields.get_tmp_xy();
+    auto qv_old = fields.get_tmp_xy();
+    // slices of ql to determine the tendency at the end
+    auto ql_new = fields.get_tmp_xy();
+    auto ql_old = fields.get_tmp_xy();
+    // slices to store integrated values of thl and qt
+    auto qt_slice = fields.get_tmp_xy();
+    auto thl_slice = fields.get_tmp_xy();
+    auto T_slice = fields.get_tmp_xy();
+
     for (int k=gd.kend-1; k>=gd.kstart; --k)
     {
         const TF rdzdt = TF(0.5) * gd.dzi[k] * dt;
+
+        // copy 3D thl and qt to 2D slices and do partial integration of dynamic tendencies
+        Sb_common::copy_slice_and_integrate(
+                (*qt_slice).data(),
+                fields.ap.at("qt")->fld.data(),
+                fields.st.at("qt")->fld.data(),
+                rho.data(),
+                TF(dt),
+                sw_integrate,
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.icells, gd.ijcells, k);
+
+        Sb_common::copy_slice_and_integrate(
+                (*thl_slice).data(),
+                fields.ap.at("thl")->fld.data(),
+                fields.st.at("thl")->fld.data(),
+                rho.data(),
+                TF(dt),
+                sw_integrate,
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.icells, gd.ijcells, k);
+
+
+        auto calc_sat_adjust_wrapper = [&]<Satadjust_type sw_satadjust>()
+        {
+            for (int j = gd.jstart; j < gd.jend; j++)
+                for (int i = gd.istart; i < gd.iend; i++) {
+                    const int ij = i + j * gd.jstride;
+                    tmf::Struct_sat_adjust<TF> ssa = tmf::sat_adjust<TF, sw_satadjust>(
+                            (*thl_slice).data()[ij],
+                            (*qt_slice).data()[ij], p[k],
+                            exner[k]);
+
+                    (*ql_old).data()[ij] = ssa.ql;
+                    (*ql_new).data()[ij] = ssa.ql;
+                    (*T_slice).data()[ij] = ssa.t;
+                }
+        };
+
+        if (sw_satadjust == Satadjust_type::Liquid_ice)
+            calc_sat_adjust_wrapper.template operator()<Satadjust_type::Liquid_ice>();
+        else if (sw_satadjust == Satadjust_type::Liquid)
+            calc_sat_adjust_wrapper.template operator()<Satadjust_type::Liquid>();
+        else
+            calc_sat_adjust_wrapper.template operator()<Satadjust_type::Disabled>();
+
+        convert_units_short((*ql_old).data(), to_kgm3);
+        convert_units_short((*ql_new).data(), to_kgm3);
+        convert_units_short((*qt_slice).data(), to_kgm3);
 
         // Diagnose qv into 2D slice.
         // With prognostic ice, qv = qt - ql.
@@ -1269,8 +1334,8 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
             Sb_cold::diagnose_qv<TF, prognostic_ice>(
                     (*qv).data(),
-                    fields.ap.at("qt")->fld.data(),
-                    ql->fld.data(),
+                    (*qt_slice).data(),
+                    (*ql_new).data(),
                     qi_fld,
                     gd.istart, gd.iend,
                     gd.jstart, gd.jend,
@@ -1311,8 +1376,8 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     const int ij = i + j * gd.jstride;
                     (*qv_old).data()[ij] = (*qv).data()[ij];
 
-                    (*ql_old).data()[ij] = ql->fld.data()[k*gd.ijcells + ij];
-                    (*ql_new).data()[ij] = ql->fld.data()[k*gd.ijcells + ij];
+                    // (*ql_old).data()[ij] = ql->fld.data()[k*gd.ijcells + ij];
+                    // (*ql_new).data()[ij] = ql->fld.data()[k*gd.ijcells + ij];
                 }
 
         // Zero diagnostic qx tendencies.
@@ -1338,7 +1403,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 hydro_types.at("nr").v_sed_now,
                 hydro_types.at("qr").slice,
                 hydro_types.at("nr").slice,
-                ql->fld.data(),
+                (*ql_new).data(),
                 rho.data(),
                 rain, rain_coeffs,
                 rho_corr,
@@ -1470,8 +1535,8 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                         hydro_types.at("qi").slice,
                         hydro_types.at("ni").slice,
                         (*qv).data(),
-                        &ql->fld.data()[k*gd.ijcells],
-                        &T->fld.data()[k*gd.ijcells],
+                        (*ql_new).data(),
+                        (*T_slice).data(),
                         &fields.mp.at("w")->fld.data()[k*gd.ijcells],
                         afrac_dust.data(),
                         afrac_soot.data(),
@@ -1506,10 +1571,10 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                         (*nc_conversion_tend).data(),
                         hydro_types.at("qi").conversion_tend,
                         hydro_types.at("ni").conversion_tend,
-                        &ql->fld.data()[k * gd.ijcells],
+                        (*ql_new).data(),
                         (*nc_fld).data(),
                         hydro_types.at("ni").slice,
-                        &T->fld.data()[k * gd.ijcells],
+                        (*T_slice).data(),
                         nuc_c_typ, TF(dt),
                         cloud, cloud_coeffs,
                         gd.istart, gd.iend,
@@ -1563,7 +1628,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("ng").slice,
                     hydro_types.at("qh").slice,
                     hydro_types.at("nh").slice,
-                    &T->fld.data()[k * gd.ijcells],
+                    (*T_slice).data(),
                     (*qv).data(),
                     p[k], TF(dt),
                     ice,
@@ -1591,7 +1656,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("ns").conversion_tend,
                     hydro_types.at("qi").slice,
                     hydro_types.at("ni").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     TF(dt),
                     ice,
                     snow,
@@ -1611,7 +1676,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("ns").conversion_tend,
                     hydro_types.at("qs").slice,
                     hydro_types.at("ns").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     snow,
                     snow_coeffs,
                     rho_corr,
@@ -1628,7 +1693,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("ng").conversion_tend,
                     hydro_types.at("qg").slice,
                     hydro_types.at("ng").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     graupel,
                     graupel_coeffs,
                     rho_corr,
@@ -1649,7 +1714,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("qs").slice,
                     hydro_types.at("ni").slice,
                     hydro_types.at("ns").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     TF(dt),
                     ice, snow,
                     sic_coeffs,
@@ -1671,7 +1736,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("qg").slice,
                     hydro_types.at("ni").slice,
                     hydro_types.at("ng").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     TF(dt),
                     ice, graupel,
                     gic_coeffs,
@@ -1693,7 +1758,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("qg").slice,
                     hydro_types.at("ns").slice,
                     hydro_types.at("ng").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     TF(dt),
                     snow, graupel,
                     gsc_coeffs,
@@ -1715,7 +1780,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("qh").slice,
                     hydro_types.at("ni").slice,
                     hydro_types.at("nh").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     TF(dt),
                     ice, hail,
                     hic_coeffs,
@@ -1737,7 +1802,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("qh").slice,
                     hydro_types.at("ns").slice,
                     hydro_types.at("nh").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     TF(dt),
                     snow, hail,
                     hsc_coeffs,
@@ -1756,13 +1821,13 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("ng").conversion_tend,
                     hydro_types.at("qh").conversion_tend,
                     hydro_types.at("nh").conversion_tend,
-                    &ql->fld.data()[k*gd.ijcells],
+                    (*ql_new).data(),
                     hydro_types.at("qr").slice,
                     hydro_types.at("qg").slice,
                     hydro_types.at("ng").slice,
                     hydro_types.at("qi").slice,
                     hydro_types.at("qs").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     graupel_ltable1,
                     graupel_ltable2,
                     graupel,
@@ -1798,11 +1863,11 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     (*rime_rate_nr).data(),
                     hydro_types.at("qi").slice,
                     hydro_types.at("ni").slice,
-                    &ql->fld.data()[k*gd.ijcells],
+                    (*ql_new).data(),
                     (*nc_fld).data(),
                     hydro_types.at("qr").slice,
                     hydro_types.at("nr").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     ice, cloud, rain, graupel,
                     icr_coeffs, irr_coeffs,
                     t_cfg_2mom,
@@ -1837,11 +1902,11 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     (*rime_rate_nr).data(),
                     hydro_types.at("qs").slice,
                     hydro_types.at("ns").slice,
-                    &ql->fld.data()[k*gd.ijcells],
+                    (*ql_new).data(),
                     (*nc_fld).data(),
                     hydro_types.at("qr").slice,
                     hydro_types.at("nr").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     snow, ice, cloud, rain, graupel,
                     scr_coeffs, srr_coeffs,
                     t_cfg_2mom,
@@ -1866,11 +1931,11 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("ni").conversion_tend,
                     hydro_types.at("qr").conversion_tend,
                     hydro_types.at("nr").conversion_tend,
-                    &ql->fld.data()[k*gd.ijcells],
+                    (*ql_new).data(),
                     (*nc_fld).data(),
                     hydro_types.at("qh").slice,
                     hydro_types.at("nh").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     ice, hail, cloud, rain,
                     hcr_coeffs,
                     rho_corr,
@@ -1897,7 +1962,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("nr").slice,
                     hydro_types.at("qh").slice,
                     hydro_types.at("nh").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     rain, ice, hail,
                     hrr_coeffs,
                     rho_corr,
@@ -1921,11 +1986,11 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("ni").conversion_tend,
                     hydro_types.at("qr").conversion_tend,
                     hydro_types.at("nr").conversion_tend,
-                    &ql->fld.data()[k*gd.ijcells],
+                    (*ql_new).data(),
                     (*nc_fld).data(),
                     hydro_types.at("qg").slice,
                     hydro_types.at("ng").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     ice, graupel, cloud, rain,
                     gcr_coeffs,
                     rho_corr,
@@ -1952,7 +2017,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("nr").slice,
                     hydro_types.at("qg").slice,
                     hydro_types.at("ng").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     rain, ice, graupel,
                     grr_coeffs,
                     rho_corr,
@@ -1978,7 +2043,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("nh").conversion_tend,
                     hydro_types.at("qr").slice,
                     hydro_types.at("nr").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     rain_ltable1,
                     rain_ltable2,
                     rain_ltable3,
@@ -2009,7 +2074,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("nr").conversion_tend,
                     hydro_types.at("qi").slice,
                     hydro_types.at("ni").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     ice, cloud,
                     TF(dt),
                     gd.istart, gd.iend,
@@ -2027,7 +2092,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("nr").conversion_tend,
                     hydro_types.at("qs").slice,
                     hydro_types.at("ns").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     snow_coeffs,
                     snow,
                     rho_corr,
@@ -2051,7 +2116,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("nr").conversion_tend,
                     hydro_types.at("qg").slice,
                     hydro_types.at("ng").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     graupel_coeffs,
                     graupel,
                     rho_corr,
@@ -2079,7 +2144,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("nr").conversion_tend,
                     hydro_types.at("qh").slice,
                     hydro_types.at("nh").slice,
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     hail_coeffs,
                     hail,
                     t_cfg_2mom,
@@ -2105,7 +2170,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("qs").slice,
                     hydro_types.at("ns").slice,
                     (*qv).data(),
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     snow,
                     snow_coeffs,
                     rho_corr,
@@ -2124,7 +2189,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("qg").slice,
                     hydro_types.at("ng").slice,
                     (*qv).data(),
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     graupel,
                     graupel_coeffs,
                     rho_corr,
@@ -2143,7 +2208,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("qh").slice,
                     hydro_types.at("nh").slice,
                     (*qv).data(),
-                    &T->fld.data()[k*gd.ijcells],
+                    (*T_slice).data(),
                     hail,
                     hail_coeffs,
                     rho_corr,
@@ -2226,7 +2291,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 hydro_types.at("nr").slice,
                 (*qv).data(),
                 (*ql_new).data(),
-                &T->fld.data()[k*gd.ijcells],
+                (*T_slice).data(),
                 p.data(),
                 rain_coeffs,
                 cloud,
@@ -2343,7 +2408,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
     }
 
     // Convert specific humidity from `kg m-3` to `kg kg-1`
-    convert_units_short(fields.ap.at("qt")->fld.data(), !to_kgm3);
+    // convert_units_short(fields.ap.at("qt")->fld.data(), !to_kgm3);
     if (sw_prognostic_ice)
         convert_units_short(fields.ap.at("ina")->fld.data(), !to_kgm3);
 
@@ -2362,8 +2427,8 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         timer.save(timeloop.get_time());
 
     // Release temporary fields.
-    fields.release_tmp(ql);
-    fields.release_tmp(T);
+    // fields.release_tmp(ql);
+    // fields.release_tmp(T);
     fields.release_tmp(tmp_slices);
 
     fields.release_tmp_xy(rain_mass);
@@ -2380,6 +2445,9 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
     fields.release_tmp_xy(qv_old);
     fields.release_tmp_xy(ql_new);
     fields.release_tmp_xy(ql_old);
+    fields.release_tmp_xy(thl_slice);
+    fields.release_tmp_xy(qt_slice);
+    fields.release_tmp_xy(T_slice);
 
     fields.release_tmp_xy(tmpxy1);
     fields.release_tmp_xy(tmpxy2);
@@ -2508,6 +2576,7 @@ void Microphys_sb06<TF>::exec_stats(Stats<TF>& stats, Thermo<TF>& thermo, const 
 
     fields.release_tmp(vq);
     fields.release_tmp(vn);
+    fields.release_tmp(ql);
 
     // Tendency budgets.
     if (sw_microbudget)
