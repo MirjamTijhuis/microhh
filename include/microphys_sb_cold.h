@@ -205,9 +205,9 @@ namespace Sb_cold
                 const int ijk = i + j*jstride + k*kstride;
 
                 if (sw_prognostic_ice)
-                    qv[ij] = qt[ijk] - ql[ijk];
+                    qv[ij] = qt[ij] - ql[ij];
                 else
-                    qv[ij] = qt[ijk] - ql[ijk] - qi[ijk];
+                    qv[ij] = qt[ij] - ql[ij] - qi[ijk];
             }
     }
 

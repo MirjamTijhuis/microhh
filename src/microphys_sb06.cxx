@@ -1181,6 +1181,17 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 is_to_kgm3);
     };
 
+    auto convert_units_short_slice = [&](TF* data_ptr, const bool is_to_kgm3, const int k)
+    {
+        Sb_common::convert_unit_slice(
+                data_ptr,
+                rho.data(),
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.icells, k,
+                is_to_kgm3);
+    };
+
     const bool to_kgm3 = true;
 
     if (sw_prognostic_ice)
@@ -1317,9 +1328,9 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         else
             calc_sat_adjust_wrapper.template operator()<Satadjust_type::Disabled>();
 
-        convert_units_short((*ql_old).data(), to_kgm3);
-        convert_units_short((*ql_new).data(), to_kgm3);
-        convert_units_short((*qt_slice).data(), to_kgm3);
+        convert_units_short_slice((*ql_old).data(), to_kgm3, k);
+        convert_units_short_slice((*ql_new).data(), to_kgm3, k);
+        convert_units_short_slice((*qt_slice).data(), to_kgm3, k);
 
         // Diagnose qv into 2D slice.
         // With prognostic ice, qv = qt - ql.

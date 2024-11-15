@@ -50,6 +50,27 @@ namespace Sb_common
         }
     }
 
+    template<typename TF>
+    void convert_unit_slice(
+            TF* const restrict a,
+            const TF* const restrict rho,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int jstride, const int k,
+            bool to_kgm3)
+    {
+        const TF fac = (to_kgm3) ? rho[k] : TF(1.)/rho[k];
+
+        for (int j=jstart; j<jend; j++)
+        #pragma ivdep
+                for (int i=istart; i<iend; i++)
+                {
+                    const int ij = i + j*jstride;
+                    a[ij] *= fac;
+                }
+    }
+
+
 
     template<typename TF>
     void copy_slice(
