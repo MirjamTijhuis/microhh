@@ -410,7 +410,7 @@ namespace Sb_cold
 
                     if (qc_present)
                     {
-                        if (ql[ijk] >= q_crit<TF>)
+                        if (ql[ij] >= q_crit<TF>)
                             mue = (rain.nu + TF(1.0)) / rain.b_geo - TF(1.0);
                         else
                             mue = rain_mue_dm_relation(coeffs, d_m);
