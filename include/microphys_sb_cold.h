@@ -1129,6 +1129,16 @@ namespace Sb_cold
                         //!   dep_hail(i,k)    = weight * dep_hail(i,k)
                         //!END IF
 
+                        const TF x_i, x_s, x_g, x_h;
+
+                        if (reduce_sublimation)
+                        {
+                            x_i = particle_meanmass(ice, qi[ij], ni[ij]);
+                            x_s = particle_meanmass(snow, qs[ij], ns[ij]);
+                            x_g = particle_meanmass(graupel, qg[ij], ng[ij]);
+                            x_h = particle_meanmass(hail, qh[ij], nh[ij]);
+                        }
+
                         qi[ij] += dep_ice[ij];
                         qs[ij] += dep_snow[ij];
                         qg[ij] += dep_graupel[ij];
@@ -1139,11 +1149,6 @@ namespace Sb_cold
                         // particles in a way that mean size is conserved times a tuning factor < 1:
                         if (reduce_sublimation)
                         {
-                            const TF x_i = particle_meanmass(ice, qi[ij], ni[ij]);
-                            const TF x_s = particle_meanmass(snow, qs[ij], ns[ij]);
-                            const TF x_g = particle_meanmass(graupel, qg[ij], ng[ij]);
-                            const TF x_h = particle_meanmass(hail, qh[ij], nh[ij]);
-
                             const TF dep_ice_n = std::min(dep_ice[ij], TF(0)) / x_i;
                             const TF dep_snow_n = std::min(dep_snow[ij], TF(0)) / x_s;
                             const TF dep_graupel_n = std::min(dep_graupel[ij], TF(0)) / x_g;
