@@ -881,7 +881,7 @@ namespace Sb_cold
                     const TF vi = particle_velocity(itype, xi) * rho_v;
 
                     // Both these terms have a `* dt` in ICON; left out since we need the tendency.
-                    TF coll_n = pi4<TF> * np[ij] * ni[ij] * e_coll
+                    TF coll_n = pi4<TF> * np[ij] * ni[ij] * e_coll * dt
                                       * (coeffs.delta_n_aa * fm::pow2(dp)
                                        + coeffs.delta_n_ab * dp * di
                                        + coeffs.delta_n_bb * fm::pow2(di))
@@ -890,7 +890,7 @@ namespace Sb_cold
                                        + coeffs.theta_n_bb * fm::pow2(vi)
                                        + fm::pow2(itype.s_vel));
 
-                    TF coll_q = pi4<TF> * np[ij] * qi[ij] * e_coll
+                    TF coll_q = pi4<TF> * np[ij] * qi[ij] * e_coll * dt
                                       * (coeffs.delta_q_aa * fm::pow2(dp)
                                        + coeffs.delta_q_ab * dp * di
                                        + coeffs.delta_q_bb * fm::pow2(di))
