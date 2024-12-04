@@ -281,7 +281,7 @@ namespace Sb_common
             const int jstride, const int kstride,
             const int k)
     {
-        const TF rho_i = TF(1) / rho[k];
+        // const TF rho_i = TF(1) / rho[k];
         const TF Ls_cp = Ls<TF>/cp<TF>;
         const TF Lf_cp = Lf<TF>/cp<TF>;
 

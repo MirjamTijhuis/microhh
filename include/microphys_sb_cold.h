@@ -401,7 +401,7 @@ namespace Sb_cold
             for (int i=istart; i<iend; i++)
             {
                 const int ij = i + j * jstride;
-                const int ijk = i + j * jstride + k * kstride;
+                // const int ijk = i + j * jstride + k * kstride;
 
                 if (qr[ij] > q_crit<TF>)
                 {
@@ -2333,7 +2333,7 @@ namespace Sb_cold
         const TF xmax_ice = std::pow( std::pow(cfg_params.D_rainfrz_ig / rain.a_geo, TF(1) / rain.b_geo), rain.mu);
         const TF xmax_gr  = std::pow( std::pow(cfg_params.D_rainfrz_gh / rain.a_geo, TF(1) / rain.b_geo), rain.mu);
 
-        const TF zdt = TF(1) / dt;
+        // const TF zdt = TF(1) / dt;
 
         TF fr_q;
         TF fr_n;
@@ -2633,7 +2633,7 @@ namespace Sb_cold
             (uses look-up table for incomplete gamma functions)
             by Uli Blahak
         */
-        const TF zdt = TF(1) / dt;
+        // const TF zdt = TF(1) / dt;
 
         for (int j=jstart; j<jend; j++)
             #pragma ivdep
@@ -2692,7 +2692,7 @@ namespace Sb_cold
     template<typename TF>
     void ice_melting(
             TF* const restrict qc,
-            // TF* const restrict nc,
+            TF* const restrict nc,
             TF* const restrict qi,
             TF* const restrict ni,
             TF* const restrict qr,
@@ -2705,7 +2705,7 @@ namespace Sb_cold
             const int jstart, const int jend,
             const int jstride)
     {
-        const TF zdt = TF(1)/dt;
+        // const TF zdt = TF(1)/dt;
 
         for (int j=jstart; j<jend; j++)
             #pragma ivdep
@@ -2733,8 +2733,7 @@ namespace Sb_cold
                     else
                     {
                         qc[ij] += melt_q;
-                        // MT: changes in nc should be implemened if nc can be non-constant
-                        // nc[ij] += melt_n;
+                        nc[ij] += melt_n;
                     }
                 }
             } // i
@@ -2756,7 +2755,7 @@ namespace Sb_cold
             const int jstart, const int jend,
             const int jstride)
     {
-        const TF zdt = TF(1)/dt;
+        // const TF zdt = TF(1)/dt;
 
         for (int j=jstart; j<jend; j++)
             #pragma ivdep
@@ -2827,7 +2826,7 @@ namespace Sb_cold
             const int jstart, const int jend,
             const int jstride)
     {
-        const TF zdt = TF(1)/dt;
+        // const TF zdt = TF(1)/dt;
 
         for (int j=jstart; j<jend; j++)
             #pragma ivdep
@@ -2885,7 +2884,7 @@ namespace Sb_cold
             const int jstart, const int jend,
             const int jstride)
     {
-        const TF zdt = TF(1)/dt;
+        // const TF zdt = TF(1)/dt;
 
         for (int j=jstart; j<jend; j++)
             #pragma ivdep
@@ -2950,7 +2949,7 @@ namespace Sb_cold
             const int jstride)
     {
         const TF eps = TF(1.0e-20);     // DANGEROUS for SP.
-        const TF zdt = TF(1) / dt;
+        // const TF zdt = TF(1) / dt;
 
         // (i,j) strides in lookup table.
         const int iis = afrac_stride;
@@ -3111,7 +3110,7 @@ namespace Sb_cold
             - Phillips et al. (2008) with extensions
         */
 
-        const TF zdt = TF(1) / dt;
+        // const TF zdt = TF(1) / dt;
 
         // Switch for version of Phillips et al. scheme.
         // Only `2010` is supported (also in ICON)..
@@ -3360,7 +3359,7 @@ namespace Sb_cold
     {
         const TF log_10 = std::log(10);
         const TF rhow_i = TF(1)/Constants::rho_w<TF>;
-        const TF dti = TF(1)/dt;
+        // const TF dti = TF(1)/dt;
 
         TF fr_q, fr_n, j_hom;
 
