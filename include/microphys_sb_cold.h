@@ -1129,7 +1129,7 @@ namespace Sb_cold
                         //!   dep_hail(i,k)    = weight * dep_hail(i,k)
                         //!END IF
 
-                        const TF x_i, x_s, x_g, x_h;
+                        TF x_i, x_s, x_g, x_h;
 
                         if (reduce_sublimation)
                         {
