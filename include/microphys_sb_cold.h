@@ -772,13 +772,11 @@ namespace Sb_cold
 
     template<typename TF>
     void evaporation(
-            TF* const restrict qvt,
-            TF* const restrict qxt,
-            TF* const restrict nxt,
-            const TF* const restrict qx,
-            const TF* const restrict nx,
-            const TF* const restrict qv,
+            TF* const restrict qv,
+            TF* const restrict qx,
+            TF* const restrict nx,
             const TF* const restrict T,
+            const TF dt,
             Particle<TF>& particle,
             Particle_coeffs<TF>& coeffs,
             const TF rho_v,  // rain%rho_v(i,k) in ICON, constant per layer in uHH.
@@ -814,16 +812,22 @@ namespace Sb_cold
                     const TF v = particle_velocity(particle, x) * rho_v;
 
                     const TF f_v  = coeffs.a_f + coeffs.b_f * sqrt(v*D);
-                    TF eva_q = g_d * nx[ij] * coeffs.c_i * D * f_v * s_sw; // * dt in ICON
+                    TF eva_q = g_d * nx[ij] * coeffs.c_i * D * f_v * s_sw * dt; // * dt in ICON
                     eva_q = std::max(-eva_q, TF(0));
 
                     //.. Complete evaporation of some of the melting frozen particles: parameterized in a way
                     //   to conserve the mean mass, similar to the case "gamma_eva = 1.0" in rain_evaporation() above:
                     if (reduce_melting)
-                        nxt[ij] -= eva_q / x;
+                    {
+                        TF eva_n = eva_q / x;
+                        eva_n = std::min(eva_n, nx[ij]);
+                        nx[ij] -= eva_n;
+                    }
 
-                    qxt[ij] -= eva_q;
-                    qvt[ij] += eva_q;
+                    eva_q = std::min(eva_q, qx[ij]);
+
+                    qx[ij] -= eva_q;
+                    qv[ij] += eva_q;
                 }
             }
     }
@@ -831,12 +835,9 @@ namespace Sb_cold
 
     template<typename TF>
     void particle_particle_collection(
-            TF* const restrict qpt,
-            TF* const restrict qit,
-            TF* const restrict nit,
-            const TF* const restrict qi,
-            const TF* const restrict qp,
-            const TF* const restrict ni,
+            TF* const restrict qp,
+            TF* const restrict qi,
+            TF* const restrict ni,
             const TF* const restrict np,
             const TF* const restrict Ta,
             const TF dt,
@@ -899,14 +900,14 @@ namespace Sb_cold
                                        + fm::pow2(itype.s_vel));
 
                     // Gain by the destination.
-                    coll_n = std::max(coll_n, -ni[ij]/dt);
-                    coll_q = std::max(coll_q, -qi[ij]/dt);
+                    coll_n = std::min(coll_n, ni[ij]);
+                    coll_q = std::min(coll_q, qi[ij]);
 
-                    qpt[ij] += coll_q;
+                    qp[ij] += coll_q;
 
                     // Loss by the source.
-                    qit[ij] -= coll_q;
-                    nit[ij] -= coll_n;
+                    qi[ij] -= coll_q;
+                    ni[ij] -= coll_n;
 
                     //coll_n = MIN(n_i, coll_n)
                     //coll_q = MIN(q_i, coll_q)
@@ -959,15 +960,15 @@ namespace Sb_cold
     template<typename TF>
     void vapor_dep_relaxation(
             // 2D Output tendencies:
-            TF* const restrict qvt,
-            TF* const restrict qit,
-            TF* const restrict nit,
-            TF* const restrict qst,
-            TF* const restrict nst,
-            TF* const restrict qgt,
-            TF* const restrict ngt,
-            TF* const restrict qht,
-            TF* const restrict nht,
+            TF* const restrict qv,
+            TF* const restrict qi,
+            TF* const restrict ni,
+            TF* const restrict qs,
+            TF* const restrict ns,
+            TF* const restrict qg,
+            TF* const restrict ng,
+            TF* const restrict qh,
+            TF* const restrict nh,
             // Integrated deposition (so *dt):
             TF* const restrict dep_rate_ice,
             TF* const restrict dep_rate_snow,
@@ -979,16 +980,7 @@ namespace Sb_cold
             TF* const restrict dep_graupel,
             TF* const restrict dep_hail,
             // 2D input:
-            const TF* const restrict qi,
-            const TF* const restrict ni,
-            const TF* const restrict qs,
-            const TF* const restrict ns,
-            const TF* const restrict qg,
-            const TF* const restrict ng,
-            const TF* const restrict qh,
-            const TF* const restrict nh,
             const TF* const restrict T,
-            const TF* const restrict qv,
             const TF p,
             const TF dt,
             Particle<TF>& ice,
@@ -1137,11 +1129,11 @@ namespace Sb_cold
                         //!   dep_hail(i,k)    = weight * dep_hail(i,k)
                         //!END IF
 
-                        qit[ij] += dep_ice[ij] * zdt;
-                        qst[ij] += dep_snow[ij] * zdt;
-                        qgt[ij] += dep_graupel[ij] * zdt;
-                        qht[ij] += dep_hail[ij] * zdt;
-                        qvt[ij] -= dep_sum * zdt;
+                        qi[ij] += dep_ice[ij];
+                        qs[ij] += dep_snow[ij];
+                        qg[ij] += dep_graupel[ij];
+                        qh[ij] += dep_hail[ij];
+                        qv[ij] -= dep_sum;
 
                         // If deposition rate is negative, parameterize the complete evaporation of some of the
                         // particles in a way that mean size is conserved times a tuning factor < 1:
@@ -1157,14 +1149,20 @@ namespace Sb_cold
                             const TF dep_graupel_n = std::min(dep_graupel[ij], TF(0)) / x_g;
                             const TF dep_hail_n = std::min(dep_hail[ij], TF(0)) / x_h;
 
-                            nit[ij] += dep_n_fac * dep_ice_n * zdt;
-                            nst[ij] += dep_n_fac * dep_snow_n * zdt;
-                            ngt[ij] += dep_n_fac * dep_graupel_n * zdt;
-                            nht[ij] += dep_n_fac * dep_hail_n * zdt;
+                            ni[ij] += dep_n_fac * dep_ice_n;
+                            ns[ij] += dep_n_fac * dep_snow_n;
+                            ng[ij] += dep_n_fac * dep_graupel_n;
+                            nh[ij] += dep_n_fac * dep_hail_n;
+
+                            ni[ij] = std::max(ni[ij], TF(0));
+                            ns[ij] = std::max(ns[ij], TF(0));
+                            ng[ij] = std::max(ng[ij], TF(0));
+                            nh[ij] = std::max(nh[ij], TF(0));
+
                         }
 
-                        dep_rate_ice[ij] += dep_ice[ij] * zdt;
-                        dep_rate_snow[ij] += dep_snow[ij] * zdt;
+                        dep_rate_ice[ij] += dep_ice[ij];
+                        dep_rate_snow[ij] += dep_snow[ij];
                     }
                 }
             }
@@ -1172,12 +1170,10 @@ namespace Sb_cold
 
     template<typename TF>
     void ice_selfcollection(
-            TF* const restrict qit,
-            TF* const restrict nit,
-            TF* const restrict qst,
-            TF* const restrict nst,
-            const TF* const restrict qi,
-            const TF* const restrict ni,
+            TF* const restrict qi,
+            TF* const restrict ni,
+            TF* const restrict qs,
+            TF* const restrict ns,
             const TF* const restrict T,
             const TF dt,
             Particle_frozen<TF>& ice,
@@ -1212,19 +1208,19 @@ namespace Sb_cold
                     const TF v_i = ice.a_vel * pow(x_i, ice.b_vel) * rho_v;
 
                     TF self_n = pi4<TF> * e_coll * ice_coeffs.sc_delta_n * ni[ij] * ni[ij] * D_i * D_i *
-                         sqrt( ice_coeffs.sc_theta_n * v_i * v_i + TF(2) * pow(ice.s_vel, TF(2)) ); // * dt in ICON
+                         sqrt( ice_coeffs.sc_theta_n * v_i * v_i + TF(2) * pow(ice.s_vel, TF(2)) ) * dt; // * dt in ICON
 
                     TF self_q = pi4<TF> * e_coll * ice_coeffs.sc_delta_q * ni[ij] * qi[ij] * D_i * D_i *
-                         sqrt( ice_coeffs.sc_theta_q * v_i * v_i + TF(2) * pow(ice.s_vel, TF(2)) ); // * dt in ICON
+                         sqrt( ice_coeffs.sc_theta_q * v_i * v_i + TF(2) * pow(ice.s_vel, TF(2)) * dt); // * dt in ICON
 
-                    self_q = std::max(self_q, -qi[ij]/dt);
-                    self_n = std::max(std::min(self_n, self_q/x_conv_ii), -ni[ij]/dt);
+                    self_q = std::min(self_q, qi[ij]);
+                    self_n = std::min(std::min(self_n, self_q/x_conv_ii), ni[ij]);
 
-                    qit[ij] -= self_q;
-                    qst[ij] += self_q;
+                    qi[ij] -= self_q;
+                    qs[ij] += self_q;
 
-                    nit[ij] -= self_n;
-                    nst[ij] += self_n / TF(2);      // BvS; why /2?
+                    ni[ij] -= self_n;
+                    ns[ij] += self_n / TF(2);      // BvS; why /2?
 
                     //self_q = MIN(self_q,q_i)
                     //self_n = MIN(MIN(self_n,self_q/x_conv_ii),n_i)
@@ -1242,10 +1238,10 @@ namespace Sb_cold
 
     template<typename TF>
     void snow_selfcollection(
-            TF* const restrict nst,
+            TF* const restrict ns,
             const TF* const restrict qs,
-            const TF* const restrict ns,
             const TF* const restrict T,
+            const TF dt,
             Particle_frozen<TF>& snow,
             Particle_snow_coeffs<TF>& snow_coeffs,
             const TF rho_v,
@@ -1273,9 +1269,9 @@ namespace Sb_cold
                             pi8<TF> * e_coll * ns[ij] * ns[ij] *
                             snow_coeffs.sc_delta_n * D_s * D_s *
                             sqrt(snow_coeffs.sc_theta_n * v_s * v_s + TF(2) *
-                            fm::pow2(snow.s_vel) ); // * dt in ICON
+                            fm::pow2(snow.s_vel) ) * dt; // * dt in ICON
 
-                    nst[ij] -= self_n;
+                    ns[ij] -= self_n;
                 }
             }
     }
@@ -1283,10 +1279,10 @@ namespace Sb_cold
 
     template<typename TF>
     void graupel_selfcollection(
-            TF* const restrict ngt,
+            TF* const restrict ng,
             const TF* const restrict qg,
-            const TF* const restrict ng,
             const TF* const restrict Ta,
+            const TF dt,
             Particle<TF>& graupel,
             Particle_graupel_coeffs<TF>& graupel_coeffs,
             const TF rho_v,
@@ -1308,12 +1304,12 @@ namespace Sb_cold
                     const TF v_g = particle_velocity(graupel, x_g) * rho_v;
 
                     // Times dt in ICON
-                    TF self_n = graupel_coeffs.sc_coll_n * fm::pow2(ng[ij]) * fm::pow2(D_g) * v_g;
+                    TF self_n = graupel_coeffs.sc_coll_n * fm::pow2(ng[ij]) * fm::pow2(D_g) * v_g * dt;
 
                     // Sticking efficiency does only distinguish dry and wet based on T_3;
                     self_n = Ta[ij] > Constants::T0<TF> ? self_n * ecoll_gg_wet<TF> : self_n * ecoll_gg<TF>;
 
-                    ngt[ij] -= self_n;
+                    ng[ij] -= self_n;
                 }
             }
     }
@@ -1327,6 +1323,7 @@ namespace Sb_cold
             const TF* const restrict np,
             const TF* const restrict qc,
             const TF* const restrict nc,
+            const TF dt,
             const TF rho_v,
             const TF rho_v_cld,
             Particle_frozen<TF>& ptype,
@@ -1362,7 +1359,7 @@ namespace Sb_cold
                             ptype.ecoll_c, std::max(const1*(D_c - D_crit_c<TF>), ecoll_min<TF>));
 
                     // Both terms are time integrated (* dt) in ICON...
-                    const TF rime_n = pi4<TF> * e_coll * np[ij] * nc[ij] *
+                    const TF rime_n = pi4<TF> * e_coll * np[ij] * nc[ij] * dt *
                                      ( coeffs.delta_n_aa * fm::pow2(D_p) +
                                        coeffs.delta_n_ab * D_p * D_c +
                                        coeffs.delta_n_bb * fm::pow2(D_c)) *
@@ -1371,7 +1368,7 @@ namespace Sb_cold
                                        coeffs.theta_n_bb * fm::pow2(v_c) +
                                        fm::pow2(ptype.s_vel));
 
-                    const TF rime_q = pi4<TF> * e_coll * np[ij] * qc[ij] *
+                    const TF rime_q = pi4<TF> * e_coll * np[ij] * qc[ij] * dt *
                                      ( coeffs.delta_q_aa * fm::pow2(D_p) +
                                        coeffs.delta_q_ab * D_p * D_c +
                                        coeffs.delta_q_bb * fm::pow2(D_c)) *
@@ -1401,6 +1398,7 @@ namespace Sb_cold
             const TF* const restrict na,
             const TF* const restrict qr,
             const TF* const restrict nr,
+            const TF dt,
             const TF rho_v,
             Particle_frozen<TF>& ptype,
             Particle<TF>& rain,
@@ -1426,7 +1424,7 @@ namespace Sb_cold
                     const TF v_a = particle_velocity(ptype, x_a) * rho_v;
 
                     // All three terms are time integrated (* dt) in ICON...
-                    const TF rime_n = pi4<TF> * na[ij] * nr[ij] *
+                    const TF rime_n = pi4<TF> * na[ij] * nr[ij] * dt *
                                  (coeffs.delta_n_aa * D_a * D_a +
                                   coeffs.delta_n_ab * D_a * D_r +
                                   coeffs.delta_n_bb * D_r * D_r) *
@@ -1435,7 +1433,7 @@ namespace Sb_cold
                                   coeffs.theta_n_bb * v_r * v_r +
                                   fm::pow2(ptype.s_vel));
 
-                    const TF rime_qr = pi4<TF> * na[ij] * qr[ij] *
+                    const TF rime_qr = pi4<TF> * na[ij] * qr[ij] * dt *
                                  (coeffs.delta_n_aa * D_a * D_a +
                                   coeffs.delta_q_ab * D_a * D_r +
                                   coeffs.delta_q_bb * D_r * D_r) *
@@ -1444,7 +1442,7 @@ namespace Sb_cold
                                   coeffs.theta_q_bb * v_r * v_r +
                                   fm::pow2(ptype.s_vel));
 
-                    const TF rime_qi = pi4<TF> * nr[ij] * qa[ij] *
+                    const TF rime_qi = pi4<TF> * nr[ij] * qa[ij] * dt *
                                  (coeffs.delta_q_aa * D_a * D_a +
                                   coeffs.delta_q_ba * D_a * D_r +
                                   coeffs.delta_n_bb * D_r * D_r) *
@@ -1468,27 +1466,22 @@ namespace Sb_cold
 
     template<typename TF>
     void ice_riming(
-            TF* const restrict qct,
-            TF* const restrict nct,
-            TF* const restrict qit,
-            TF* const restrict nit,
-            TF* const restrict qrt,
-            TF* const restrict nrt,
-            TF* const restrict qgt,
-            TF* const restrict ngt,
+            TF* const restrict qc,
+            TF* const restrict nc,
+            TF* const restrict qi,
+            TF* const restrict ni,
+            TF* const restrict qr,
+            TF* const restrict nr,
+            TF* const restrict qg,
+            TF* const restrict ng,
             TF* const restrict dep_rate_ice,
             TF* const restrict rime_rate_qc,
             TF* const restrict rime_rate_nc,
             TF* const restrict rime_rate_qi,
             TF* const restrict rime_rate_qr,
             TF* const restrict rime_rate_nr,
-            const TF* const restrict qi,
-            const TF* const restrict ni,
-            const TF* const restrict qc,
-            const TF* const restrict nc,
-            const TF* const restrict qr,
-            const TF* const restrict nr,
             const TF* const restrict Ta,
+            const TF dt,
             Particle_frozen<TF>& ice,
             Particle<TF>& cloud,
             Particle<TF>& rain,
@@ -1520,6 +1513,7 @@ namespace Sb_cold
                 rime_rate_nc,
                 qi, ni,
                 qc, nc,
+                dt,
                 rho_v,
                 rho_v_cld,
                 ice, cloud,
@@ -1534,6 +1528,7 @@ namespace Sb_cold
                 rime_rate_nr,   // nb
                 qi, ni,
                 qr, nr,
+                dt,
                 rho_v,
                 ice, rain,
                 irr_coeffs,
@@ -1557,9 +1552,9 @@ namespace Sb_cold
                     // .. Ice_cloud_riming
                     if (rime_rate_qc[ij] > TF(0))
                     {
-                        qit[ij] += rime_rate_qc[ij];
-                        qct[ij] -= rime_rate_qc[ij];
-                        nct[ij] -= rime_rate_nc[ij];
+                        qi[ij] += rime_rate_qc[ij];
+                        qc[ij] -= rime_rate_qc[ij];
+                        nc[ij] -= rime_rate_nc[ij];
 
                         if (Ta[ij] < Constants::T0<TF> && ice_multiplication)
                         {
@@ -1569,16 +1564,16 @@ namespace Sb_cold
                             mult_2 = std::max(TF(0), std::min(mult_2, TF(1)));
                             const TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qc[ij];
 
-                            nit[ij] += mult_n;
+                            ni[ij] += mult_n;
                         }
                     }
 
                     // .. Ice_rain_riming
                     if (rime_rate_qr[ij] > TF(0))
                     {
-                        qit[ij] += rime_rate_qr[ij];
-                        qrt[ij] -= rime_rate_qr[ij];
-                        nrt[ij] -= rime_rate_nr[ij];
+                        qi[ij] += rime_rate_qr[ij];
+                        qr[ij] -= rime_rate_qr[ij];
+                        nr[ij] -= rime_rate_nr[ij];
 
                         // .. Ice multiplication
                         if (Ta[ij] < Constants::T0<TF> && ice_multiplication)
@@ -1589,7 +1584,7 @@ namespace Sb_cold
                             mult_2 = std::max(TF(0), std::min(mult_2, TF(1)));
                             const TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qr[ij];
 
-                            nit[ij] += mult_n;
+                            ni[ij] += mult_n;
                         }
                     }
                 }
@@ -1604,9 +1599,9 @@ namespace Sb_cold
                         const TF x_i = particle_meanmass(ice, qi[ij], ni[ij]);
                         const TF D_i = particle_diameter(ice, x_i);
 
-                        qit[ij] += rime_rate_qc[ij];
-                        qct[ij] -= rime_rate_qc[ij];
-                        nct[ij] -= rime_rate_nc[ij];
+                        qi[ij] += rime_rate_qc[ij];
+                        qc[ij] -= rime_rate_qc[ij];
+                        nc[ij] -= rime_rate_nc[ij];
 
                         // Ice multiplication;
                         const TF mult_q = TF(0);
@@ -1618,36 +1613,51 @@ namespace Sb_cold
                             mult_2 = std::max(TF(0), std::min(mult_2, TF(1)));
                             const TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qc[ij];
 
-                            nit[ij] += mult_n;
+                            ni[ij] += mult_n;
                         }
 
                         // Conversion ice -> graupel (depends on alpha_spacefilling);
+                        TF conv_q, conv_n;
                         if (D_i > D_conv_ig<TF> && Ta[ij] < cfg_params.Tmax_gr_rime)
                         {
-                            const TF conv_q = (rime_rate_qc[ij] - mult_q) /
+                            conv_q = (rime_rate_qc[ij] - mult_q) /
                                 (const5 * (pi6<TF> * rho_i<TF> * fm::pow3(D_i) / x_i - TF(1)) );
+                            conv_q = std::min(qi[ij], conv_q);
                             const TF x_i = particle_meanmass(ice, qi[ij], ni[ij]);
-                            const TF conv_n = conv_q / std::max(x_i, x_conv<TF>);
-
-                            qit[ij] -= conv_q;
-                            qgt[ij] += conv_q;
-
-                            nit[ij] -= conv_n;
-                            ngt[ij] += conv_n;
+                            conv_n = conv_q / std::max(x_i, x_conv<TF>);
+                            conv_n = std::min(ni[ij], conv_n);
                         }
+                        else
+                        {
+                            conv_q = TF(0);
+                            conv_n = TF(0);
+                        }
+
+                        qi[ij] -= conv_q;
+                        qg[ij] += conv_q;
+
+                        ni[ij] -= conv_n;
+                        ng[ij] += conv_n;
                     }
 
                     // Ice_rain_riming;
                     if (rime_rate_qi[ij] > TF(0))
                     {
-                        nit[ij] -= rime_rate_nr[ij];
-                        nrt[ij] -= rime_rate_nr[ij];
+                        TF rime_qi = rime_rate_qi[ij];
+                        TF rime_qr = rime_rate_qr[ij];
+                        TF rime_n  = rime_rate_nr[ij];
+                        rime_n  = std::min(std::min(nr[ij],ni[ij]), rime_n);
+                        rime_qr = std::min(qr[ij], rime_qr);
+                        rime_qi = std::min(qi[ij], rime_qi);
+
+                        ni[ij] -= rime_n;
+                        nr[ij] -= rime_n;
 
                         // BvS: I'm not sure about this part. If:
                         //      rime_rate_qi != -rime_rate_qr,
                         //      moisture is not conserved...?
-                        qit[ij] -= rime_rate_qi[ij];
-                        qrt[ij] -= rime_rate_qr[ij];
+                        qi[ij] -= rime_qi;
+                        qr[ij] -= rime_qr;
 
                         // Ice multiplication;
                         TF mult_q = TF(0);
@@ -1661,6 +1671,7 @@ namespace Sb_cold
                             mult_2 = std::max(TF(0), std::min(mult_2, TF(1)));
                             mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qr[ij];
                             mult_q = mult_n * ice.x_min;
+                            mult_q = std::min(rime_qr, mult_q);
                         }
 
                         if (Ta[ij] >= Constants::T0<TF>)
@@ -1669,34 +1680,34 @@ namespace Sb_cold
                             // i.e. undo time integration, but with modified rain.n;
                             const TF x_r = particle_meanmass(rain, qr[ij], nr[ij]);
 
-                            nit[ij] += rime_rate_nr[ij];
-                            nrt[ij] += rime_rate_qr[ij] / x_r;
+                            ni[ij] += rime_n;
+                            nr[ij] += rime_qr / x_r;
 
                             // BvS: I'm not sure about this part. If:
                             //      rime_rate_qi != -rime_rate_qr,
                             //      moisture is not conserved...?
-                            qit[ij] += rime_rate_qi[ij];
-                            qrt[ij] += rime_rate_qr[ij];
+                            qi[ij] += rime_qi;
+                            qr[ij] += rime_qr;
                         }
                         else
                         {
                             // New ice particles from multiplication;
-                            nit[ij] += mult_n;
-                            qit[ij] += mult_q;
+                            ni[ij] += mult_n;
+                            qi[ij] += mult_q;
 
                             // Riming to graupel;
                             if (Ta[ij] < cfg_params.Tmax_gr_rime)
                             {
-                                ngt[ij] += rime_rate_nr[ij];
-                                qgt[ij] += rime_rate_qi[ij] + rime_rate_qr[ij] - mult_q;
+                                ng[ij] += rime_n;
+                                qg[ij] += rime_qi + rime_qr - mult_q;
                             }
                             else
                             {
                                 // Ice + frozen liquid stays ice:;
-                                const TF conv_q = rime_rate_qi[ij] + rime_rate_qr[ij] - mult_q;
+                                const TF conv_q = rime_qi + rime_qr - mult_q;
 
-                                nit[ij] += rime_rate_nr[ij];
-                                qit[ij] += conv_q;
+                                ni[ij] += rime_n;
+                                qi[ij] += conv_q;
                             }
                         }
                     }
@@ -1707,29 +1718,24 @@ namespace Sb_cold
 
     template<typename TF>
     void snow_riming(
-            TF* const restrict qct,
-            TF* const restrict nct,
-            TF* const restrict qst,
-            TF* const restrict nst,
-            TF* const restrict qit,
-            TF* const restrict nit,
-            TF* const restrict qrt,
-            TF* const restrict nrt,
-            TF* const restrict qgt,
-            TF* const restrict ngt,
+            TF* const restrict qc,
+            TF* const restrict nc,
+            TF* const restrict qs,
+            TF* const restrict ns,
+            TF* const restrict qi,
+            TF* const restrict ni,
+            TF* const restrict qr,
+            TF* const restrict nr,
+            TF* const restrict qg,
+            TF* const restrict ng,
             TF* const restrict dep_rate_snow,
             TF* const restrict rime_rate_qc,
             TF* const restrict rime_rate_nc,
             TF* const restrict rime_rate_qs,
             TF* const restrict rime_rate_qr,
             TF* const restrict rime_rate_nr,
-            const TF* const restrict qs,
-            const TF* const restrict ns,
-            const TF* const restrict qc,
-            const TF* const restrict nc,
-            const TF* const restrict qr,
-            const TF* const restrict nr,
             const TF* const restrict Ta,
+            const TF dt,
             Particle_frozen<TF>& snow,
             Particle_frozen<TF>& ice,
             Particle<TF>& cloud,
@@ -1761,6 +1767,7 @@ namespace Sb_cold
                 rime_rate_nc,
                 qs, ns,
                 qc, nc,
+                dt,
                 rho_v,
                 rho_v_cld,
                 snow, cloud,
@@ -1775,6 +1782,7 @@ namespace Sb_cold
                 rime_rate_nr,   // nb
                 qs, ns,
                 qr, nr,
+                dt,
                 rho_v,
                 snow, rain,
                 srr_coeffs,
@@ -1798,9 +1806,14 @@ namespace Sb_cold
                     // Snow_cloud_riming;
                     if (rime_rate_qc[ij] > TF(0))
                     {
-                        qst[ij] += rime_rate_qc[ij];
-                        qct[ij] -= rime_rate_qc[ij];
-                        nct[ij] -= rime_rate_nc[ij];
+                        TF rime_q = rime_rate_qc[ij];
+                        TF rime_n = rime_rate_nc[ij];
+                        rime_q = std::min(qc[ij], rime_q);
+                        rime_n = std::min(nc[ij], rime_n);
+
+                        qs[ij] += rime_q;
+                        qc[ij] -= rime_q;
+                        nc[ij] -= rime_n;
 
                         // Ice multiplication;
                         if (Ta[ij] < Constants::T0<TF> && ice_multiplication)
@@ -1811,21 +1824,28 @@ namespace Sb_cold
                             mult_1 = std::max(TF(0), std::min(mult_1, TF(1)));
                             mult_2 = std::max(TF(0), std::min(mult_2, TF(1)));
 
-                            const TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qc[ij];
-                            const TF mult_q = mult_n * ice.x_min;
+                            TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qc[ij];
+                            TF mult_q = mult_n * ice.x_min;
+                            mult_q = std::min(rime_q, mult_q);
+                            mult_n = mult_q / ice.x_min;
 
-                            nit[ij] += mult_n;
-                            qit[ij] += mult_q;
-                            qst[ij] -= mult_q;
+                            ni[ij] += mult_n;
+                            qi[ij] += mult_q;
+                            qs[ij] -= mult_q;
                         }
                     }
 
                     //.. Snow_rain_riming;
                     if (rime_rate_qr[ij] > TF(0))
                     {
-                        qst[ij] += rime_rate_qr[ij];
-                        qrt[ij] -= rime_rate_qr[ij];
-                        nrt[ij] -= rime_rate_nr[ij];
+                        TF rime_q = rime_rate_qr[ij];
+                        TF rime_n = rime_rate_nr[ij];
+                        rime_q = std::min(qr[ij], rime_q);
+                        rime_n = std::min(nr[ij], rime_n);
+
+                        qs[ij] += rime_q;
+                        qr[ij] -= rime_q;
+                        nr[ij] -= rime_n;
 
                         // Ice multiplication;
                         if (Ta[ij] < Constants::T0<TF> && ice_multiplication)
@@ -1836,12 +1856,14 @@ namespace Sb_cold
                             mult_1 = std::max(TF(0), std::min(mult_1, TF(1)));
                             mult_2 = std::max(TF(0), std::min(mult_2, TF(1)));
 
-                            const TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qr[ij];
-                            const TF mult_q = mult_n * ice.x_min;
+                            TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qr[ij];
+                            TF mult_q = mult_n * ice.x_min;
+                            mult_q = std::min(rime_q, mult_q);
+                            mult_n = mult_q / ice.x_min;
 
-                            nit[ij] += mult_n;
-                            qit[ij] += mult_q;
-                            qst[ij] -= mult_q;
+                            ni[ij] += mult_n;
+                            qi[ij] += mult_q;
+                            qs[ij] -= mult_q;
                         }
                     }
                 }
@@ -1856,9 +1878,14 @@ namespace Sb_cold
                         const TF x_s = particle_meanmass(snow, qs[ij], ns[ij]);
                         const TF D_s = particle_diameter(snow, x_s);
 
-                        qst[ij] += rime_rate_qc[ij];
-                        qct[ij] -= rime_rate_qc[ij];
-                        nct[ij] -= rime_rate_nc[ij];
+                        TF rime_q = rime_rate_qc[ij];
+                        TF rime_n = rime_rate_nc[ij];
+                        rime_q = std::min(qc[ij], rime_q);
+                        rime_n = std::min(nc[ij], rime_n);
+
+                        qs[ij] += rime_q;
+                        qc[ij] -= rime_q;
+                        nc[ij] -= rime_n;
 
                         // ice multiplication;
                         TF mult_q = TF(0);
@@ -1870,40 +1897,58 @@ namespace Sb_cold
                             mult_1 = std::max(TF(0), std::min(mult_1, TF(1)));
                             mult_2 = std::max(TF(0), std::min(mult_2, TF(1)));
 
-                            const TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qc[ij];
+                            TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qc[ij];
                             mult_q = mult_n * ice.x_min;
+                            mult_q = std::min(rime_q, mult_q);
+                            mult_n = mult_q / ice.x_min;
 
-                            nit[ij] += mult_n;
-                            qit[ij] += mult_q;
-                            qst[ij] -= mult_q;
+                            ni[ij] += mult_n;
+                            qi[ij] += mult_q;
+                            qs[ij] -= mult_q;
                         }
 
                         // Conversion of snow to graupel, depends on alpha_spacefilling;
+                        TF conv_q, conv_n;
                         if (D_s > D_conv_sg<TF> && Ta[ij] < cfg_params.Tmax_gr_rime)
                         {
-                            const TF conv_q = (rime_rate_qc[ij] - mult_q) /
+                            conv_q = (rime_rate_qc[ij] - mult_q) /
                                 ( const5 * (pi6<TF> * rho_i<TF> * fm::pow3(D_s)/x_s - TF(1)) );
+                            conv_q = std::min(conv_q, qs[ij]);
                             const TF x_s = particle_meanmass(snow, qs[ij], ns[ij]);
-                            const TF conv_n = conv_q / std::max(x_s, x_conv<TF>);
-
-                            qst[ij] -= conv_q;
-                            qgt[ij] += conv_q;
-                            nst[ij] -= conv_n;
-                            ngt[ij] += conv_n;
+                            conv_n = conv_q / std::max(x_s, x_conv<TF>);
+                            std::min(ns[ij], conv_n);
                         }
+                        else
+                        {
+                            conv_q = TF(0);
+                            conv_n = TF(0);
+                        }
+
+                        qs[ij] -= conv_q;
+                        qg[ij] += conv_q;
+                        ns[ij] -= conv_n;
+                        ng[ij] += conv_n;
                     }
 
                     // snow_rain_riming;
                     if (rime_rate_qs[ij] > TF(0))
                     {
-                        nst[ij] -= rime_rate_nr[ij];
-                        nrt[ij] -= rime_rate_nr[ij];
+                        TF rime_qs = rime_rate_qs[ij];
+                        TF rime_qr = rime_rate_qr[ij];
+                        TF rime_n  = rime_rate_nr[ij];
+                        rime_qr = std::min(qr[ij], rime_qr);
+                        rime_qs = std::min(qs[ij], rime_qs);
+                        rime_n  = std::min(nr[ij],rime_n);
+                        rime_n  = std::min(ns[ij],rime_n);
+
+                        ns[ij] -= rime_n;
+                        nr[ij] -= rime_n;
 
                         // BvS: I'm not sure about this part. If:
                         //      rime_rate_qs != -rime_rate_qr,
                         //      moisture is not conserved...?
-                        qst[ij] -= rime_rate_qs[ij];
-                        qrt[ij] -= rime_rate_qr[ij];
+                        qs[ij] -= rime_qs;
+                        qr[ij] -= rime_qr;
 
                         // Ice multiplication;
                         TF mult_q = TF(0);
@@ -1919,6 +1964,8 @@ namespace Sb_cold
 
                             mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qr[ij];
                             mult_q = mult_n * ice.x_min;
+                            mult_q = std::min(rime_qr, mult_q);
+                            mult_n = mult_q / ice.x_min;
                         }
 
                         if (Ta[ij] >= Constants::T0<TF>)
@@ -1927,32 +1974,32 @@ namespace Sb_cold
                             // i.e. undo time integration, but with modified rain.n;
                             const TF x_r = particle_meanmass(rain, qr[ij], nr[ij]);
 
-                            nst[ij] += rime_rate_nr[ij];
-                            nrt[ij] += rime_rate_qr[ij] / x_r;
+                            ns[ij] += rime_n;
+                            nr[ij] += rime_qr / x_r;
 
                             // BvS: I'm not sure about this part. If:
                             //      rime_rate_qs != -rime_rate_qr,
                             //      moisture is not conserved...?
-                            qst[ij] += rime_rate_qs[ij];
-                            qrt[ij] += rime_rate_qr[ij];
+                            qs[ij] += rime_qs;
+                            qr[ij] += rime_qr;
                         }
                         else
                         {
                             // new ice particles from multiplication;
-                            nit[ij] += mult_n;
-                            qit[ij] += mult_q;
+                            ni[ij] += mult_n;
+                            qi[ij] += mult_q;
 
                             // riming to graupel;
                             if (Ta[ij] < cfg_params.Tmax_gr_rime)
                             {
-                                ngt[ij] += rime_rate_nr[ij];
-                                qgt[ij] += rime_rate_qr[ij] + rime_rate_qs[ij] - mult_q;
+                                ng[ij] += rime_n;
+                                qg[ij] += rime_qr + rime_qs - mult_q;
                             }
                             else
                             {
                                 // Snow + frozen liquid stays snow:;
-                                nst[ij] += rime_rate_nr[ij];
-                                qst[ij] += rime_rate_qr[ij] + rime_rate_qs[ij] - mult_q;
+                                ns[ij] += rime_n;
+                                qs[ij] += rime_qr + rime_qs - mult_q;
                             }
                         }
                     }
@@ -1963,19 +2010,16 @@ namespace Sb_cold
 
     template<typename TF>
     void particle_cloud_riming(
-            TF* const restrict qct,
-            TF* const restrict nct,
-            TF* const restrict qpt,
-            TF* const restrict npt,
-            TF* const restrict qit,
-            TF* const restrict nit,
-            TF* const restrict qrt,
-            TF* const restrict nrt,
-            const TF* const restrict qc,
-            const TF* const restrict nc,
-            const TF* const restrict qp,
-            const TF* const restrict np,
+            TF* const restrict qc,
+            TF* const restrict nc,
+            TF* const restrict qp,
+            TF* const restrict np,
+            TF* const restrict qi,
+            TF* const restrict ni,
+            TF* const restrict qr,
+            TF* const restrict nr,
             const TF* const restrict Ta,
+            const TF dt,
             Particle_frozen<TF>& ice,
             Particle_frozen<TF>& ptype,
             Particle<TF>& cloud,
@@ -2018,17 +2062,20 @@ namespace Sb_cold
                     const TF e_coll_q = e_coll_n;
 
                     // Both terms are multiplied by dt in ICON
-                    const TF rime_n = pi4<TF> * e_coll_n * np[ij] * nc[ij]
+                    TF rime_n = pi4<TF> * e_coll_n * np[ij] * nc[ij] * dt
                         *     (coeffs.delta_n_aa * D_p*D_p + coeffs.delta_n_ab * D_p*D_c + coeffs.delta_n_bb * D_c*D_c)
                         * sqrt(coeffs.theta_n_aa * v_p*v_p - coeffs.theta_n_ab * v_p*v_c + coeffs.theta_n_bb * v_c*v_c);
 
-                    const TF rime_q = pi4<TF> * e_coll_q * np[ij] * qc[ij]
+                    TF rime_q = pi4<TF> * e_coll_q * np[ij] * qc[ij] * dt
                         *     (coeffs.delta_q_aa * D_p*D_p + coeffs.delta_q_ab * D_p*D_c + coeffs.delta_q_bb * D_c*D_c)
                         * sqrt(coeffs.theta_q_aa * v_p*v_p - coeffs.theta_q_ab * v_p*v_c + coeffs.theta_q_bb * v_c*v_c);
 
-                    qpt[ij] += rime_q;
-                    qct[ij] -= rime_q;
-                    nct[ij] -= rime_n;
+                    rime_q = std::min(rime_q, qc[ij]);
+                    rime_n = std::min(rime_n, nc[ij]);
+
+                    qp[ij] += rime_q;
+                    qc[ij] -= rime_q;
+                    nc[ij] -= rime_n;
 
                     // Ice multiplication based on Hallet and Mossop;
                     if (Ta[ij] < Constants::T0<TF> && ice_multiplication)
@@ -2039,24 +2086,28 @@ namespace Sb_cold
                         mult_1 = std::max(TF(0), std::min(mult_1, TF(1)));
                         mult_2 = std::max(TF(0), std::min(mult_2, TF(1)));
 
-                        const TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_q;
-                        const TF mult_q = mult_n * ice.x_min;
+                        TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_q;
+                        TF mult_q = mult_n * ice.x_min;
+                        mult_q = std::min(rime_q, mult_q);
+                        mult_n = mult_q / ice.x_min;
 
-                        nit[ij] += mult_n;
-                        qit[ij] += mult_q;
-                        qpt[ij] -= mult_q;
+                        ni[ij] += mult_n;
+                        qi[ij] += mult_q;
+                        qp[ij] -= mult_q;
                     }
 
                     // Enhancement of melting;
                     if (Ta[ij] > Constants::T0<TF> && enhanced_melting)
                     {
-                        const TF melt_q = const4 * (Ta[ij] - Constants::T0<TF>) * rime_q;
-                        const TF melt_n = melt_q / x_p;
+                        TF melt_q = const4 * (Ta[ij] - Constants::T0<TF>) * rime_q;
+                        TF melt_n = melt_q / x_p;
+                        melt_q = std::min(qp[ij], melt_q);
+                        melt_n = std::min(np[ij], melt_n);
 
-                        qpt[ij] -= melt_q;
-                        qrt[ij] += melt_q;
-                        npt[ij] -= melt_n;
-                        nrt[ij] += melt_n;
+                        qp[ij] -= melt_q;
+                        qr[ij] += melt_q;
+                        np[ij] -= melt_n;
+                        nr[ij] += melt_n;
                     }
                 }
             } // i
@@ -2065,17 +2116,14 @@ namespace Sb_cold
 
     template<typename TF>
     void particle_rain_riming(
-            TF* const restrict qpt,
-            TF* const restrict npt,
-            TF* const restrict qrt,
-            TF* const restrict nrt,
-            TF* const restrict qit,
-            TF* const restrict nit,
-            const TF* const restrict qr,
-            const TF* const restrict nr,
-            const TF* const restrict qp,
-            const TF* const restrict np,
+            TF* const restrict qp,
+            TF* const restrict np,
+            TF* const restrict qr,
+            TF* const restrict nr,
+            TF* const restrict qi,
+            TF* const restrict ni,
             const TF* const restrict Ta,
+            const TF dt,
             Particle<TF>& rain,
             Particle<TF>& ice,
             Particle<TF>& ptype,
@@ -2112,21 +2160,24 @@ namespace Sb_cold
                     const TF v_r = particle_velocity(rain, x_r) * rho_v;
 
                     // Both terms are `* dt` in ICON.
-                    const TF rime_n = pi4<TF> * np[ij] * nr[ij]
+                    TF rime_n = pi4<TF> * np[ij] * nr[ij] * dt
                              * (coeffs.delta_n_aa * fm::pow2(D_p)
                                 + coeffs.delta_n_ab * D_p*D_r + coeffs.delta_n_bb * fm::pow2(D_r))
                              * sqrt(coeffs.theta_n_aa * fm::pow2(v_p)
                                 - coeffs.theta_n_ab * v_p*v_r + coeffs.theta_n_bb * fm::pow2(v_r));
 
-                    const TF rime_q = pi4<TF> * np[ij] * qr[ij]
+                    TF rime_q = pi4<TF> * np[ij] * qr[ij] * dt
                              * (coeffs.delta_n_aa * fm::pow2(D_p)
                                 + coeffs.delta_q_ab * D_p*D_r + coeffs.delta_q_bb * fm::pow2(D_r))
                              * sqrt(coeffs.theta_n_aa * fm::pow2(v_p)
                                 - coeffs.theta_q_ab * v_p*v_r + coeffs.theta_q_bb * fm::pow2(v_r));
 
-                    qpt[ij] += rime_q;
-                    qrt[ij] -= rime_q;
-                    nrt[ij] -= rime_n;
+                    rime_q = std::min(qr[ij], rime_q);
+                    rime_n = std::min(nr[ij], rime_n);
+
+                    qp[ij] += rime_q;
+                    qr[ij] -= rime_q;
+                    nr[ij] -= rime_n;
 
                     // Ice multiplication based on Hallet and Mossop;
                     if (Ta[ij] < Constants::T0<TF> && ice_multiplication)
@@ -2141,22 +2192,25 @@ namespace Sb_cold
                         TF mult_q = mult_n * ice.x_min;
                         mult_q = std::min(rime_q, mult_q);
 
-                        nit[ij] += mult_n;
-                        qit[ij] += mult_q;
-                        qpt[ij] -= mult_q;
+                        ni[ij] += mult_n;
+                        qi[ij] += mult_q;
+                        qp[ij] -= mult_q;
                     }
 
                     // Enhancement of melting of ptype;
                     if (Ta[ij] > Constants::T0<TF> && enhanced_melting)
                     {
-                        const TF melt_q = const4 * (Ta[ij] - Constants::T0<TF>) * rime_q;
-                        const TF melt_n = melt_q / x_p;
+                        TF melt_q = const4 * (Ta[ij] - Constants::T0<TF>) * rime_q;
+                        TF melt_n = melt_q / x_p;
 
-                        qpt[ij] -= melt_q;
-                        qrt[ij] += melt_q;
+                        melt_q = std::min(melt_q, qp[ij]);
+                        melt_n = std::min(melt_n, np[ij]);
 
-                        npt[ij] -= melt_n;
-                        nrt[ij] += melt_n;
+                        qp[ij] -= melt_q;
+                        qr[ij] += melt_q;
+
+                        np[ij] -= melt_n;
+                        nr[ij] += melt_n;
                     }
                 }
             } // i
@@ -2240,16 +2294,14 @@ namespace Sb_cold
 
     template<typename TF>
     void rain_freeze_gamlook(
-            TF* const restrict qit,
-            TF* const restrict nit,
-            TF* const restrict qrt,
-            TF* const restrict nrt,
-            TF* const restrict qgt,
-            TF* const restrict ngt,
-            TF* const restrict qht,
-            TF* const restrict nht,
-            const TF* const restrict qr,
-            const TF* const restrict nr,
+            TF* const restrict qi,
+            TF* const restrict ni,
+            TF* const restrict qr,
+            TF* const restrict nr,
+            TF* const restrict qg,
+            TF* const restrict ng,
+            TF* const restrict qh,
+            TF* const restrict nh,
             const TF* const restrict Ta,
             Gamlookuptable<TF>& rain_ltable1,
             Gamlookuptable<TF>& rain_ltable2,
@@ -2270,8 +2322,8 @@ namespace Sb_cold
         const TF a_HET = 6.5e-1;      // Data of Barklie and Gokhale (PK S.350)
         const TF b_HET = 2.0e+2;      //         Barklie and Gokhale (PK S.350)
 
-        //const TF eps = 1e-15;         // for clipping
-        //const bool lclipping = true;
+        const TF eps = 1e-15;         // for clipping
+        const bool lclipping = true;
 
         const TF xmax_ice = std::pow( std::pow(cfg_params.D_rainfrz_ig / rain.a_geo, TF(1) / rain.b_geo), rain.mu);
         const TF xmax_gr  = std::pow( std::pow(cfg_params.D_rainfrz_gh / rain.a_geo, TF(1) / rain.b_geo), rain.mu);
@@ -2430,8 +2482,8 @@ namespace Sb_cold
                         fr_q_h = fr_q_h * fr_q_tmp;
                     }
 
-                    qrt[ij] -= fr_q * zdt;
-                    nrt[ij] -= fr_n * zdt;
+                    qr[ij] -= fr_q;
+                    nr[ij] -= fr_n;
 
                     //if (use_prog_in) then;
                     //   n_inact[ij] = n_inact[ij] + fr_n;
@@ -2441,24 +2493,25 @@ namespace Sb_cold
                     //snow.q[ij] = snow.q[ij]  + fr_q_i;
                     //snow.n[ij] = snow.n[ij]  + fr_n_i   // put this into snow;
 
-                    qit[ij] += fr_q_i * zdt; // ... or into ice? --> UB: original idea was to put it into ice;
-                    nit[ij] += fr_n_i * zdt;
+                    qi[ij] += fr_q_i; // ... or into ice? --> UB: original idea was to put it into ice;
+                    ni[ij] += fr_n_i;
 
-                    qgt[ij] += fr_q_g * zdt;
-                    ngt[ij] += fr_n_g * zdt;
+                    qg[ij] += fr_q_g;
+                    ng[ij] += fr_n_g;
 
-                    qht[ij] += fr_q_h * zdt;
-                    nht[ij] += fr_n_h * zdt;
+                    qh[ij] += fr_q_h;
+                    nh[ij] += fr_n_h;
 
-                    //! clipping of small negatives is necessary here
-                    //if (lclipping) then
-                    //    IF (rain%q(i,k) < 0.0 .and. abs(rain%q(i,k)) < eps) rain%q(i,k) = 0.0_wp
-                    //IF (rain%n(i,k) < 0.0 .and. abs(rain%n(i,k)) < eps) rain%n(i,k) = 0.0_wp
-                    //IF (graupel%q(i,k) < 0.0 .and. abs(graupel%q(i,k)) < eps) graupel%q(i,k) = 0.0_wp
-                    //IF (graupel%n(i,k) < 0.0 .and. abs(graupel%q(i,k)) < eps) graupel%n(i,k) = 0.0_wp
-                    //IF (hail%q(i,k) < 0.0 .and. abs(hail%q(i,k)) < eps) hail%q(i,k) = 0.0_wp
-                    //IF (hail%n(i,k) < 0.0 .and. abs(hail%n(i,k)) < eps) hail%n(i,k) = 0.0_wp
-                    //end if
+                    // ! clipping of small negatives is necessary here
+                    if (lclipping)
+                    {
+                        if (qr[ij] < 0 and std::abs(qr[ij]) < eps){qr[ij] = TF(0);}
+                        if (nr[ij] < 0 and std::abs(nr[ij]) < eps){nr[ij] = TF(0);}
+                        if (qg[ij] < 0 and std::abs(qg[ij]) < eps){qg[ij] = TF(0);}
+                        if (ng[ij] < 0 and std::abs(ng[ij]) < eps){ng[ij] = TF(0);}
+                        if (qh[ij] < 0 and std::abs(qh[ij]) < eps){qh[ij] = TF(0);}
+                        if (nh[ij] < 0 and std::abs(nh[ij]) < eps){nh[ij] = TF(0);}
+                    }
                 }
             } // i
     }
@@ -2547,14 +2600,12 @@ namespace Sb_cold
 
     template<typename TF>
     void graupel_hail_conv_wet_gamlook(
-            TF* const restrict qgt,
-            TF* const restrict ngt,
-            TF* const restrict qht,
-            TF* const restrict nht,
+            TF* const restrict qg,
+            TF* const restrict ng,
+            TF* const restrict qh,
+            TF* const restrict nh,
             const TF* const restrict qc,
             const TF* const restrict qr,
-            const TF* const restrict qg,
-            const TF* const restrict ng,
             const TF* const restrict qi,
             const TF* const restrict qs,
             const TF* const restrict Ta,
@@ -2613,20 +2664,20 @@ namespace Sb_cold
                         xmin = std::exp( std::log(xmin) * graupel.mu );
                         const TF n_0  = graupel.mu * n_g * std::exp( std::log(lam) * graupel_nm1 ) / graupel_g1;
 
-                        const TF conv_n = n_0 / (graupel.mu * std::exp( std::log(lam)*graupel_nm1))
+                        TF conv_n = n_0 / (graupel.mu * std::exp( std::log(lam)*graupel_nm1))
                                 * incgfct_upper_lookup(lam*xmin, graupel_ltable1);
-                        const TF conv_q = n_0 / (graupel.mu * std::exp( std::log(lam)*graupel_nm2))
+                        TF conv_q = n_0 / (graupel.mu * std::exp( std::log(lam)*graupel_nm2))
                                 * incgfct_upper_lookup(lam*xmin, graupel_ltable2);
 
                         // BvS: this implies that conv_X is already time integrated here???
-                        //conv_n = std::min(conv_n, n_g);
-                        //conv_q = std::min(conv_q, q_g);
+                        conv_n = std::min(conv_n, n_g);
+                        conv_q = std::min(conv_q, q_g);
 
-                        qgt[ij] -= conv_q * zdt;
-                        ngt[ij] -= conv_n * zdt;
+                        qg[ij] -= conv_q;
+                        ng[ij] -= conv_n;
 
-                        qht[ij] += conv_q * zdt;
-                        nht[ij] += conv_n * zdt;
+                        qh[ij] += conv_q;
+                        nh[ij] += conv_n;
                     }
                 }
             }
@@ -2635,14 +2686,12 @@ namespace Sb_cold
 
     template<typename TF>
     void ice_melting(
-            TF* const restrict qct,
-            TF* const restrict nct,
-            TF* const restrict qit,
-            TF* const restrict nit,
-            TF* const restrict qrt,
-            TF* const restrict nrt,
-            const TF* const restrict qi,
-            const TF* const restrict ni,
+            TF* const restrict qc,
+            // TF* const restrict nc,
+            TF* const restrict qi,
+            TF* const restrict ni,
+            TF* const restrict qr,
+            TF* const restrict nr,
             const TF* const restrict Ta,
             Particle<TF>& ice,
             Particle<TF>& cloud,
@@ -2664,22 +2713,23 @@ namespace Sb_cold
                     const TF x_i = particle_meanmass(ice, qi[ij], ni[ij]);
 
                     // Complete melting within this time step;
-                    const TF melt_q = qi[ij] * zdt;
-                    const TF melt_n = ni[ij] * zdt;
+                    const TF melt_q = qi[ij];
+                    const TF melt_n = ni[ij];
 
-                    qit[ij] -= melt_q;
-                    nit[ij] -= melt_n;
+                    qi[ij] = TF(0);
+                    ni[ij] = TF(0);
 
                     // Ice either melts into cloud droplets or rain depending on x_i;
                     if (x_i > cloud.x_max)
                     {
-                        qrt[ij] += melt_q;
-                        nrt[ij] += melt_n;
+                        qr[ij] += melt_q;
+                        nr[ij] += melt_n;
                     }
                     else
                     {
-                        qct[ij] += melt_q;
-                        nct[ij] += melt_n;
+                        qc[ij] += melt_q;
+                        // MT: changes in nc should be implemened if nc can be non-constant
+                        // nc[ij] += melt_n;
                     }
                 }
             } // i
@@ -2688,12 +2738,10 @@ namespace Sb_cold
 
     template<typename TF>
     void snow_melting(
-            TF* const restrict qst,
-            TF* const restrict nst,
-            TF* const restrict qrt,
-            TF* const restrict nrt,
-            const TF* const restrict qs,
-            const TF* const restrict ns,
+            TF* const restrict qs,
+            TF* const restrict ns,
+            TF* const restrict qr,
+            TF* const restrict nr,
             const TF* const restrict Ta,
             Particle_sphere<TF>& snow_coeffs,
             Particle<TF>& snow,
@@ -2746,14 +2794,14 @@ namespace Sb_cold
                         melt_n = ns[ij];
                     }
 
-                    qst[ij] -= melt_q * zdt;
-                    qrt[ij] += melt_q * zdt;
+                    qs[ij] -= melt_q;
+                    qr[ij] += melt_q;
 
-                    nst[ij] -= melt_n * zdt;
-                    nrt[ij] += melt_n * zdt;
+                    ns[ij] -= melt_n;
+                    nr[ij] += melt_n;
 
                     // Oiiiii
-                    //snow.n[ij] = std::max(snow.n[ij], snow.q[ij]/snow.x_max);
+                    ns[ij] = std::max(ns[ij], qs[ij]/snow.x_max);
                 }
             } // i
     } // function
@@ -2761,12 +2809,10 @@ namespace Sb_cold
 
     template<typename TF>
     void graupel_melting(
-            TF* const restrict qgt,
-            TF* const restrict ngt,
-            TF* const restrict qrt,
-            TF* const restrict nrt,
-            const TF* const restrict qg,
-            const TF* const restrict ng,
+            TF* const restrict qg,
+            TF* const restrict ng,
+            TF* const restrict qr,
+            TF* const restrict nr,
             const TF* const restrict Ta,
             Particle_sphere<TF>& graupel_coeffs,
             Particle<TF>& graupel,
@@ -2808,11 +2854,11 @@ namespace Sb_cold
                     melt_q = std::min(qg[ij], std::max(melt_q, TF(0)));
                     melt_n = std::min(ng[ij], std::max(melt_n, TF(0)));
 
-                    qgt[ij] -= melt_q * zdt;
-                    qrt[ij] += melt_q * zdt;
+                    qg[ij] -= melt_q;
+                    qr[ij] += melt_q;
 
-                    ngt[ij] -= melt_n * zdt;
-                    nrt[ij] += melt_n * zdt;
+                    ng[ij] -= melt_n;
+                    nr[ij] += melt_n;
                 }
             } // i
     } // function
@@ -2820,12 +2866,10 @@ namespace Sb_cold
 
     template<typename TF>
     void hail_melting_simple(
-            TF* const restrict qht,
-            TF* const restrict nht,
-            TF* const restrict qrt,
-            TF* const restrict nrt,
-            const TF* const restrict qh,
-            const TF* const restrict nh,
+            TF* const restrict qh,
+            TF* const restrict nh,
+            TF* const restrict qr,
+            TF* const restrict nr,
             const TF* const restrict Ta,
             Particle_sphere<TF>& hail_coeffs,
             Particle<TF>& hail,
@@ -2868,11 +2912,11 @@ namespace Sb_cold
                     melt_q = std::min(qh[ij], std::max(melt_q, TF(0)));
                     melt_n = std::min(nh[ij], std::max(melt_n, TF(0)));
 
-                    qht[ij] -= melt_q * zdt;
-                    qrt[ij] += melt_q * zdt;
+                    qh[ij] -= melt_q;
+                    qr[ij] += melt_q;
 
-                    nht[ij] -= melt_n * zdt;
-                    nrt[ij] += melt_n * zdt;
+                    nh[ij] -= melt_n;
+                    nr[ij] += melt_n;
                 }
             } // i
     } // function
@@ -2880,11 +2924,10 @@ namespace Sb_cold
 
     template<typename TF>
     void ice_nucleation_het_philips(
-            TF* const restrict qit,
-            TF* const restrict nit,
-            TF* const restrict qvt,
+            TF* const restrict qi,
+            TF* const restrict ni,
+            TF* const restrict qv,
             TF* const restrict n_inact,
-            const TF* const restrict qv,
             const TF* const restrict ql,
             const TF* const restrict Ta,
             const TF* const restrict afrac_dust,
@@ -3000,14 +3043,14 @@ namespace Sb_cold
                     // From absolute change -> tendency.
                     // NOTE: there is no `*dt` in ICON, but `nuc_q` and `nuc_n` are assumed to
                     // be total increments of `ni` and `qi`....?
-                    nuc_q *= zdt;
-                    nuc_n *= zdt;
+                    // nuc_q *= zdt;
+                    // nuc_n *= zdt;
 
                     // Store tendencies.
-                    qit[ij] += nuc_q;
-                    nit[ij] += nuc_n;
-                    qvt[ij] -= nuc_q;
-                    n_inact[ij] += nuc_n / zdt;
+                    qi[ij] += nuc_q;
+                    ni[ij] += nuc_n;
+                    qv[ij] -= nuc_q;
+                    n_inact[ij] += nuc_n;
 
                     //lwrite_n_inpot = use_prog_in && ndiag .GT. 1.0e-12_wp;
                     //ndiag_mask(i, k) = lwrite_n_inpot;
@@ -3029,14 +3072,11 @@ namespace Sb_cold
 
     template<typename TF>
     void ice_nucleation_homhet(
-            TF* const restrict qvt,
-            TF* const restrict qit,
-            TF* const restrict nit,
+            TF* const restrict qv,
+            TF* const restrict qi,
+            TF* const restrict ni,
             TF* const restrict n_inact,
             //TF* const restrict n_inpot,
-            const TF* const restrict qi,
-            const TF* const restrict ni,
-            const TF* const restrict qv,
             const TF* const restrict ql,
             const TF* const restrict Ta,
             const TF* const restrict w,
@@ -3179,9 +3219,9 @@ namespace Sb_cold
             }
 
             ice_nucleation_het_philips(
-                qit, nit, qvt,
+                qi, ni, qv,
                 n_inact,
-                qv, ql, Ta,
+                ql, Ta,
                 afrac_dust, afrac_soot, afrac_orga,
                 ice, use_prog_in,
                 na_dust, na_soot, na_orga,
@@ -3286,12 +3326,12 @@ namespace Sb_cold
                             // From absolute change -> tendency.
                             // NOTE: there is no `*dt` in ICON, but `nuc_q` and `nuc_n` are assumed to
                             // be total increments of `ni` and `qi`....?
-                            nuc_n *= zdt;
-                            nuc_q *= zdt;
+                            // nuc_n *= zdt;
+                            // nuc_q *= zdt;
 
-                            qit[ij] += nuc_q;
-                            nit[ij] += nuc_n;
-                            qvt[ij] -= nuc_q;
+                            qi[ij] += nuc_q;
+                            ni[ij] += nuc_n;
+                            qv[ij] -= nuc_q;
                         }
                     }
                 } // loop
@@ -3300,13 +3340,10 @@ namespace Sb_cold
 
     template<typename TF>
     void cloud_freeze(
-            TF* const restrict qct,
-            TF* const restrict nct,
-            TF* const restrict qit,
-            TF* const restrict nit,
-            const TF* const restrict qc,
-            const TF* const restrict nc,
-            const TF* const restrict ni,
+            TF* const restrict qc,
+            TF* const restrict nc,
+            TF* const restrict qi,
+            TF* const restrict ni,
             const TF* const restrict Ta,
             const int nuc_c_typ,
             const TF dt,
@@ -3364,16 +3401,16 @@ namespace Sb_cold
                             fr_n  = std::min(fr_n, nc[ij]);
                         }
 
-                        qct[ij] -= fr_q * dti;
-                        nct[ij] -= fr_n * dti;
+                        qc[ij] -= fr_q;
+                        nc[ij] -= fr_n;
 
                         fr_n = std::max(fr_n, fr_q/cloud.x_max);
                         // Special treatment for constant drop number; Force upper bound in cloud_freeze
                         if (nuc_c_typ == 0)
                             fr_n = std::max(std::min(fr_n, nc[ij]-ni[ij]), TF(0));
 
-                        qit[ij] += fr_q * dti;
-                        nit[ij] += fr_n * dti;
+                        qi[ij] += fr_q;
+                        ni[ij] += fr_n;
                     }
                 }
             }
