@@ -1313,7 +1313,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     tmf::Struct_sat_adjust<TF> ssa = tmf::sat_adjust<TF, sw_satadjust>(
                             (*thl_slice).data()[ij],
                             (*qt_slice).data()[ij], p[k],
-                            exner[k]);
+                            exner[k], rho.data()[k]);
 
                     (*ql_old).data()[ij] = ssa.ql;
                     (*ql_new).data()[ij] = ssa.ql;
