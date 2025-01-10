@@ -192,35 +192,6 @@ namespace Thermo_moist_functions
     }
 
     template<typename TF>
-    CUDA_MACRO inline TF sat_pres_water(const TF T)
-    {
-        const TF b1 = 610.78;
-        const TF b2w = 17.269;
-        const TF b3 = 273.15;
-        const TF b4w = 35.86;
-        const TF b234w = b2w * (b3 - b4w);
-        return b1*std::exp( b2w*(T-b3)/(T-b4w));
-    }
-
-    template<typename TF>
-    CUDA_MACRO inline TF qsat_rho(const TF T, const TF rho)
-    {
-        return sat_pres_water(T) / (rho * Rv<TF> * T);
-    }
-
-    template<typename TF>
-    CUDA_MACRO inline TF dqsatdT_rho(const TF qs, const TF T)
-    {
-        const TF b2w = 17.269;
-        const TF b3 = 273.15;
-        const TF b4w = 35.86;
-        const TF b234w = b2w * (b3 - b4w);
-
-        const TF beta = b234w / pow2(T - b4w) - 1.0 / T;
-        return beta * qs;
-    }
-
-    template<typename TF>
     struct Struct_sat_adjust
     {
         TF ql;
@@ -231,7 +202,7 @@ namespace Thermo_moist_functions
 
     template<typename TF, Satadjust_type sw_satadjust>
     inline Struct_sat_adjust<TF> sat_adjust(
-            const TF thl, const TF qt, const TF p, const TF exn, const TF rho)
+            const TF thl, const TF qt, const TF p, const TF exn)
     {
         int niter = 0;
         int nitermax = 10;
@@ -276,38 +247,6 @@ namespace Thermo_moist_functions
             ans.ql = std::max(TF(0.), qt - qs);
             ans.t  = tnr;
             ans.qs = qs;
-
-            // adjust again using the functions from ICON
-            const TF qv = qt - ans.ql;
-            int niter_2 = 0;
-            TF T = ans.t;
-            TF tnr_2 = T;
-
-            TF Ttest = T - Lv<TF> / cp<TF> * ans.ql;
-            TF qtest = qsat_rho(Ttest, rho);
-            if (qv + ans.ql - qtest <= 0)
-            {
-              ans.t = Ttest;
-              ans.ql = TF(0);
-              ans.qs = qtest;
-            }
-            else
-            {
-                while (std::fabs(tnr_2-tnr_old)/tnr_old > TF(1.e-5) && niter_2 < nitermax)
-                {
-                    ++ niter_2;
-                    tnr_old = tnr_2;
-                    qs = qsat_rho(tnr_2, rho);
-                    const TF f = tnr_2 - T - Lv<TF> / cp<TF> * (qv - qs);
-                    const TF f_prime = 1. + Lv<TF> / cp<TF> * dqsatdT_rho(qs, tnr_2);
-                    tnr_2 -= f / f_prime;
-
-                    qs = qsat_rho(tnr_2, rho);
-                    ans.ql = std::max(TF(0.), qt - qs);
-                    ans.t = tnr_2;
-                    ans.qs = qs;
-                }
-            }
         }
         else
         {
@@ -393,7 +332,7 @@ namespace Thermo_moist_functions
         exh[kstart] = exner(prefh[kstart]);
 
         Struct_sat_adjust<TF> ssa =
-            sat_adjust<TF, sw_satadjust>(thlsurf, qtsurf, prefh[kstart], exh[kstart], rhoh[kstart]);
+            sat_adjust<TF, sw_satadjust>(thlsurf, qtsurf, prefh[kstart], exh[kstart]);
 
         thvh[kstart] = virtual_temperature<TF, sw_satadjust>(exh[kstart], thlsurf, qtsurf, ssa.ql, ssa.qi);
         rhoh[kstart] = pbot / (Rd<TF> * exh[kstart] * thvh[kstart]);
@@ -405,7 +344,7 @@ namespace Thermo_moist_functions
         {
             // 1. Calculate remaining values (thv and rho) at full-level[k-1]
             ex[k-1]  = exner(pref[k-1]);
-            ssa = sat_adjust<TF, sw_satadjust>(thlmean[k-1], qtmean[k-1], pref[k-1], ex[k-1], rho[k-1]);
+            ssa = sat_adjust<TF, sw_satadjust>(thlmean[k-1], qtmean[k-1], pref[k-1], ex[k-1]);
             thv[k-1] = virtual_temperature<TF, sw_satadjust>(ex[k-1], thlmean[k-1], qtmean[k-1], ssa.ql, ssa.qi);
             rho[k-1] = pref[k-1] / (Rd<TF> * ex[k-1] * thv[k-1]);
 
@@ -417,7 +356,7 @@ namespace Thermo_moist_functions
             const TF thli = TF(0.5)*(thlmean[k-1] + thlmean[k]);
             const TF qti = TF(0.5)*(qtmean [k-1] + qtmean [k]);
 
-            ssa = sat_adjust<TF, sw_satadjust>(thli, qti, prefh[k], exh[k], rhoh[k]);
+            ssa = sat_adjust<TF, sw_satadjust>(thli, qti, prefh[k], exh[k]);
 
             thvh[k] = virtual_temperature<TF, sw_satadjust>(exh[k], thli, qti, ssa.ql, ssa.qi);
             rhoh[k] = prefh[k] / (Rd<TF> * exh[k] * thvh[k]);

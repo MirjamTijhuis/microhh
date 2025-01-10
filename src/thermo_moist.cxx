@@ -83,7 +83,6 @@ namespace
             TF* restrict thl,
             TF* restrict qt,
             TF* restrict ph,
-            TF* restrict rhoh,
             TF* restrict thlh,
             TF* restrict qth,
             TF* restrict ql,
@@ -115,7 +114,7 @@ namespace
                     const int ij  = i + j*jj;
 
                     Struct_sat_adjust<TF> ssa =
-                        sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh, rhoh[k]);
+                        sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh);
 
                     ql[ij] = ssa.ql;
                     qi[ij] = ssa.qi;
@@ -138,7 +137,6 @@ namespace
             TF* restrict thl,
             TF* restrict qt,
             TF* restrict p,
-            TF* restrict rho,
             TF* restrict ql,
             TF* restrict qi,
             TF* restrict thvref,
@@ -160,7 +158,7 @@ namespace
                         const int ijk = i + j*jj + k*kk;
 
                         Struct_sat_adjust<TF> ssa =
-                            sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex, rho[k]);
+                            sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex);
 
                         ql[ijk] = ssa.ql;
                         qi[ijk] = ssa.qi;
@@ -194,7 +192,6 @@ namespace
             TF* restrict thl,
             TF* restrict qt,
             TF* restrict ph,
-            TF* restrict rhoh,
             TF* restrict thvrefh,
             TF* restrict thlh,
             TF* restrict qth,
@@ -231,7 +228,7 @@ namespace
                         const int ij  = i + j*jj;
 
                         Struct_sat_adjust<TF> ssa =
-                                sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh, rhoh[k]);
+                                sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh);
 
                         ql[ij] = ssa.ql;
                         qi[ij] = ssa.qi;
@@ -267,7 +264,6 @@ namespace
             TF* restrict thl,
             TF* restrict qt,
             TF* restrict p,
-            TF* restrict rho,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int kstart, const int kend,
@@ -284,7 +280,7 @@ namespace
                     const int ijk = i + j*jj + k*kk;
 
                     Struct_sat_adjust<TF> ssa =
-                            sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex, rho[k]);
+                            sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex);
 
                     if (satadj_field == Satadjust_field::Temperature)
                         fld[ijk] = ssa.t;
@@ -306,7 +302,6 @@ namespace
             TF* restrict thl,
             TF* restrict qt,
             TF* restrict ph,
-            TF* restrict rhoh,
             TF* restrict thlh,
             TF* restrict qth,
             const int istart, const int iend,
@@ -338,7 +333,7 @@ namespace
                     const int ij  = i + j*jj;
                     const int ijk  = i + j*jj+k*kk;
 
-                    qlh[ijk] = sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh, rhoh[k]).ql;
+                    qlh[ijk] = sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh).ql;
                 }
         }
 
@@ -357,7 +352,6 @@ namespace
             TF* restrict thl,
             TF* restrict qt,
             TF* restrict p,
-            TF* restrict rho,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int kstart, const int kend,
@@ -375,7 +369,7 @@ namespace
                     const int ijk = i + j*jj + k*kk;
 
                     Struct_sat_adjust<TF> ssa =
-                            sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex, rho[k]);
+                            sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex);
 
                     rh[ijk] = std::min( qt[ijk] / ssa.qs, TF(1.));
                 }
@@ -483,7 +477,6 @@ namespace
             TF* restrict thl,
             TF* restrict qt,
             TF* restrict ph,
-            TF* restrict rhoh,
             TF* restrict thlh,
             TF* restrict qth,
             TF* restrict ql,
@@ -515,7 +508,7 @@ namespace
                     const int ij  = i + j*jj;
                     const int ijk  = i + j*jj+k*kk;
 
-                    Th[ijk] = sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh, rhoh[k]).t;
+                    Th[ijk] = sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh).t;
                 }
         }
     }
@@ -561,7 +554,6 @@ namespace
             const TF* const restrict thl,
             const TF* const restrict qt,
             const TF* const restrict p,
-            const TF* const restrict rho,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int kstart_minus_one,
@@ -604,7 +596,7 @@ namespace
                     const int ijk = i + j*jj + k*kk;
 
                     Struct_sat_adjust<TF> ssa =
-                            sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex, rho[k]);
+                            sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex);
 
                     thv[ijk] = virtual_temperature<TF, sw_satadjust>(ex, thl[ijk], qt[ijk], ssa.ql, ssa.qi);
                 }
@@ -766,8 +758,6 @@ namespace
             const TF* restrict thl_bot,
             const TF* restrict p,
             const TF* restrict ph,
-            const TF* restrict rho,
-            const TF* restrict rhoh,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int kstart, const int kend,
@@ -791,7 +781,7 @@ namespace
                     const int ijk_nogc = (i-igc) + (j-jgc)*jj_nogc + (k-kgc)*kk_nogc;
 
                     const Struct_sat_adjust<TF> ssa =
-                        sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex, rho[k]);
+                        sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex);
 
                     clwp[ijk_nogc] = ssa.ql * dpg;
                     ciwp[ijk_nogc] = ssa.qi * dpg;
@@ -823,7 +813,7 @@ namespace
                     const int ij = i + j*jj;
                     const int ijk_nogc = (i-igc) + (j-jgc)*jj_nogc + (k-kgc)*kk_nogc;
 
-                    T_h[ijk_nogc] = sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh, rhoh[k]).t;
+                    T_h[ijk_nogc] = sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh).t;
                 }
         }
 
@@ -854,8 +844,6 @@ namespace
             const TF* const restrict thl_bot,
             const TF* const restrict p,
             const TF* const restrict ph,
-            const TF* const restrict rho,
-            const TF* const restrict rhoh,
             const int* const col_i,
             const int* const col_j,
             const int n_cols,
@@ -883,7 +871,7 @@ namespace
                 const int ijk_out = n + (k-kgc)*n_cols;
 
                 const Struct_sat_adjust<TF> ssa =
-                        sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex, rho[k]);
+                        sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex);
 
                 clwp[ijk_out] = ssa.ql * dpg;
                 ciwp[ijk_out] = ssa.qi * dpg;
@@ -911,7 +899,7 @@ namespace
                 const TF thlh = interp2(thl[ijk-ijcells], thl[ijk]);
                 const TF qth  = interp2(qt [ijk-ijcells], qt [ijk]);
 
-                T_h[ijk_out] = sat_adjust<TF, sw_satadjust>(thlh, qth, ph[k], exnh, rhoh[k]).t;
+                T_h[ijk_out] = sat_adjust<TF, sw_satadjust>(thlh, qth, ph[k], exnh).t;
             }
         }
 
@@ -945,8 +933,6 @@ namespace
             const TF* const restrict exnerh,
             const TF* const restrict p,
             const TF* const restrict ph,
-            const TF* const restrict rho,
-            const TF* const restrict rhoh,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int kstart,
@@ -961,7 +947,7 @@ namespace
 
                 // Saturation adjustment for first model level
                 const Struct_sat_adjust<TF> ssa =
-                        sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[kstart], exner[kstart], rho[kstart]);
+                        sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[kstart], exner[kstart]);
 
                 T_bot[ij] = exnerh[kstart] * thl_bot[ij];   // Assuming no ql
                 T_a[ij]   = ssa.t;
@@ -1346,7 +1332,6 @@ void Thermo_moist<TF>::exec(const double dt, Stats<TF>& stats)
                 fields.sp.at("thl")->fld.data(),
                 fields.sp.at("qt")->fld.data(),
                 bs.prefh.data(),
-                bs.rhorefh.data(),
                 &tmp->fld[0*gd.ijcells],
                 &tmp->fld[1*gd.ijcells],
                 &tmp->fld[2*gd.ijcells],
@@ -1536,7 +1521,6 @@ void Thermo_moist<TF>::get_thermo_field(
                 fields.sp.at("thl")->fld.data(),
                 fields.sp.at("qt")->fld.data(),
                 base.pref.data(),
-                base.rhoref.data(),
                 gd.istart, gd.iend,
                 gd.jstart, gd.jend,
                 gd.kstart, gd.kend,
@@ -1555,7 +1539,6 @@ void Thermo_moist<TF>::get_thermo_field(
                     fields.sp.at("thl")->fld.data(),
                     fields.sp.at("qt")->fld.data(),
                     base.pref.data(),
-                    base.rhoref.data(),
                     tmp->fld.data(),
                     tmp2->fld.data(),
                     base.thvref.data(),
@@ -1587,7 +1570,6 @@ void Thermo_moist<TF>::get_thermo_field(
                     fields.sp.at("thl")->fld.data(),
                     fields.sp.at("qt")->fld.data(),
                     base.prefh.data(),
-                    base.rhorefh.data(),
                     base.thvrefh.data(),
                     &tmp->fld[0*gd.ijcells],
                     &tmp->fld[1*gd.ijcells],
@@ -1630,7 +1612,6 @@ void Thermo_moist<TF>::get_thermo_field(
                     fields.sp.at("thl")->fld.data(),
                     fields.sp.at("qt")->fld.data(),
                     base.prefh.data(),
-                    base.rhorefh.data(),
                     &tmp->fld[0*gd.ijcells],
                     &tmp->fld[1*gd.ijcells],
                     gd.istart, gd.iend,
@@ -1690,7 +1671,6 @@ void Thermo_moist<TF>::get_thermo_field(
                         fields.sp.at("thl")->fld.data(),
                         fields.sp.at("qt")->fld.data(),
                         base.pref.data(),
-                        base.rhoref.data(),
                         gd.istart, gd.iend,
                         gd.jstart, gd.jend,
                         gd.kstart, gd.kend,
@@ -1739,7 +1719,6 @@ void Thermo_moist<TF>::get_thermo_field(
                     fields.sp.at("thl")->fld.data(),
                     fields.sp.at("qt")->fld.data(),
                     base.prefh.data(),
-                    base.rhorefh.data(),
                     &tmp->fld[0*gd.ijcells],
                     &tmp->fld[1*gd.ijcells],
                     &tmp->fld[2*gd.ijcells],
@@ -1768,7 +1747,6 @@ void Thermo_moist<TF>::get_thermo_field(
                     fields.sp.at("thl")->fld.data(),
                     fields.sp.at("qt")->fld.data(),
                     base.pref.data(),
-                    base.rhoref.data(),
                     gd.istart, gd.iend,
                     gd.jstart, gd.jend,
                     gd.kstart-1, gd.kend+1,
@@ -1824,8 +1802,6 @@ void Thermo_moist<TF>::get_radiation_fields(
                 fields.sp.at("thl")->fld_bot.data(),
                 bs.pref.data(),
                 bs.prefh.data(),
-                bs.rhoref.data(),
-                bs.rhorefh.data(),
                 gd.istart, gd.iend,
                 gd.jstart, gd.jend,
                 gd.kstart, gd.kend,
@@ -1868,8 +1844,6 @@ void Thermo_moist<TF>::get_radiation_columns(
                     fields.sp.at("thl")->fld_bot.data(),
                     bs.pref.data(),
                     bs.prefh.data(),
-                    bs.rhoref.data(),
-                    bs.rhorefh.data(),
                     col_i.data(),
                     col_j.data(),
                     n_cols,
@@ -1909,8 +1883,6 @@ void Thermo_moist<TF>::get_land_surface_fields(
                 bs.exnrefh.data(),
                 bs.pref.data(),
                 bs.prefh.data(),
-                bs.rhoref.data(),
-                bs.rhorefh.data(),
                 gd.istart, gd.iend,
                 gd.jstart, gd.jend,
                 gd.kstart,
