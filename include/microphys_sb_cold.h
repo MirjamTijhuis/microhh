@@ -486,11 +486,11 @@ namespace Sb_cold
             TF* const restrict qr,
             TF* const restrict nr,
             TF* const restrict qc,
+            TF* const restrict nc,
             Particle_cloud_coeffs<TF>& cloud_coeffs,
             Particle<TF>& cloud,
             Particle<TF>& rain,
             const TF cloud_rho_v,  // cloud%rho_v(i,k) in ICON, constant per layer in uHH.
-            const TF Nc0,
             const TF dt,
             const int istart, const int iend,
             const int jstart, const int jend,
@@ -514,8 +514,8 @@ namespace Sb_cold
 
                 if (qc[ij] > q_crit<TF>)
                 {
-                    const TF n_c = Nc0; // cloud%n(i,k) in ICON
-                    const TF x_c = particle_meanmass(cloud, qc[ij], n_c);
+                    // const TF n_c = Nc0; // cloud%n(i,k) in ICON
+                    const TF x_c = particle_meanmass(cloud, qc[ij], nc[ij]);
 
                     TF au = cloud_coeffs.k_au * fm::pow2(qc[ij]) * fm::pow2(x_c) * cloud_rho_v * dt;
                     const TF tau = std::min(std::max(TF(1) - qc[ij] / (qc[ij] + qr[ij] + eps), eps), TF(0.9));
@@ -538,6 +538,7 @@ namespace Sb_cold
     void accretionSB(
             TF* const restrict qr,
             TF* const restrict qc,
+            TF* const restrict nc,
             const TF dt,
             const int istart, const int iend,
             const int jstart, const int jend,
@@ -1559,7 +1560,7 @@ namespace Sb_cold
                     {
                         qi[ij] += rime_rate_qc[ij];
                         qc[ij] -= rime_rate_qc[ij];
-                        nc[ij] -= rime_rate_nc[ij];
+                        // nc[ij] -= rime_rate_nc[ij];
 
                         if (Ta[ij] < Constants::T0<TF> && ice_multiplication)
                         {
@@ -1606,7 +1607,7 @@ namespace Sb_cold
 
                         qi[ij] += rime_rate_qc[ij];
                         qc[ij] -= rime_rate_qc[ij];
-                        nc[ij] -= rime_rate_nc[ij];
+                        // nc[ij] -= rime_rate_nc[ij];
 
                         // Ice multiplication;
                         const TF mult_q = TF(0);
@@ -1818,7 +1819,7 @@ namespace Sb_cold
 
                         qs[ij] += rime_q;
                         qc[ij] -= rime_q;
-                        nc[ij] -= rime_n;
+                        // nc[ij] -= rime_n;
 
                         // Ice multiplication;
                         if (Ta[ij] < Constants::T0<TF> && ice_multiplication)
@@ -1890,7 +1891,7 @@ namespace Sb_cold
 
                         qs[ij] += rime_q;
                         qc[ij] -= rime_q;
-                        nc[ij] -= rime_n;
+                        // nc[ij] -= rime_n;
 
                         // ice multiplication;
                         TF mult_q = TF(0);
@@ -2080,7 +2081,7 @@ namespace Sb_cold
 
                     qp[ij] += rime_q;
                     qc[ij] -= rime_q;
-                    nc[ij] -= rime_n;
+                    // nc[ij] -= rime_n;
 
                     // Ice multiplication based on Hallet and Mossop;
                     if (Ta[ij] < Constants::T0<TF> && ice_multiplication)
@@ -2733,7 +2734,7 @@ namespace Sb_cold
                     else
                     {
                         qc[ij] += melt_q;
-                        nc[ij] += melt_n;
+                        // nc[ij] += melt_n;
                     }
                 }
             } // i
@@ -3406,7 +3407,7 @@ namespace Sb_cold
                         }
 
                         qc[ij] -= fr_q;
-                        nc[ij] -= fr_n;
+                        // nc[ij] -= fr_n;
 
                         fr_n = std::max(fr_n, fr_q/cloud.x_max);
                         // Special treatment for constant drop number; Force upper bound in cloud_freeze
