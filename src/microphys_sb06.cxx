@@ -64,7 +64,7 @@ Microphys_sb06<TF>::Microphys_sb06(
     // Read microphysics switches and settings
     sw_microbudget = inputin.get_item<bool>("micro", "swmicrobudget", "", false);
     sw_debug = inputin.get_item<bool>("micro", "swdebug", "", false);
-    sw_integrate = inputin.get_item<bool>("micro", "swintegrate", "", false);
+    sw_integrate = inputin.get_item<bool>("micro", "swintegrate", "", true);
     sw_prognostic_ice = inputin.get_item<bool>("micro", "swprognosticice", "", true);
     sw_ice = inputin.get_item<bool>("micro", "swice", "", true);
 
@@ -176,6 +176,12 @@ Microphys_sb06<TF>::Microphys_sb06(
         sw_satadjust = Satadjust_type::Liquid;
     else
         sw_satadjust = Satadjust_type::Disabled;
+
+    // MT Check for ice formation processes. If swsatadjust_qi and swprognosticice are false, no ice is formed. If both are true, ice is formed twice.
+    if (sw_prognostic_ice &&  sw_satadjust_qi)
+        master.print_message("swprognosticice=true and swsatadjust_qi=true means double ice formation.\n");
+    if (!sw_prognostic_ice &&  !sw_satadjust_qi)
+        master.print_message("swprognosticice=false and swsatadjust_qi=false means no ice formation.\n");
 
 }
 
