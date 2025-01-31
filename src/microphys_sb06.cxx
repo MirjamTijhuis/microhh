@@ -1074,6 +1074,8 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
     // for calculating the `thl` and `qt` tendencies.
     auto qv_conversion_tend = fields.get_tmp_xy();
     auto qc_conversion_tend = fields.get_tmp_xy();
+    auto qi_conversion_tend = fields.get_tmp_xy();
+    auto qr_conversion_tend = fields.get_tmp_xy();
     // auto nc_conversion_tend = fields.get_tmp_xy();
 
     // Dummy fields for qcloud number density.
@@ -1400,6 +1402,8 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         // Zero diagnostic qx tendencies.
         zero_tmp_xy(qv_conversion_tend);
         zero_tmp_xy(qc_conversion_tend);
+        zero_tmp_xy(qi_conversion_tend);
+        zero_tmp_xy(qr_conversion_tend);
         //zero_tmp_xy(nc_conversion_tend);
 
         // Reset conversion tendencies.
@@ -2232,6 +2236,60 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         // check("rain_evaporation", k);
         // tendencies("evaporation_rain", {"qv", "qr", "nr"}, k);
 
+        // diagnose tendencies in qc, qv, qr and qi for thl and qt tendency
+        // MT: this is done before the implicit_time, as it is also done in ICON
+        Sb_common::diagnose_tendency_2d(
+                (*qv_conversion_tend).data(),
+                (*qv_old).data(),
+                (*qv).data(),
+                rho.data(),
+                dt,
+                sw_integrate,
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.icells, gd.ijcells,
+                k
+        );
+
+        Sb_common::diagnose_tendency_2d(
+                (*qc_conversion_tend).data(),
+                (*ql_old).data(),
+                (*ql_new).data(),
+                rho.data(),
+                dt,
+                sw_integrate,
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.icells, gd.ijcells,
+                k
+        );
+
+        Sb_common::diagnose_tendency_2d(
+                (*qr_conversion_tend).data(),
+                fields.sp.at("qr")->fld.data(),
+                hydro_types.at("qr").slice,
+                rho.data(),
+                dt,
+                sw_integrate,
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.icells, gd.ijcells,
+                k
+        );
+
+        if (sw_ice)
+            Sb_common::diagnose_tendency_2d(
+                    (*qi_conversion_tend).data(),
+                    fields.sp.at("qi")->fld.data(),
+                    hydro_types.at("qi").slice,
+                    rho.data(),
+                    dt,
+                    sw_integrate,
+                    gd.istart, gd.iend,
+                    gd.jstart, gd.jend,
+                    gd.icells, gd.ijcells,
+                    k
+            );
 
         for (auto& it : hydro_types)
         {
@@ -2262,32 +2320,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     k);
         }
 
-        // diagnose also the tendencies in qc and qv
-        Sb_common::diagnose_tendency_2d(
-                (*qv_conversion_tend).data(),
-                (*qv_old).data(),
-                (*qv).data(),
-                rho.data(),
-                dt,
-                sw_integrate,
-                gd.istart, gd.iend,
-                gd.jstart, gd.jend,
-                gd.icells, gd.ijcells,
-                k
-                );
-
-        Sb_common::diagnose_tendency_2d(
-                (*qc_conversion_tend).data(),
-                (*ql_old).data(),
-                (*ql_new).data(),
-                rho.data(),
-                dt,
-                sw_integrate,
-                gd.istart, gd.iend,
-                gd.jstart, gd.jend,
-                gd.icells, gd.ijcells,
-                k
-        );
 
         // Calculate thermodynamic tendencies `thl` and `qt`,
         // from microphysics tendencies excluding sedimentation.
@@ -2295,14 +2327,14 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         {
             TF *qi_tend;
             if (sw_ice)
-                qi_tend = fields.st.at("qi")->fld.data();
+                qi_tend = (*qi_conversion_tend).data();
             else
                 qi_tend = nullptr;
 
             Sb_common::calc_thermo_tendencies_cloud_ice<TF, sw_prognostic_ice, sw_ice>(
                     fields.st.at("thl")->fld.data(),
                     fields.st.at("qt")->fld.data(),
-                    fields.st.at("qr")->fld.data(),
+                    (*qr_conversion_tend).data(),
                     qi_tend,
                     (*qv_conversion_tend).data(),
                     (*qc_conversion_tend).data(),
@@ -2362,6 +2394,8 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
     fields.release_tmp_xy(qv_conversion_tend);
     fields.release_tmp_xy(qc_conversion_tend);
+    fields.release_tmp_xy(qi_conversion_tend);
+    fields.release_tmp_xy(qr_conversion_tend);
     //fields.release_tmp_xy(nc_conversion_tend);
     fields.release_tmp_xy(nc_fld);
 
