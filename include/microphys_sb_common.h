@@ -345,6 +345,38 @@ namespace Sb_common
     }
 
     template<typename TF>
+    void diagnose_tendency_temp(
+            TF* const restrict temp_tend,
+            const TF* const restrict tend,
+            const TF* const restrict fld_old,
+            const TF* const restrict fld_new,
+            const TF* const restrict rho,
+            const double dt,
+            bool do_integration,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int jstride, const int kstride,
+            const int k)
+    {
+        const TF dt_i = TF(1) / dt;
+        const TF rho_i = TF(1) / rho[k];
+        const TF fac = do_integration ? 1 : 0;
+
+        for (int j = jstart; j < jend; j++)
+#pragma ivdep
+                for (int i = istart; i < iend; i++)
+                {
+                    const int ij = i + j * jstride;
+                    const int ijk= i + j * jstride + k*kstride;
+
+                    // Evaluate tendencies. This includes the tendencies from both conversions and implicit sedimentation.
+                    // `Old` versions are integrated first with only the dynamics tendencies to avoid double counting.
+                    temp_tend[ij] += rho_i * (fld_new[ij] - (fld_old[ijk] + fac*dt*rho[k]*tend[ijk])) * dt_i;
+
+                }
+    }
+
+    template<typename TF>
     void diagnose_tendency_2d(
             TF* const restrict tend,
             TF* const restrict fld_old,

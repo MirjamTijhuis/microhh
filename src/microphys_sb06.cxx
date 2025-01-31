@@ -2264,8 +2264,9 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 k
         );
 
-        Sb_common::diagnose_tendency_2d(
+        Sb_common::diagnose_tendency_temp(
                 (*qr_conversion_tend).data(),
+                fields.st.at("qr")->fld.data(),
                 fields.sp.at("qr")->fld.data(),
                 hydro_types.at("qr").slice,
                 rho.data(),
@@ -2278,8 +2279,10 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         );
 
         if (sw_ice)
-            Sb_common::diagnose_tendency_2d(
+        {
+            Sb_common::diagnose_tendency_temp(
                     (*qi_conversion_tend).data(),
+                    fields.st.at("qi")->fld.data(),
                     fields.sp.at("qi")->fld.data(),
                     hydro_types.at("qi").slice,
                     rho.data(),
@@ -2290,6 +2293,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.icells, gd.ijcells,
                     k
             );
+        }
 
         for (auto& it : hydro_types)
         {
