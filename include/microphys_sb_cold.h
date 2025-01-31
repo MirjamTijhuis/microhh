@@ -1264,8 +1264,7 @@ namespace Sb_cold
                 if (qs[ij] > q_crit<TF>)
                 {
                     //.. Temperaturabhaengige sticking efficiency nach Lin (1983)
-                    const TF e_coll = std::max(TF(0.1),
-                        std::min(std::exp(TF(0.09)*(T[ij]-Constants::T0<TF>)), TF(1.0)));
+                    const TF e_coll = std::min(std::exp(TF(0.09)*(T[ij]-Constants::T0<TF>)), TF(1.0));
 
                     const TF x_s = particle_meanmass(snow, qs[ij], ns[ij]);
                     const TF D_s = particle_diameter(snow, x_s);

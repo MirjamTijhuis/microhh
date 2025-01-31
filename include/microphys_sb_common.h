@@ -282,8 +282,8 @@ namespace Sb_common
             const int k)
     {
         // const TF rho_i = TF(1) / rho[k];
-        const TF Ls_cp = Ls<TF>/cp<TF>;
-        const TF Lf_cp = Lf<TF>/cp<TF>;
+        const TF Ls_cp = Ls<TF>/(cp<TF>*exner[k]);
+        const TF Lf_cp = Lf<TF>/(cp<TF>*exner[k]);
 
         for (int j = jstart; j < jend; j++)
                 #pragma ivdep
