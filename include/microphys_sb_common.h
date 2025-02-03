@@ -116,10 +116,35 @@ namespace Sb_common
                 const int ijk = i + j * jstride + k * kstride;
 
                 // fld_3d_tend is still per kg, while fld_2d and fld_3d per m-3.
+                // this is valid for the hydrotypes
                 fld_2d[ij] = fld_3d[ijk] + fac*dt*rho[k]*fld_3d_tend[ijk];
             }
     }
 
+    template<typename TF>
+    void copy_slice_and_integrate(
+            TF* const restrict fld_2d,
+            const TF* const restrict fld_3d,
+            const TF* const restrict fld_3d_tend,
+            const TF dt,
+            bool do_integration,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int jstride, const int kstride,
+            const int k)
+    {
+        const TF fac = do_integration ? 1 : 0;
+
+        for (int j = jstart; j < jend; j++)
+            #pragma ivdep
+            for (int i = istart; i < iend; i++)
+            {
+                const int ij = i + j * jstride;
+                const int ijk = i + j * jstride + k * kstride;
+
+                fld_2d[ij] = fld_3d[ijk] + fac*dt*fld_3d_tend[ijk];
+            }
+    }
 
     template<typename TF>
     void implicit_core(
@@ -369,7 +394,7 @@ namespace Sb_common
                     const int ij = i + j * jstride;
                     const int ijk= i + j * jstride + k*kstride;
 
-                    // Evaluate tendencies. This includes the tendencies from both conversions and implicit sedimentation.
+                    // Evaluate tendencies. This includes the tendencies only from conversions not from implicit sedimentation.
                     // `Old` versions are integrated first with only the dynamics tendencies to avoid double counting.
                     temp_tend[ij] += rho_i * (fld_new[ij] - (fld_old[ijk] + fac*dt*rho[k]*tend[ijk])) * dt_i;
 
