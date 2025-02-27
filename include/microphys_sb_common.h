@@ -100,14 +100,11 @@ namespace Sb_common
             const TF* const restrict fld_3d_tend,
             const TF* const restrict rho,
             const TF dt,
-            bool do_integration,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int jstride, const int kstride,
             const int k)
     {
-        const TF fac = do_integration ? 1 : 0;
-
         for (int j = jstart; j < jend; j++)
             #pragma ivdep
             for (int i = istart; i < iend; i++)
@@ -117,7 +114,7 @@ namespace Sb_common
 
                 // fld_3d_tend is still per kg, while fld_2d and fld_3d per m-3.
                 // this is valid for the hydrotypes
-                fld_2d[ij] = fld_3d[ijk] + fac*dt*rho[k]*fld_3d_tend[ijk];
+                fld_2d[ij] = fld_3d[ijk] + dt*rho[k]*fld_3d_tend[ijk];
             }
     }
 
@@ -127,14 +124,11 @@ namespace Sb_common
             const TF* const restrict fld_3d,
             const TF* const restrict fld_3d_tend,
             const TF dt,
-            bool do_integration,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int jstride, const int kstride,
             const int k)
     {
-        const TF fac = do_integration ? 1 : 0;
-
         for (int j = jstart; j < jend; j++)
             #pragma ivdep
             for (int i = istart; i < iend; i++)
@@ -142,7 +136,7 @@ namespace Sb_common
                 const int ij = i + j * jstride;
                 const int ijk = i + j * jstride + k * kstride;
 
-                fld_2d[ij] = fld_3d[ijk] + fac*dt*fld_3d_tend[ijk];
+                fld_2d[ij] = fld_3d[ijk] + dt*fld_3d_tend[ijk];
             }
     }
 
@@ -291,12 +285,11 @@ namespace Sb_common
     }
 
 
-    template<typename TF, bool sw_prognostic_ice, bool sw_ice>
+    template<typename TF>
     void calc_thermo_tendencies_cloud_ice(
             TF* const restrict thlt,
             TF* const restrict qtt,
             const TF* const restrict qrt,
-            const TF* const restrict qit,
             const TF* const restrict qvt,
             const TF* const restrict qct,
             const TF* const restrict rho,
@@ -319,8 +312,6 @@ namespace Sb_common
 
                     // ICON/UCLA method:
                     TF qtt_mcr = qvt[ij] + qct[ij];
-                    if (sw_ice && !sw_prognostic_ice)
-                        qtt_mcr += qit[ij];
 
                     qtt[ijk] += qtt_mcr;
                     thlt[ijk] += - Ls_cp * qtt_mcr - Lf_cp * qrt[ij];
@@ -345,7 +336,6 @@ namespace Sb_common
             const TF* const restrict fld_new,
             const TF* const restrict rho,
             const double dt,
-            bool do_integration,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int jstride, const int kstride,
@@ -353,7 +343,6 @@ namespace Sb_common
     {
         const TF dt_i = TF(1) / dt;
         const TF rho_i = TF(1) / rho[k];
-        const TF fac = do_integration ? 1 : 0;
 
         for (int j = jstart; j < jend; j++)
                 #pragma ivdep
@@ -364,7 +353,7 @@ namespace Sb_common
 
                     // Evaluate tendencies. This includes the tendencies from both conversions and implicit sedimentation.
                     // `Old` versions are integrated first with only the dynamics tendencies to avoid double counting.
-                    tend[ijk] += rho_i * (fld_new[ij] - (fld_old[ijk] + fac*dt*rho[k]*tend[ijk])) * dt_i;
+                    tend[ijk] += rho_i * (fld_new[ij] - (fld_old[ijk] + dt*rho[k]*tend[ijk])) * dt_i;
 
                 }
     }
@@ -377,7 +366,6 @@ namespace Sb_common
             const TF* const restrict fld_new,
             const TF* const restrict rho,
             const double dt,
-            bool do_integration,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int jstride, const int kstride,
@@ -385,7 +373,6 @@ namespace Sb_common
     {
         const TF dt_i = TF(1) / dt;
         const TF rho_i = TF(1) / rho[k];
-        const TF fac = do_integration ? 1 : 0;
 
         for (int j = jstart; j < jend; j++)
 #pragma ivdep
@@ -396,7 +383,7 @@ namespace Sb_common
 
                     // Evaluate tendencies. This includes the tendencies only from conversions not from implicit sedimentation.
                     // `Old` versions are integrated first with only the dynamics tendencies to avoid double counting.
-                    temp_tend[ij] += rho_i * (fld_new[ij] - (fld_old[ijk] + fac*dt*rho[k]*tend[ijk])) * dt_i;
+                    temp_tend[ij] += rho_i * (fld_new[ij] - (fld_old[ijk] + dt*rho[k]*tend[ijk])) * dt_i;
 
                 }
     }
@@ -408,7 +395,6 @@ namespace Sb_common
             const TF* const restrict fld_new,
             const TF* const restrict rho,
             const double dt,
-            bool do_integration,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int jstride, const int kstride,

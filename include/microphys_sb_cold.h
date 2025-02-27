@@ -186,12 +186,11 @@ namespace Sb_cold
         }
     }
 
-    template<typename TF, bool sw_prognostic_ice>
+    template<typename TF>
     void diagnose_qv(
             TF* const restrict qv,
             const TF* const restrict qt,
             const TF* const restrict ql,
-            const TF* const restrict qi,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int jstride, const int kstride,
@@ -204,10 +203,7 @@ namespace Sb_cold
                 const int ij = i + j*jstride;
                 const int ijk = i + j*jstride + k*kstride;
 
-                if (sw_prognostic_ice)
-                    qv[ij] = qt[ij] - ql[ij];
-                else
-                    qv[ij] = qt[ij] - ql[ij] - qi[ijk];
+                qv[ij] = qt[ij] - ql[ij];
             }
     }
 
@@ -363,17 +359,15 @@ namespace Sb_cold
             Particle<TF>& particle,
             const int istart, const int iend,
             const int jstart, const int jend,
-            const int kstart, const int kend,
-            const int jstride, const int kstride)
+            const int jstride)
     {
-        for (int k=kstart; k<kend; ++k)
             for (int j=jstart; j<jend; ++j)
                 for (int i=istart; i<iend; ++i)
                 {
-                    const int ijk = i + j*jstride + k*kstride;
+                    const int ij = i + j * jstride;
 
-                    nx[ijk] = std::min(nx[ijk], qx[ijk] / particle.x_min);
-                    nx[ijk] = std::max(nx[ijk], qx[ijk] / particle.x_max);
+                    nx[ij] = std::min(nx[ij], qx[ij] / particle.x_min);
+                    nx[ij] = std::max(nx[ij], qx[ij] / particle.x_max);
                 }
     }
 

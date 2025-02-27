@@ -343,10 +343,8 @@ class Microphys_sb06 : public Microphys<TF>
         void init_2mom_scheme_once();
 
         bool sw_ice;            // Switch to enable the ice/snow/graupel/hail part of SB06.
-        bool sw_prognostic_ice; // Switch between prognostic (calculated by SB06) or diagnostic (satadjust) ice.
         bool sw_microbudget;    // Output full microphysics budget terms
         bool sw_debug;          // Print debug info.
-        bool sw_integrate;      // Pre-integrate water species in implicit solver.
         Satadjust_type sw_satadjust;      // satadjust liquid, ice or both
 
         //const int cloud_type = 2673;
