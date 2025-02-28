@@ -55,7 +55,7 @@ class Micro_budget {
                 this->tendencies.emplace(full_name, std::vector<TF>(this->nlev));
 
                 // Register in statistics.
-                const std::string unit = full_name.at(0) == 'q' ? "kg kg-1 s" : "m-3 s";
+                const std::string unit = full_name.at(0) == 'q' ? "kg kg-1" : "kg-1";
                 stats.add_prof(full_name, "Tendency " + full_name, unit, "z" , group_name);
             }
         }
@@ -76,11 +76,10 @@ class Micro_budget {
                 const std::string& process,
                 const std::string& specie,
                 const TF humidity,
-                const int k,
-                const int dt)
+                const int k)
         {
             const std::string full_name = specie + "_" + process;
-            this->tendencies.at(full_name)[k] += (humidity - this->prev_humidities.at(specie)[k])/dt;
+            this->tendencies.at(full_name)[k] += (humidity - this->prev_humidities.at(specie)[k]);
             this->prev_humidities.at(specie)[k] = humidity;
         }
 

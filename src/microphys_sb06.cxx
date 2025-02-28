@@ -1122,8 +1122,8 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             const TF* const restrict ql_new,
             const int k)
     {
-        bool check = stats.do_statistics(timeloop.get_itime());
-        if (!sw_microbudget || !check)
+        // bool check = stats.do_statistics(timeloop.get_itime());
+        if (!sw_microbudget)
             return;
 
         for (auto& specie : species)
@@ -1172,7 +1172,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             master.sum(&sum, 1);
             sum /= (gd.itot*gd.jtot);
 
-            micro_budget.set(name, specie, sum, k, dt);
+            micro_budget.set(name, specie, sum, k);
         }
     };
 
@@ -2034,7 +2034,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.icells);
             timer.stop("qi_melt");
             check("ice_melting", (*qv_new).data(), (*ql_new).data(), q_sum_old);
-            tendencies("melting_ice", {"qi", "ni", "qr", "nr"}, (*qv_new).data(), (*ql_new).data(), k);
+            tendencies("melting_ice", {"qi", "ni", "qr", "nr", "qc", "nc"}, (*qv_new).data(), (*ql_new).data(), k);
 
             timer.start("qs_melt");
             Sb_cold::snow_melting(
