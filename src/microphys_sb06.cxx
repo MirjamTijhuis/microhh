@@ -1202,7 +1202,8 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
     const bool to_kgm3 = true;
 
-    convert_units_short(fields.ap.at("ina")->fld.data(), to_kgm3);
+    if (sw_ice)
+    	convert_units_short(fields.ap.at("ina")->fld.data(), to_kgm3);
 
     for (auto& it : hydro_types)
         convert_units_short(fields.ap.at(it.first)->fld.data(), to_kgm3);
@@ -2396,7 +2397,8 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
     // Convert specific humidity from `kg m-3` to `kg kg-1`
     // convert_units_short(fields.ap.at("qt")->fld.data(), !to_kgm3);
-    convert_units_short(fields.ap.at("ina")->fld.data(), !to_kgm3);
+    if (sw_ice)
+    	convert_units_short(fields.ap.at("ina")->fld.data(), !to_kgm3);
 
     // Calculate tendencies.
     stats.calc_tend(*fields.st.at("thl"), tend_name);
