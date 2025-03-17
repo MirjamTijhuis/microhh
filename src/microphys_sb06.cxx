@@ -2065,6 +2065,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     hydro_types.at("ng").slice,
                     hydro_types.at("qr").slice,
                     hydro_types.at("nr").slice,
+                    (*qv_new).data(),
                     (*T_slice).data(),
                     graupel_coeffs,
                     graupel,

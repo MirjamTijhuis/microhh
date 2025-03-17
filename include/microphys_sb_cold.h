@@ -2811,6 +2811,7 @@ namespace Sb_cold
             TF* const restrict ng,
             TF* const restrict qr,
             TF* const restrict nr,
+            const TF* const restrict qv,
             const TF* const restrict Ta,
             Particle_sphere<TF>& graupel_coeffs,
             Particle<TF>& graupel,
@@ -2830,7 +2831,8 @@ namespace Sb_cold
 
                 if (Ta[ij] > Constants::T0<TF> && qg[ij] > TF(0))
                 {
-                    const TF e_a = tmf::esat_liq(Ta[ij]);
+                    // const TF e_a = tmf::esat_liq(Ta[ij]);
+                    const TF e_a  = qv[ij] * Constants::Rv<TF> * Ta[ij];  // need actual e_v here, not satur. vapor pres.
 
                     const TF x_g = particle_meanmass(graupel, qg[ij], ng[ij]);
                     const TF D_g = particle_diameter(graupel, x_g);
