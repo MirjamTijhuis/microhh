@@ -2740,6 +2740,7 @@ namespace Sb_cold
             TF* const restrict ns,
             TF* const restrict qr,
             TF* const restrict nr,
+            const TF* const restrict qv,
             const TF* const restrict Ta,
             Particle_sphere<TF>& snow_coeffs,
             Particle<TF>& snow,
@@ -2759,7 +2760,8 @@ namespace Sb_cold
 
                 if (Ta[ij] > Constants::T0<TF> && qs[ij] > TF(0))
                 {
-                    const TF e_a = tmf::esat_liq(Ta[ij]);
+                    // const TF e_a = tmf::esat_liq(Ta[ij]);  // saturation pressure IS WRONG HERE, need actual e_v
+                    const TF e_a  = qv[ij] * Constants::Rv<TF> * Ta[ij];
 
                     const TF x_s = particle_meanmass(snow, qs[ij], ns[ij]);
                     const TF D_s = particle_diameter(snow, x_s);
@@ -2870,6 +2872,7 @@ namespace Sb_cold
             TF* const restrict nh,
             TF* const restrict qr,
             TF* const restrict nr,
+            const TF* const restrict qv,
             const TF* const restrict Ta,
             Particle_sphere<TF>& hail_coeffs,
             Particle<TF>& hail,
@@ -2890,7 +2893,8 @@ namespace Sb_cold
 
                 if (Ta[ij] > Constants::T0<TF> && qh[ij] > TF(0))
                 {
-                    const TF e_a = tmf::esat_liq(Ta[ij]);
+                    // const TF e_a = tmf::esat_liq(Ta[ij]);
+                    const TF e_a = qv[ij] * Constants::Rv<TF> * Ta[ij];
 
                     const TF x_h = particle_meanmass(hail, qh[ij], nh[ij]);
                     const TF D_h = particle_diameter(hail, x_h);
