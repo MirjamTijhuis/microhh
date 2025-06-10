@@ -415,9 +415,9 @@ namespace
         Float radliq_upr = coef_nc.get_variable<Float>("radliq_upr");
         Float radliq_fac = coef_nc.get_variable<Float>("radliq_fac");
 
-        Float radice_lwr = coef_nc.get_variable<Float>("radice_lwr");
-        Float radice_upr = coef_nc.get_variable<Float>("radice_upr");
-        Float radice_fac = coef_nc.get_variable<Float>("radice_fac");
+        Float diamice_lwr = coef_nc.get_variable<Float>("diamice_lwr");
+        Float diamice_upr = coef_nc.get_variable<Float>("diamice_upr");
+        Float diamice_fac = coef_nc.get_variable<Float>("diamice_fac");
 
         Array<Float,2> lut_extliq(
                 coef_nc.get_variable<Float>("lut_extliq", {n_band, n_size_liq}), {n_size_liq, n_band});
@@ -436,7 +436,7 @@ namespace
         return Cloud_optics(
                 band_lims_wvn,
                 radliq_lwr, radliq_upr, radliq_fac,
-                radice_lwr, radice_upr, radice_fac,
+                diamice_lwr, diamice_upr, diamice_fac,
                 lut_extliq, lut_ssaliq, lut_asyliq,
                 lut_extice, lut_ssaice, lut_asyice);
     }
