@@ -717,6 +717,12 @@ Radiation_rrtmgp<TF>::Radiation_rrtmgp(
         std::string error = "Aerosol optics are not supported in TICA mode"; // NOTE: Aersol optics with TICA has significant errors at high SZA.
         throw std::runtime_error(error);
     }
+    if (sw_diffuse_filter) {
+        #ifndef USECUDA
+        throw std::runtime_error("Tilted columns are not (yet) implemented on the CPU.");
+        #endif
+    }
+
     // Surface diffuse radiation filtering
     sw_diffuse_filter = inputin.get_item<bool>("radiation", "swfilterdiffuse", "", false);
     if (sw_diffuse_filter)
