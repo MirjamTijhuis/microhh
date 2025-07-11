@@ -165,6 +165,7 @@ add_subdirectory(rte-rrtmgp-cpp/src)
 if(USECUDA)
   add_subdirectory(rte-rrtmgp-cpp/src_cuda)
   add_subdirectory(rte-rrtmgp-cpp/src_cuda_rt)
+  add_subdirectory(rte-rrtmgp-cpp/src_tilt)
 endif()
 
 if(USECUDA)

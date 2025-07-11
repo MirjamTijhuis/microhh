@@ -1817,7 +1817,6 @@ void Radiation_rrtmgp_rt<TF>::exec_shortwave_rt(
             Array_gpu<Float,2> mie_cdfs_sub;
             Array_gpu<Float,3> mie_angs_sub;
 
-            //MT: radiation code can do tilted columns, microhh not (yet)
             const bool use_independent_column = false;
 
             const Int qrng_offset = Int(igpt - 1) + this->time_idx * Int(n_gpt);

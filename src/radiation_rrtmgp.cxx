@@ -711,6 +711,12 @@ Radiation_rrtmgp<TF>::Radiation_rrtmgp(
         }
     }
 
+    // tilted columns
+    sw_tica = inputin.get_item<bool>("radiation", "swtica", "", false);
+    if (sw_tica && sw_aerosol) {
+        std::string error = "Aerosol optics are not supported in TICA mode"; // NOTE: Aersol optics with TICA has significant errors at high SZA.
+        throw std::runtime_error(error);
+    }
     // Surface diffuse radiation filtering
     sw_diffuse_filter = inputin.get_item<bool>("radiation", "swfilterdiffuse", "", false);
     if (sw_diffuse_filter)

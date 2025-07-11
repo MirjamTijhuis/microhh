@@ -190,9 +190,9 @@ class Radiation_rrtmgp : public Radiation<TF>
                 Thermo<TF>&, Microphys<TF>&, Timeloop<TF>&, Stats<TF>&,
                 Array_gpu<Float,2>&, Array_gpu<Float,2>&, Array_gpu<Float,2>&, Array_gpu<Float,2>&,
                 Array<Float, 1>&,
+                Array_gpu<Float,2>&, Array_gpu<Float,2>&,
                 const Array_gpu<Float,2>&, const Array_gpu<Float,2>&,
-                const Array_gpu<Float,2>&, const Array_gpu<Float,2>&,
-                const Array_gpu<Float,2>&, const Array_gpu<Float,2>&,
+                Array_gpu<Float,2>&, Array_gpu<Float,2>&,
                 const bool, const int);
         #endif
 
@@ -312,6 +312,8 @@ class Radiation_rrtmgp : public Radiation<TF>
         Float* sw_flux_dn_dif_inc_g;
         Float* lw_flux_dn_inc_g;
 
+        // tilted columns
+        bool sw_tica;
         // Surface diffuse radiation filtering
         bool sw_diffuse_filter;
 
