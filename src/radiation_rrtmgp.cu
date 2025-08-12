@@ -258,26 +258,61 @@ namespace
     }
 
     __global__
-    void scale_tau_kernel(Float* tau, const int ncol, const int nlay, Float scale_factor) {
+    void scale_tau_kernel(Float* __restrict__ tau, const int ncol, const int nlay, const int ngpt, Float scale_factor) {
+
         const int icol = blockIdx.x*blockDim.x + threadIdx.x;
         const int ilay = blockIdx.y*blockDim.y + threadIdx.y;
+        const int igpt = blockIdx.z*blockDim.z + threadIdx.z;
 
-        if ( (icol < ncol) && (ilay < nlay) )
+        if ( (icol < ncol) && (ilay < nlay) && (igpt < ngpt) )
         {
-            const int idx = icol + ilay*ncol;
-            tau[idx] = tau[idx] * scale_factor;
+            const int idx = icol + ilay*ncol + igpt*nlay*ncol;
+            tau[idx] *= scale_factor;
         }
     }
 
-    void scale_tau(Float* tau, const int ncol, const int nlay, Float scale_factor) {
-        const int block_col = 64;
-        const int block_lay = 1;
-        const int grid_col  = ncol/block_col + (ncol%block_col > 0);
-        const int grid_lay  = nlay/block_lay + (nlay%block_lay > 0);
+    void scale_tau(Float* tau, const int ncol, const int nlay, const int ngpt, Float scale_factor) {
+        const int block_gpt = 1;
+        const int block_lay = 16;
+        const int block_col = 16;
 
-        dim3 grid_gpu(grid_col, grid_lay);
-        dim3 block_gpu(block_col, block_lay);
-        scale_tau_kernel<<<grid_gpu, block_gpu>>>(tau, ncol, nlay, scale_factor);
+        const int grid_gpt  = ngpt/block_gpt + (ngpt%block_gpt > 0);
+        const int grid_lay  = nlay/block_lay + (nlay%block_lay > 0);
+        const int grid_col  = ncol/block_col + (ncol%block_col > 0);
+
+        dim3 grid_gpu(grid_col, grid_lay, grid_gpt);
+        dim3 block_gpu(block_col, block_lay, block_gpt);
+        scale_tau_kernel<<<grid_gpu, block_gpu>>>(tau, ncol, nlay, ngpt, scale_factor);
+    }
+
+    __global__
+    void scaling_to_subset_kernel(
+            const int ncol, const int ngpt, Float* __restrict__ toa_src, const Float tsi_scaling)
+    {
+        const int icol = blockIdx.x*blockDim.x + threadIdx.x;
+        const int igpt = blockIdx.y*blockDim.y + threadIdx.y;
+
+        if ( ( icol < ncol) && (igpt < ngpt) )
+        {
+            const int idx = icol + igpt*ncol;
+            toa_src[idx] *= tsi_scaling;
+        }
+    }
+
+
+    void scaling_to_subset(
+            const int ncol, const int ngpt, Float* toa_src, const Float& tsi_scaling)
+    {
+        const int block_col = 16;
+        const int block_gpt = 16;
+        const int grid_col = ncol/block_col + (ncol%block_col > 0);
+        const int grid_gpt = ngpt/block_gpt + (ngpt%block_gpt > 0);
+
+        dim3 grid_gpu(grid_col, grid_gpt);
+        dim3 block_gpu(block_col, block_gpt);
+
+        scaling_to_subset_kernel<<<grid_gpu, block_gpu>>>(
+                ncol, ngpt, toa_src, tsi_scaling);
     }
 
     Gas_optics_rrtmgp_gpu load_and_init_gas_optics(
@@ -992,11 +1027,19 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
                 four_third_pi_N0_rho_w, four_third_pi_N0_rho_i, fac);
     }
 
-
     Float tica_scaling;
-    bool do_tilting = true;
+    bool do_tilting = false;
+    Array<ijk,1> center_path;
+    Array<Float,1> center_zh_tilt;
+    std::vector<TF> zh_nogc(gd.zh.begin() + gd.kstart, gd.zh.begin() + gd.kend+1);
+    Array<Float,1> zh_a(zh_nogc, {int(gd.ktot + 1)});
 
-    if (sw_tica && compute_clouds)
+    if (sw_tica && mu0({1})> 0.087 && compute_clouds)
+        // mu0 = 0.087 roughly corresponds to a sza of 85 degrees
+        // compute_clouds is false when calculating clear sky stats, we don't need a tilted column for that
+        do_tilting = true;
+
+    if (do_tilting)
     {
         // CvH: this computation assumes that mu0 and azimuth are constant over the entire subset. Works for small LES only.
         Float zenith_angle = std::acos(mu0({1}));
@@ -1010,193 +1053,149 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
 
         // setup arrays
         std::vector<TF> z_nogc (gd.z. begin() + gd.kstart, gd.z. begin() + gd.kend  );
-        std::vector<TF> zh_nogc(gd.zh.begin() + gd.kstart, gd.zh.begin() + gd.kend+1);
         std::vector<TF> xh_nogc(gd.xh.begin() + gd.istart, gd.xh.begin() + gd.iend+1);
         std::vector<TF> yh_nogc(gd.yh.begin() + gd.jstart, gd.yh.begin() + gd.jend+1);
 
         Array<Float,1> xh_a(xh_nogc, {int(gd.itot + 1)});
         Array<Float,1> yh_a(yh_nogc, {int(gd.jtot + 1)});
-        Array<Float,1> zh_a(zh_nogc, {int(gd.ktot + 1)});
         Array<Float,1> z_a(z_nogc, {int(gd.ktot)});
         const int n_z_in = gd.ktot;
         const int n_zh_in = n_z_in + 1;
 
-        // check if sza is small enough for tilting, otherwise don't tilt
-        // as the number of tilted layers depends on the (random) starting point,
-        // we span the range of possibilities with a limited number of options (3) and a margin (10%)
-        Array<int, 1> n_zh({9});
-        Array<ijk,1> center_path;
-        Array<Float,1> center_zh_tilt;
+        Float tica_sza;
+        Float tica_azi;
 
-        tilted_path(xh_a.v(),yh_a.v(),zh_a.v(),z_a.v(),zenith_angle,azimuth_angle, 0.001, 0.001, center_path.v(), center_zh_tilt.v());
-        n_zh.v()[1] = center_zh_tilt.v().size();
-        tilted_path(xh_a.v(),yh_a.v(),zh_a.v(),z_a.v(),zenith_angle,azimuth_angle, 0.001, 0.5, center_path.v(), center_zh_tilt.v());
-        n_zh.v()[2] = center_zh_tilt.v().size();
-        tilted_path(xh_a.v(),yh_a.v(),zh_a.v(),z_a.v(),zenith_angle,azimuth_angle, 0.001, 0.999, center_path.v(), center_zh_tilt.v());
-        n_zh.v()[3] = center_zh_tilt.v().size();
-        tilted_path(xh_a.v(),yh_a.v(),zh_a.v(),z_a.v(),zenith_angle,azimuth_angle, 0.5, 0.001, center_path.v(), center_zh_tilt.v());
-        n_zh.v()[4] = center_zh_tilt.v().size();
-        tilted_path(xh_a.v(),yh_a.v(),zh_a.v(),z_a.v(),zenith_angle,azimuth_angle, 0.5, 0.5, center_path.v(), center_zh_tilt.v());
-        n_zh.v()[5] = center_zh_tilt.v().size();
-        tilted_path(xh_a.v(),yh_a.v(),zh_a.v(),z_a.v(),zenith_angle,azimuth_angle, 0.5, 0.999, center_path.v(), center_zh_tilt.v());
-        n_zh.v()[6] = center_zh_tilt.v().size();
-        tilted_path(xh_a.v(),yh_a.v(),zh_a.v(),z_a.v(),zenith_angle,azimuth_angle, 0.999, 0.001, center_path.v(), center_zh_tilt.v());
-        n_zh.v()[7] = center_zh_tilt.v().size();
-        tilted_path(xh_a.v(),yh_a.v(),zh_a.v(),z_a.v(),zenith_angle,azimuth_angle, 0.999, 0.5, center_path.v(), center_zh_tilt.v());
-        n_zh.v()[8] = center_zh_tilt.v().size();
-        tilted_path(xh_a.v(),yh_a.v(),zh_a.v(),z_a.v(),zenith_angle,azimuth_angle, 0.999, 0.999, center_path.v(), center_zh_tilt.v());
-        n_zh.v()[9] = center_zh_tilt.v().size();
+        tica_scaling = mu0({1});
+        tica_sza = zenith_angle;
+        tica_azi = azimuth_angle;
 
-        int n_zh_tilt_center = n_zh.max() * 1.1;
-        int n_z_tilt_center = n_zh_tilt_center - 1;
+        // calculate center path used for back translation of the fluxes at the end
+        tilted_path(xh_a.v(),yh_a.v(),zh_a.v(),z_a.v(),tica_sza, tica_azi, 0.5, 0.5, center_path.v(), center_zh_tilt.v());
+        int n_z_tilt_center = center_zh_tilt.v().size() - 1;
 
-        int idx_hold = 2*(n_z_tilt_center - n_z_in);
-        if ((n_z_tilt_center - idx_hold) % 2 != 0) {
-            idx_hold--;
-        }
+        mu0.fill(1.0);
+        zenith_angle = std::acos(mu0({1}));
+        azimuth_angle = 0.0;
 
-        int compress_lay_start_idx_center = (n_z_tilt_center - idx_hold);
+        std::vector<std::string> gas_names = {
+                "h2o", "co2", "o3", "n2o", "co", "ch4", "o2", "n2", "ccl4", "cfc11",
+                "cfc12", "cfc22", "hfc143a", "hfc125", "hfc23", "hfc32", "hfc134a",
+                "cf4", "no2"
+        };
+        std::vector<std::string> aerosol_names = {
+                "aermr01", "aermr02", "aermr03", "aermr04", "aermr05", "aermr06", "aermr07",
+                "aermr08", "aermr09", "aermr10", "aermr11"
+        };
 
-        // implement also the second check here
-        if (compress_lay_start_idx_center < 0)
-        {
-            do_tilting = false;
-            std::cout<<"not tilting, sza too high"<<std::endl;
-        }
-        else
-            std::cout<<"sza okay, using tilting"<<std::endl;
-
-        if (do_tilting)
-        {
-            Float tica_sza;
-            Float tica_azi;
-
-            tica_scaling = mu0({1});
-            tica_sza = zenith_angle;
-            tica_azi = azimuth_angle;
-
-            mu0.fill(1.0);
-            zenith_angle = std::acos(mu0({1}));
-            azimuth_angle = 0.0;
-
-            std::vector<std::string> gas_names = {
-                    "h2o", "co2", "o3", "n2o", "co", "ch4", "o2", "n2", "ccl4", "cfc11",
-                    "cfc12", "cfc22", "hfc143a", "hfc125", "hfc23", "hfc32", "hfc134a",
-                    "cf4", "no2"
-            };
-            std::vector<std::string> aerosol_names = {
-                    "aermr01", "aermr02", "aermr03", "aermr04", "aermr05", "aermr06", "aermr07",
-                    "aermr08", "aermr09", "aermr10", "aermr11"
-            };
-
-            for (const auto &aerosol_name: aerosol_names) {
-                if (!aerosol_concs.exists(aerosol_name)) {
-                    continue;
-                }
-                const Array<Float, 2> &gas = aerosol_concs.get_vmr(aerosol_name);
-                if (gas.size() > 1) {
-                    if (gas.get_dims()[0] == 1) {
-                        aerosol_concs.set_vmr(aerosol_name,
-                                              aerosol_concs.get_vmr(aerosol_name).subset({{{1, n_col}, {1, n_lay}}}));
-                    }
+        for (const auto &aerosol_name: aerosol_names) {
+            if (!aerosol_concs.exists(aerosol_name)) {
+                continue;
+            }
+            const Array<Float, 2> &gas = aerosol_concs.get_vmr(aerosol_name);
+            if (gas.size() > 1) {
+                if (gas.get_dims()[0] == 1) {
+                    aerosol_concs.set_vmr(aerosol_name,
+                                          aerosol_concs.get_vmr(aerosol_name).subset({{{1, n_col}, {1, n_lay}}}));
                 }
             }
+        }
 
-            // loop over gas concs and convert single profiles to 3D fields required for tilting
-            for (const auto &gas_name: gas_names) {
-                if (!gas_concs.exists(gas_name))
+        // loop over gas concs and convert single profiles to 3D fields required for tilting
+        for (const auto &gas_name: gas_names) {
+            if (!gas_concs.exists(gas_name))
+                continue;
+
+            const Array<Float, 2> &gas = gas_concs.get_vmr(gas_name);
+            if (gas.size() > 1) {
+                if (gas.get_dims()[0] > 1) // checking: do we have 3D field?
                     continue;
-
-                const Array<Float, 2> &gas = gas_concs.get_vmr(gas_name);
-                if (gas.size() > 1) {
-                    if (gas.get_dims()[0] > 1) // checking: do we have 3D field?
-                        continue;
-                    else {
-                        Array<Float, 2> gas_tmp(gas);
-                        gas_tmp.expand_dims({n_col, n_lay});
-                        gas_concs.set_vmr(gas_name, gas_tmp);
-                    }
+                else {
+                    Array<Float, 2> gas_tmp(gas);
+                    gas_tmp.expand_dims({n_col, n_lay});
+                    gas_concs.set_vmr(gas_name, gas_tmp);
                 }
             }
-
-            // copy required input for tilting from gpu to cpu
-            const int ncollaysize = n_col * n_lay * sizeof(Float);
-            const int ncollevsize = n_col * n_lev * sizeof(Float);
-
-            Array<Float, 2> t_lay_cpu({n_col, n_z_in});
-            Array<Float, 2> t_lev_cpu({n_col, n_zh_in});
-            Array<Float, 2> p_lay_cpu({n_col, n_z_in});
-            Array<Float, 2> p_lev_cpu({n_col, n_zh_in});
-            Array<Float, 2> clwp_cpu({n_col, n_z_in});
-            Array<Float, 2> ciwp_cpu({n_col, n_z_in});
-            Array<Float, 2> rel_cpu({n_col, n_z_in});
-            Array<Float, 2> dei_cpu({n_col, n_z_in});
-            Array<Float, 2> rh_cpu({n_col, n_z_in});
-
-            cuda_safe_call(cudaMemcpy(t_lay_cpu.ptr(), t_lay.ptr(),  ncollaysize, cudaMemcpyDeviceToHost));
-            cuda_safe_call(cudaMemcpy(t_lev_cpu.ptr(), t_lev.ptr(),  ncollevsize, cudaMemcpyDeviceToHost));
-            cuda_safe_call(cudaMemcpy(p_lay_cpu.ptr(), p_lay.ptr(),  ncollaysize, cudaMemcpyDeviceToHost));
-            cuda_safe_call(cudaMemcpy(p_lev_cpu.ptr(), p_lev.ptr(),  ncollevsize, cudaMemcpyDeviceToHost));
-            cuda_safe_call(cudaMemcpy(clwp_cpu.ptr(), clwp.ptr(),  ncollaysize, cudaMemcpyDeviceToHost));
-            cuda_safe_call(cudaMemcpy(ciwp_cpu.ptr(), ciwp.ptr(),  ncollaysize, cudaMemcpyDeviceToHost));
-            cuda_safe_call(cudaMemcpy(rel_cpu.ptr(), rel.ptr(),  ncollaysize, cudaMemcpyDeviceToHost));
-            cuda_safe_call(cudaMemcpy(dei_cpu.ptr(), dei.ptr(),  ncollaysize, cudaMemcpyDeviceToHost));
-            cuda_safe_call(cudaMemcpy(rh_cpu.ptr(), rh.ptr(),  ncollaysize, cudaMemcpyDeviceToHost));
-
-            // create output arrays equal to the input arrays
-            Array<Float, 2> t_lay_out = t_lay_cpu;
-            Array<Float, 2> t_lev_out = t_lev_cpu;
-            Array<Float, 2> p_lay_out = p_lay_cpu;
-            Array<Float, 2> p_lev_out = p_lev_cpu;
-            Array<Float, 2> rh_out = rh_cpu;
-
-            // create empty arrays to store output
-            Array<Float, 2> lwp_out({n_col, n_z_in});
-            Array<Float, 2> rel_out({n_col, n_z_in});
-            Array<Float, 2> iwp_out({n_col, n_z_in});
-            Array<Float, 2> dei_out({n_col, n_z_in});
-
-            // use cpu gas and aerosol concs for now
-            Gas_concs gas_concs_out = gas_concs;
-            Aerosol_concs aerosol_concs_out = aerosol_concs;
-
-            // switches
-            const bool switch_liq_cloud_optics = true;
-            const bool switch_ice_cloud_optics = true;
-
-            tica_tilt(
-                    tica_sza, tica_azi,
-                    gd.itot, gd.jtot, n_col,
-                    n_lay, n_lev, n_z_in, n_zh_in,
-                    xh_a, yh_a, zh_a, z_a,
-                    p_lay_cpu, t_lay_cpu, p_lev_cpu, t_lev_cpu,
-                    clwp_cpu, ciwp_cpu, rel_cpu, dei_cpu, rh_cpu,
-                    gas_concs, aerosol_concs,
-                    p_lay_out, t_lay_out, p_lev_out, t_lev_out,
-                    lwp_out, iwp_out, rel_out, dei_out, rh_out,
-                    gas_concs_out, aerosol_concs_out,
-                    gas_names, aerosol_names,
-                    compute_clouds, switch_liq_cloud_optics, switch_ice_cloud_optics, sw_aerosol
-            );
-
-            // copy output back to gpu
-            cuda_safe_call(cudaMemcpy(clwp.ptr(), lwp_out.ptr(),  ncollaysize, cudaMemcpyHostToDevice));
-            cuda_safe_call(cudaMemcpy(rel.ptr(), rel_out.ptr(),  ncollaysize, cudaMemcpyHostToDevice));
-            cuda_safe_call(cudaMemcpy(ciwp.ptr(), iwp_out.ptr(),  ncollaysize, cudaMemcpyHostToDevice));
-            cuda_safe_call(cudaMemcpy(dei.ptr(), dei_out.ptr(),  ncollaysize, cudaMemcpyHostToDevice));
-            cuda_safe_call(cudaMemcpy(p_lay.ptr(), p_lay_out.ptr(),  ncollaysize, cudaMemcpyHostToDevice));
-            cuda_safe_call(cudaMemcpy(p_lev.ptr(), p_lev_out.ptr(),  ncollevsize, cudaMemcpyHostToDevice));
-            cuda_safe_call(cudaMemcpy(t_lay.ptr(), t_lay_out.ptr(),  ncollaysize, cudaMemcpyHostToDevice));
-            cuda_safe_call(cudaMemcpy(t_lev.ptr(), t_lev.ptr(),  ncollevsize, cudaMemcpyHostToDevice));
-
-            // use cpu gas and aerosol concs for now
-            gas_concs = gas_concs_out;
-            aerosol_concs = aerosol_concs_out;
-
-            // put cpu gas concs to gpu
-            this->gas_concs_gpu = std::make_unique<Gas_concs_gpu>(gas_concs);
-            this->aerosol_concs_gpu = std::make_unique<Aerosol_concs_gpu>(aerosol_concs);
         }
+
+        // copy required input for tilting from gpu to cpu
+        const int ncollaysize = n_col * n_lay * sizeof(Float);
+        const int ncollevsize = n_col * n_lev * sizeof(Float);
+
+        Array<Float, 2> t_lay_cpu({n_col, n_z_in});
+        Array<Float, 2> t_lev_cpu({n_col, n_zh_in});
+        Array<Float, 2> p_lay_cpu({n_col, n_z_in});
+        Array<Float, 2> p_lev_cpu({n_col, n_zh_in});
+        Array<Float, 2> clwp_cpu({n_col, n_z_in});
+        Array<Float, 2> ciwp_cpu({n_col, n_z_in});
+        Array<Float, 2> rel_cpu({n_col, n_z_in});
+        Array<Float, 2> dei_cpu({n_col, n_z_in});
+        Array<Float, 2> rh_cpu({n_col, n_z_in});
+
+        cuda_safe_call(cudaMemcpy(t_lay_cpu.ptr(), t_lay.ptr(),  ncollaysize, cudaMemcpyDeviceToHost));
+        cuda_safe_call(cudaMemcpy(t_lev_cpu.ptr(), t_lev.ptr(),  ncollevsize, cudaMemcpyDeviceToHost));
+        cuda_safe_call(cudaMemcpy(p_lay_cpu.ptr(), p_lay.ptr(),  ncollaysize, cudaMemcpyDeviceToHost));
+        cuda_safe_call(cudaMemcpy(p_lev_cpu.ptr(), p_lev.ptr(),  ncollevsize, cudaMemcpyDeviceToHost));
+        cuda_safe_call(cudaMemcpy(clwp_cpu.ptr(), clwp.ptr(),  ncollaysize, cudaMemcpyDeviceToHost));
+        cuda_safe_call(cudaMemcpy(ciwp_cpu.ptr(), ciwp.ptr(),  ncollaysize, cudaMemcpyDeviceToHost));
+        cuda_safe_call(cudaMemcpy(rel_cpu.ptr(), rel.ptr(),  ncollaysize, cudaMemcpyDeviceToHost));
+        cuda_safe_call(cudaMemcpy(dei_cpu.ptr(), dei.ptr(),  ncollaysize, cudaMemcpyDeviceToHost));
+        cuda_safe_call(cudaMemcpy(rh_cpu.ptr(), rh.ptr(),  ncollaysize, cudaMemcpyDeviceToHost));
+
+        // create output arrays equal to the input arrays
+        Array<Float, 2> t_lay_out = t_lay_cpu;
+        Array<Float, 2> t_lev_out = t_lev_cpu;
+        Array<Float, 2> p_lay_out = p_lay_cpu;
+        Array<Float, 2> p_lev_out = p_lev_cpu;
+        Array<Float, 2> rh_out = rh_cpu;
+
+        // create empty arrays to store output
+        Array<Float, 2> lwp_out({n_col, n_z_in});
+        Array<Float, 2> rel_out({n_col, n_z_in});
+        Array<Float, 2> iwp_out({n_col, n_z_in});
+        Array<Float, 2> dei_out({n_col, n_z_in});
+
+        // use cpu gas and aerosol concs for now
+        Gas_concs gas_concs_out = gas_concs;
+        Aerosol_concs aerosol_concs_out = aerosol_concs;
+
+        // switches
+        const bool switch_liq_cloud_optics = true;
+        const bool switch_ice_cloud_optics = true;
+        int rnd_seed = timeloop.get_iteration();        // MT: is this random enough / reproduceable enough ?
+
+        tica_tilt(
+                tica_sza, tica_azi,
+                gd.itot, gd.jtot, n_col,
+                n_lay, n_lev, n_z_in, n_zh_in,
+                xh_a, yh_a, zh_a, z_a,
+                p_lay_cpu, t_lay_cpu, p_lev_cpu, t_lev_cpu,
+                clwp_cpu, ciwp_cpu, rel_cpu, dei_cpu, rh_cpu,
+                gas_concs, aerosol_concs,
+                p_lay_out, t_lay_out, p_lev_out, t_lev_out,
+                lwp_out, iwp_out, rel_out, dei_out, rh_out,
+                gas_concs_out, aerosol_concs_out,
+                gas_names, aerosol_names,
+                compute_clouds, switch_liq_cloud_optics, switch_ice_cloud_optics, sw_aerosol,
+                rnd_seed
+        );
+
+        // copy output back to gpu
+        cuda_safe_call(cudaMemcpy(clwp.ptr(), lwp_out.ptr(),  ncollaysize, cudaMemcpyHostToDevice));
+        cuda_safe_call(cudaMemcpy(rel.ptr(), rel_out.ptr(),  ncollaysize, cudaMemcpyHostToDevice));
+        cuda_safe_call(cudaMemcpy(ciwp.ptr(), iwp_out.ptr(),  ncollaysize, cudaMemcpyHostToDevice));
+        cuda_safe_call(cudaMemcpy(dei.ptr(), dei_out.ptr(),  ncollaysize, cudaMemcpyHostToDevice));
+        cuda_safe_call(cudaMemcpy(p_lay.ptr(), p_lay_out.ptr(),  ncollaysize, cudaMemcpyHostToDevice));
+        cuda_safe_call(cudaMemcpy(p_lev.ptr(), p_lev_out.ptr(),  ncollevsize, cudaMemcpyHostToDevice));
+        cuda_safe_call(cudaMemcpy(t_lay.ptr(), t_lay_out.ptr(),  ncollaysize, cudaMemcpyHostToDevice));
+        cuda_safe_call(cudaMemcpy(t_lev.ptr(), t_lev_out.ptr(),  ncollevsize, cudaMemcpyHostToDevice));
+
+        // use cpu gas and aerosol concs for now
+        gas_concs = gas_concs_out;
+        aerosol_concs = aerosol_concs_out;
+
+        // put cpu gas concs to gpu
+        this->gas_concs_gpu = std::make_unique<Gas_concs_gpu>(gas_concs);
+        this->aerosol_concs_gpu = std::make_unique<Aerosol_concs_gpu>(aerosol_concs);
     }
 
     // MT: col dry should be calculated after TICA tilt
@@ -1232,8 +1231,8 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
                 toa_src_dummy,
                 col_dry.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}) );
 
-        if (sw_tica && do_tilting && compute_clouds)
-            scale_tau(dynamic_cast<Optical_props_2str_gpu&>(*optical_props_subset_in).get_tau().ptr(), n_col_in, n_lay, 1/tica_scaling);
+        if (do_tilting)
+            scale_tau(dynamic_cast<Optical_props_2str_gpu&>(*optical_props_subset_in).get_tau().ptr(), n_col_in, n_lay, n_gpt, 1/tica_scaling);
 
         if (compute_clouds)
         {
@@ -1252,8 +1251,8 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
             if (sw_delta_cloud)
                 cloud_optical_props_subset_in->delta_scale();
 
-            if (sw_tica && do_tilting && compute_clouds)
-                scale_tau(dynamic_cast<Optical_props_2str_gpu&>(*cloud_optical_props_subset_in).get_tau().ptr(), n_col_in, n_lay, 1/tica_scaling);
+            if (do_tilting)
+                scale_tau(dynamic_cast<Optical_props_2str_gpu&>(*cloud_optical_props_subset_in).get_tau().ptr(), n_col_in, n_lay, n_bnd, 1/tica_scaling);
 
             // Add the cloud optical props to the gas optical properties.
             add_to(
@@ -1273,8 +1272,8 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
             if (sw_delta_aer)
                 aerosol_optical_props_subset_in->delta_scale();
 
-            if (sw_tica && do_tilting && compute_clouds)
-                scale_tau(dynamic_cast<Optical_props_2str_gpu&>(*aerosol_optical_props_subset_in).get_tau().ptr(), n_col_in, n_lay, 1/tica_scaling);
+            if (do_tilting)
+                scale_tau(dynamic_cast<Optical_props_2str_gpu&>(*aerosol_optical_props_subset_in).get_tau().ptr(), n_col_in, n_lay, n_bnd, 1/tica_scaling);
 
             // Add the cloud optical props to the gas optical properties.
             add_to(
@@ -1291,8 +1290,8 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
         Array_gpu<Float,3> gpt_flux_dn({n_col_in, n_lev, n_gpt});
         Array_gpu<Float,3> gpt_flux_dn_dir({n_col_in, n_lev, n_gpt});
 
-        if (sw_tica && do_tilting && compute_clouds)
-            scale_tau(sw_flux_dn_dir_inc_subset_in.ptr(), n_col_in, n_lay, tica_scaling);
+        if (do_tilting)
+            scaling_to_subset(n_col_in, n_gpt, sw_flux_dn_dir_inc_subset_in.ptr(), tica_scaling);
 
         rte_sw_gpu.rte_sw(
                 optical_props_subset_in,
@@ -1378,6 +1377,42 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
                 sw_flux_dn_dif_inc_residual,
                 *fluxes_residual,
                 *bnd_fluxes_residual);
+    }
+
+    // back translation of fluxes according to tilted path
+    if (sw_tica && compute_clouds)
+    {
+        const int ncollevsize = n_col * n_lev * sizeof(Float);
+
+        Array<Float,2> flux_dn_cpu({gd.imax*gd.jmax, gd.ktot+1});
+        Array<Float,2> flux_dn_dir_cpu({gd.imax*gd.jmax, gd.ktot+1});
+        Array<Float,2> flux_up_cpu({gd.imax*gd.jmax, gd.ktot+1});
+        Array<Float,2> flux_net_cpu({gd.imax*gd.jmax, gd.ktot+1});
+
+        cuda_safe_call(cudaMemcpy(flux_dn_cpu.ptr(), flux_dn.ptr(),  ncollevsize, cudaMemcpyDeviceToHost));
+        cuda_safe_call(cudaMemcpy(flux_dn_dir_cpu.ptr(), flux_dn_dir.ptr(),  ncollevsize, cudaMemcpyDeviceToHost));
+        cuda_safe_call(cudaMemcpy(flux_up_cpu.ptr(), flux_up.ptr(),  ncollevsize, cudaMemcpyDeviceToHost));
+        cuda_safe_call(cudaMemcpy(flux_net_cpu.ptr(), flux_net.ptr(),  ncollevsize, cudaMemcpyDeviceToHost));
+
+        if (do_tilting)
+        {
+            translate_fluxes(gd.itot, gd.jtot, n_lev, center_zh_tilt, zh_a, center_path.v(), flux_dn_cpu);
+            translate_fluxes(gd.itot, gd.jtot, n_lev, center_zh_tilt, zh_a, center_path.v(), flux_dn_dir_cpu);
+            translate_fluxes(gd.itot, gd.jtot, n_lev, center_zh_tilt, zh_a, center_path.v(), flux_up_cpu);
+            translate_fluxes(gd.itot, gd.jtot, n_lev, center_zh_tilt, zh_a, center_path.v(), flux_net_cpu);
+        }
+        else
+        {
+            tica_mean(flux_dn_cpu, gd.itot, gd.jtot, n_lev);
+            tica_mean(flux_dn_dir_cpu, gd.itot, gd.jtot, n_lev);
+            tica_mean(flux_up_cpu, gd.itot, gd.jtot, n_lev);
+            tica_mean(flux_net_cpu, gd.itot, gd.jtot, n_lev);
+        }
+
+        cuda_safe_call(cudaMemcpy(flux_dn.ptr(), flux_dn_cpu.ptr(),  ncollevsize, cudaMemcpyHostToDevice));
+        cuda_safe_call(cudaMemcpy(flux_dn_dir.ptr(), flux_dn_dir_cpu.ptr(),  ncollevsize, cudaMemcpyHostToDevice));
+        cuda_safe_call(cudaMemcpy(flux_up.ptr(), flux_up_cpu.ptr(),  ncollevsize, cudaMemcpyHostToDevice));
+        cuda_safe_call(cudaMemcpy(flux_net.ptr(), flux_net_cpu.ptr(),  ncollevsize, cudaMemcpyHostToDevice));
     }
 }
 #endif

@@ -713,11 +713,8 @@ Radiation_rrtmgp<TF>::Radiation_rrtmgp(
 
     // tilted columns
     sw_tica = inputin.get_item<bool>("radiation", "swtica", "", false);
-    if (sw_tica && sw_aerosol) {
-        std::string error = "Aerosol optics are not supported in TICA mode"; // NOTE: Aersol optics with TICA has significant errors at high SZA.
-        throw std::runtime_error(error);
-    }
-    if (sw_diffuse_filter) {
+
+    if (sw_tica) {
         #ifndef USECUDA
         throw std::runtime_error("Tilted columns are not (yet) implemented on the CPU.");
         #endif
