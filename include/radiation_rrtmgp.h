@@ -307,6 +307,7 @@ class Radiation_rrtmgp : public Radiation<TF>
 
         Float* sw_flux_dn_sfc_g;
         Float* sw_flux_up_sfc_g;
+        Float* sw_flux_dn_dif_f_g;
 
         Float* sw_flux_dn_dir_inc_g;
         Float* sw_flux_dn_dif_inc_g;
@@ -325,6 +326,8 @@ class Radiation_rrtmgp : public Radiation<TF>
 
         std::vector<Float> filter_kernel_x;
         std::vector<Float> filter_kernel_y;
+        Float* filter_kernel_x_g;
+        Float* filter_kernel_y_g;
 
         // timedependent gases
         std::map<std::string, Timedep<TF>*> tdep_gases;

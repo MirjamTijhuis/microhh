@@ -724,9 +724,9 @@ Radiation_rrtmgp<TF>::Radiation_rrtmgp(
     sw_diffuse_filter = inputin.get_item<bool>("radiation", "swfilterdiffuse", "", false);
     if (sw_diffuse_filter)
     {
-        #ifdef USECUDA
-        throw std::runtime_error("Surface diffuse filtering is not (yet) implemented on the GPU.");
-        #endif
+        // #ifdef USECUDA
+        // throw std::runtime_error("Surface diffuse filtering is not (yet) implemented on the GPU.");
+        // #endif
 
         sigma_filter = inputin.get_item<Float>("radiation", "sigma_filter", "");
 

@@ -35,6 +35,7 @@
 #include "stats.h"
 #include "cross.h"
 #include "column.h"
+#include "boundary_cyclic.h"
 
 #include "Array.h"
 #include "Fluxes.h"
@@ -188,6 +189,110 @@ namespace
             out[ijk] = in[ijk_nogc];
         }
     }
+
+
+    __global__
+    void calc_diffuse_radiation(Float* __restrict__ sw_flux_dn_dif_sfc,
+                                const Float* __restrict__ sw_flux_dn,
+                                const Float* __restrict__ sw_flux_dn_dir,
+                                const int istart, const int iend,
+                                const int jstart, const int jend,
+                                const int igc, const int jgc,
+                                const int jj, const int jj_nogc)
+    {
+        const int i = blockIdx.x*blockDim.x + threadIdx.x + istart;
+        const int j = blockIdx.y*blockDim.y + threadIdx.y + jstart;
+
+        if ( (i < iend) && (j < jend) )
+        {
+            const int ij = i + j*jj;
+            const int ij_nogc = (i-igc) + (j-jgc)*jj_nogc;
+
+            sw_flux_dn_dif_sfc[ij] = sw_flux_dn[ij_nogc] - sw_flux_dn_dir[ij_nogc];
+        }
+    }
+
+    __global__
+    void filter_diffuse_radiation_y(Float* __restrict__ sw_flux_dn_dif_sfc,
+                                    Float* __restrict__ tmp_2d,
+                                    const Float* const restrict kernel_y,
+                                    const int istart, const int iend,
+                                    const int jstart, const int jend,
+                                    const int igc, const int jgc,
+                                    const int icells)
+    {
+        const int ngc = igc;
+
+        const int i = blockIdx.x*blockDim.x + threadIdx.x;
+        const int j = blockIdx.y*blockDim.y + threadIdx.y + jstart;
+
+        if ( (i < icells) && (j < jend) )
+        {
+            const int ij1 = i + j*icells;
+
+            tmp_2d[ij1] = kernel_y[ngc] * sw_flux_dn_dif_sfc[i + (j)*icells];
+            tmp_2d[ij1] += kernel_y[ngc+1] * sw_flux_dn_dif_sfc[i + (j+1)*icells];
+            tmp_2d[ij1] += kernel_y[ngc+2] * sw_flux_dn_dif_sfc[i + (j+2)*icells];
+            tmp_2d[ij1] += kernel_y[ngc+3] * sw_flux_dn_dif_sfc[i + (j+3)*icells];
+            tmp_2d[ij1] += kernel_y[ngc-1] * sw_flux_dn_dif_sfc[i + (j-1)*icells];
+            tmp_2d[ij1] += kernel_y[ngc-2] * sw_flux_dn_dif_sfc[i + (j-2)*icells];
+            tmp_2d[ij1] += kernel_y[ngc-3] * sw_flux_dn_dif_sfc[i + (j-3)*icells];
+        }
+    }
+
+    __global__
+    void filter_diffuse_radiation_x(Float* __restrict__ sw_flux_dn_dif_sfc,
+                                    Float* __restrict__ tmp_2d,
+                                    const Float* const restrict kernel_x,
+                                    const int istart, const int iend,
+                                    const int jstart, const int jend,
+                                    const int igc, const int jgc,
+                                    const int icells)
+    {
+        const int ngc = igc;
+
+        const int i = blockIdx.x*blockDim.x + threadIdx.x + istart;
+        const int j = blockIdx.y*blockDim.y + threadIdx.y + jstart;
+
+        if ( (i < iend) && (j < jend) )
+        {
+            const int ij1 = i + j*icells;
+
+            sw_flux_dn_dif_sfc[ij1] = kernel_x[ngc] * tmp_2d[(i) + j*icells];
+            sw_flux_dn_dif_sfc[ij1] += kernel_x[ngc+1] * tmp_2d[(i+1) + j*icells];
+            sw_flux_dn_dif_sfc[ij1] += kernel_x[ngc+2] * tmp_2d[(i+2) + j*icells];
+            sw_flux_dn_dif_sfc[ij1] += kernel_x[ngc+3] * tmp_2d[(i+3) + j*icells];
+            sw_flux_dn_dif_sfc[ij1] += kernel_x[ngc-1] * tmp_2d[(i-1) + j*icells];
+            sw_flux_dn_dif_sfc[ij1] += kernel_x[ngc-2] * tmp_2d[(i-2) + j*icells];
+            sw_flux_dn_dif_sfc[ij1] += kernel_x[ngc-3] * tmp_2d[(i-3) + j*icells];
+        }
+    }
+
+    __global__
+    void calc_global_radiation(const Float* __restrict__ sw_flux_dn_dif_sfc,
+                               Float* __restrict__ sw_flux_dn_sfc,
+                               Float* const restrict sw_flux_up_sfc,
+                               const Float* __restrict__ sw_flux_dn_dir,
+                               const Float* const restrict alb_dir,
+                               const Float* const restrict alb_dif,
+                               const int istart, const int iend,
+                               const int jstart, const int jend,
+                               const int igc, const int jgc,
+                               const int jj, const int jj_nogc)
+    {
+        const int i = blockIdx.x*blockDim.x + threadIdx.x + istart;
+        const int j = blockIdx.y*blockDim.y + threadIdx.y + jstart;
+
+        if ( (i < iend) && (j < jend) )
+        {
+            const int ij = i + j*jj;
+            const int ijk_nogc = (i-igc) + (j-jgc)*jj_nogc;
+            sw_flux_dn_sfc[ij] = sw_flux_dn_dif_sfc[ij] + sw_flux_dn_dir[ijk_nogc];
+            sw_flux_up_sfc[ij] = alb_dir[ijk_nogc] * sw_flux_dn_dir[ijk_nogc]
+                                 + alb_dif[ijk_nogc] * sw_flux_dn_dif_sfc[ij];
+        }
+    }
+
 
     __global__
     void sum_tau_kernel(
@@ -721,6 +826,19 @@ void Radiation_rrtmgp<TF>::prepare_device()
         const int nsfcsize = gd.ijcells*sizeof(Float);
         cuda_safe_call(cudaMalloc(&sw_flux_dn_sfc_g, nsfcsize));
         cuda_safe_call(cudaMalloc(&sw_flux_up_sfc_g, nsfcsize));
+
+        if (sw_diffuse_filter)
+        {
+            cuda_safe_call(cudaMalloc(&sw_flux_dn_dif_f_g, nsfcsize));           
+            
+            const int ngcsize = (gd.igc*2+1)*sizeof(Float);
+            cuda_safe_call(cudaMalloc(&filter_kernel_x_g, ngcsize));
+            cuda_safe_call(cudaMalloc(&filter_kernel_y_g, ngcsize));
+
+            cuda_safe_call(cudaMemcpy(filter_kernel_x_g, filter_kernel_x.data(), ngcsize, cudaMemcpyHostToDevice));
+            cuda_safe_call(cudaMemcpy(filter_kernel_y_g, filter_kernel_y.data(), ngcsize, cudaMemcpyHostToDevice));
+        }
+
 
         const int ncolgptsize = n_col*kdist_sw_gpu->get_ngpt()*sizeof(Float);
         cuda_safe_call(cudaMalloc(&sw_flux_dn_dir_inc_g, ncolgptsize));
@@ -1435,6 +1553,9 @@ void Radiation_rrtmgp<TF>::exec(
     dim3 gridGPU_2d (gridi, gridj, 1);
     dim3 blockGPU_2d(blocki, blockj, 1);
 
+    const int gridi_gc  = gd.icells/blocki + (gd.icells%blocki > 0);
+    dim3 gridGPU_2d_igc (gridi_gc, gridj);
+
     const bool do_radiation = ((timeloop.get_itime() % idt_rad == 0) && !timeloop.in_substep()) ;
     const bool do_radiation_stats = timeloop.is_stats_step();
 
@@ -1723,6 +1844,46 @@ void Radiation_rrtmgp<TF>::exec(
                         homogenize(sw_flux_up_sfc_g);
                         homogenize(sw_flux_dn_sfc_g);
                     }
+
+                    if (sw_diffuse_filter)
+                    {
+                        calc_diffuse_radiation<<<gridGPU_2d, blockGPU_2d>>>(
+                                sw_flux_dn_dif_f_g, flux_dn.ptr(), flux_dn_dir.ptr(),
+                                gd.istart, gd.iend,
+                                gd.jstart, gd.jend,
+                                gd.igc, gd.jgc,
+                                gd.icells, gd.imax);
+
+                        boundary_cyclic.exec_2d_g(sw_flux_dn_dif_f_g);
+
+                        for (int n=0; n<n_filter_iterations; ++n)
+                        {
+                            // Misuse `t_lay`'s surface fields as tmp fields..
+                            filter_diffuse_radiation_y<<<gridGPU_2d_igc, blockGPU_2d>>>(
+                                    sw_flux_dn_dif_f_g, t_lay->fld_bot_g, filter_kernel_y_g,
+                                    gd.istart, gd.iend,
+                                    gd.jstart, gd.jend,
+                                    gd.igc, gd.jgc,
+                                    gd.icells);
+
+                            filter_diffuse_radiation_x<<<gridGPU_2d, blockGPU_2d>>>(
+                                    sw_flux_dn_dif_f_g, t_lay->fld_bot_g, filter_kernel_x_g,
+                                    gd.istart, gd.iend,
+                                    gd.jstart, gd.jend,
+                                    gd.igc, gd.jgc,
+                                    gd.icells);
+
+                            boundary_cyclic.exec_2d_g(sw_flux_dn_dif_f_g);
+                        }
+
+                        calc_global_radiation<<<gridGPU_2d, blockGPU_2d>>>(
+                                sw_flux_dn_dif_f_g, sw_flux_dn_sfc_g, sw_flux_up_sfc_g, flux_dn_dir.ptr(),
+                                sfc_alb_dir_g.ptr(), sfc_alb_dif_g.ptr(),
+                                gd.istart, gd.iend,
+                                gd.jstart, gd.jend,
+                                gd.igc, gd.jgc,
+                                gd.icells, gd.imax);
+                    }
                 }
 
                 // Note: keep this as a separate `if()` instead of an `else`,
@@ -1732,6 +1893,8 @@ void Radiation_rrtmgp<TF>::exec(
                     // Set the surface fluxes to zero, for (e.g.) the land-surface model.
                     cudaMemset(sw_flux_dn_sfc_g, 0, gd.ijcells*sizeof(Float));
                     cudaMemset(sw_flux_up_sfc_g, 0, gd.ijcells*sizeof(Float));
+                    if (sw_diffuse_filter)
+                        cudaMemset(sw_flux_dn_dif_f_g, 0, gd.ijcells*sizeof(Float));
 
                     // Set tendency to zero if sw was calculated just for tuning..
                     if (!sw_is_tuned)
@@ -1783,6 +1946,9 @@ void Radiation_rrtmgp<TF>::exec(
                         do_gcs(*fields.sd.at("sw_flux_dn_clear"), flux_dn);
                         do_gcs(*fields.sd.at("sw_flux_dn_dir_clear"), flux_dn_dir);
                     }
+
+                    // copy diffuse radiation to cpu
+                    cudaMemcpy(sw_flux_dn_dif_f.data(), sw_flux_dn_dif_f_g, gd.ijcells*sizeof(Float), cudaMemcpyDeviceToHost);
                  }
              }
          } // End try block.
@@ -1874,6 +2040,9 @@ void Radiation_rrtmgp<TF>::clear_device()
 
     for (auto& it : gasprofs_g)
         cuda_safe_call(cudaFree(it.second));
+
+    if (sw_diffuse_filter)
+        cuda_safe_call(cudaFree(sw_flux_dn_dif_f_g));
 }
 
 
