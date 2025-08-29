@@ -650,6 +650,33 @@ namespace
     {
         return Float(2.*M_PI/360. * deg);
     }
+
+    template<typename TF>
+    void calc_cover(
+            const Float* const restrict sw_flux_dn_dir, Float mu0,
+            const int istart, const int iend, const int jstart, const int jend,
+            const int icells, const int igc, const int jgc,
+            const int imax, int& cc)
+    {
+        int cover = 0.;
+
+        const Float dni_fac = 1 / (std::sin(0.5 * M_PI - std::acos(mu0)));
+
+        for (int j=jstart; j<jend; ++j)
+            for (int i=istart; i<iend; ++i)
+            {
+                const int ij = i + j*icells;
+                const int ijk_nogc = (i-igc) + (j-jgc)*imax;
+                Float dni = sw_flux_dn_dir[ijk_nogc] * dni_fac;
+
+                if (dni < 120.)
+                {
+                    cover+=1;
+                }
+            }
+
+        cc = cover;
+    }
 }
 
 
@@ -728,7 +755,7 @@ Radiation_rrtmgp<TF>::Radiation_rrtmgp(
         // throw std::runtime_error("Surface diffuse filtering is not (yet) implemented on the GPU.");
         // #endif
 
-        sigma_filter = inputin.get_item<Float>("radiation", "sigma_filter", "");
+        fac_filter = inputin.get_item<Float>("radiation", "fac_filter", "");
 
         const int igc = 3;  // for now..
         const int jgc = 3;  // for now..
@@ -834,9 +861,6 @@ void Radiation_rrtmgp<TF>::create(
     // Check if the thermo supports the radiation.
     if (thermo.get_switch() != Thermo_type::Moist)
         throw std::runtime_error("Radiation only supports swthermo=moist.");
-
-    // Setup spatial filtering diffuse surace radiation (if enabled..)
-    create_diffuse_filter();
 
     // Setup time dependent gasses.
     auto& gd = grid.get_grid_data();
@@ -1145,7 +1169,7 @@ void Radiation_rrtmgp<TF>::solve_shortwave_column(
 }
 
 template<typename TF>
-void Radiation_rrtmgp<TF>::create_diffuse_filter()
+void Radiation_rrtmgp<TF>::create_diffuse_filter(const float sigma_filter_t)
 {
     if (!sw_diffuse_filter)
         return;
@@ -1159,13 +1183,13 @@ void Radiation_rrtmgp<TF>::create_diffuse_filter()
     sigma_filter_small = std::min(gd.dx, gd.dy);
 
     // Required number of iterations
-    const Float n = fm::pow2(sigma_filter) / fm::pow2(sigma_filter_small);
+    const Float n = fm::pow2(sigma_filter_t) / fm::pow2(sigma_filter_small);
     n_filter_iterations = ceil(n);
-    sigma_filter_small = pow(1./n_filter_iterations, Float(0.5)) * sigma_filter;
+    sigma_filter_small = pow(1./n_filter_iterations, Float(0.5)) * sigma_filter_t;
 
     master.print_message(
             "Setup surface diffuse filtering: sigma=%f m, n_iterations=%d\n",
-            sigma_filter_small, n_filter_iterations);
+            sigma_filter_t, sigma_filter_small, n_filter_iterations);
 
     // Calculate filter kernels
     Float filter_sum_x = Float(0);
@@ -1841,22 +1865,39 @@ void Radiation_rrtmgp<TF>::exec(
 
                     if (sw_diffuse_filter)
                     {
+                        int n_cloudy = 0;
+                        calc_cover<TF>(flux_dn_dir.ptr(), this->mu0, gd.istart, gd.iend, gd.jstart, gd.jend, gd.icells, gd.igc, gd.jgc, gd.imax, n_cloudy);
+                        master.sum(&n_cloudy, 1);
+
+                        Float cloud_cover = TF(n_cloudy) / (gd.itot * gd.jtot);
+                        Float sigma_filter_t = fac_filter * cloud_cover;
                         // Misuse `t_lay`'s surface fields as tmp fields..
-                        filter_diffuse_radiation<TF>(
-                                sw_flux_dn_dif_f.data(),
-                                sw_flux_dn_sfc.data(),
-                                sw_flux_up_sfc.data(),
-                                t_lay->fld_bot.data(), t_lay->flux_bot.data(),
-                                flux_dn.ptr(), flux_dn_dir.ptr(),
-                                filter_kernel_x.data(), filter_kernel_y.data(),
-                                n_filter_iterations,
-                                sfc_alb_dir.ptr(), sfc_alb_dif.ptr(),
-                                gd.istart, gd.iend,
-                                gd.jstart, gd.jend,
-                                gd.igc, gd.jgc,
-                                gd.icells, gd.jcells,
-                                gd.ijcells, gd.imax,
-                                boundary_cyclic);
+                        if (sigma_filter_t > 0)
+                        {
+                            // const int ngc = gd.igc;
+                            // int n_filter_iterations = 0;
+                            // std::vector<Float> filter_kernel_x;
+                            // std::vector<Float> filter_kernel_y;
+                            // filter_kernel_x.resize(2*ngc+1);
+                            // filter_kernel_y.resize(2*ngc+1);
+
+                            create_diffuse_filter(sigma_filter_t);
+                            filter_diffuse_radiation<TF>(
+                                 sw_flux_dn_dif_f.data(),
+                                 sw_flux_dn_sfc.data(),
+                                 sw_flux_up_sfc.data(),
+                                 t_lay->fld_bot.data(), t_lay->flux_bot.data(),
+                                 flux_dn.ptr(), flux_dn_dir.ptr(),
+                                 filter_kernel_x.data(), filter_kernel_y.data(),
+                                 n_filter_iterations,
+                                 sfc_alb_dir.ptr(), sfc_alb_dif.ptr(),
+                                 gd.istart, gd.iend,
+                                 gd.jstart, gd.jend,
+                                 gd.igc, gd.jgc,
+                                 gd.icells, gd.jcells,
+                                 gd.ijcells, gd.imax,
+                                 boundary_cyclic);
+                        }
                     }
                 }
                 else

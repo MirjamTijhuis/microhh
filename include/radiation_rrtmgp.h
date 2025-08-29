@@ -128,8 +128,7 @@ class Radiation_rrtmgp : public Radiation<TF>
         void create_solver_shortwave(
                 Input&, Netcdf_handle&, Thermo<TF>&, Stats<TF>&, Column<TF>&,
                 const Gas_concs&);
-        void create_diffuse_filter();
-
+        void create_diffuse_filter(const float);
 
     void solve_shortwave_column(
             std::unique_ptr<Optical_props_arry>&,
@@ -318,7 +317,7 @@ class Radiation_rrtmgp : public Radiation<TF>
         // Surface diffuse radiation filtering
         bool sw_diffuse_filter;
 
-        Float sigma_filter;
+        Float fac_filter;
         Float sigma_filter_small;
         int n_filter_iterations;
 
