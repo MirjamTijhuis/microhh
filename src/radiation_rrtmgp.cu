@@ -1892,50 +1892,50 @@ void Radiation_rrtmgp<TF>::exec(
 
                         Float sigma_filter_t = fac_filter * cloud_cover;
 
-                        if (sigma_filter_t > 0)
-                        {
-                            create_diffuse_filter(sigma_filter_t);
+//                        if (sigma_filter_t > 0)
+//                        {
+                        create_diffuse_filter(sigma_filter_t);
 
-                            const int ngcsize = (gd.igc * 2 + 1) * sizeof(Float);
-                            cuda_safe_call(cudaMemcpy(filter_kernel_x_g, filter_kernel_x.data(), ngcsize,cudaMemcpyHostToDevice));
-                            cuda_safe_call(cudaMemcpy(filter_kernel_y_g, filter_kernel_y.data(), ngcsize,cudaMemcpyHostToDevice));
+                        const int ngcsize = (gd.igc * 2 + 1) * sizeof(Float);
+                        cuda_safe_call(cudaMemcpy(filter_kernel_x_g, filter_kernel_x.data(), ngcsize,cudaMemcpyHostToDevice));
+                        cuda_safe_call(cudaMemcpy(filter_kernel_y_g, filter_kernel_y.data(), ngcsize,cudaMemcpyHostToDevice));
 
-                            calc_diffuse_radiation<<<gridGPU_2d, blockGPU_2d>>>(
-                                    sw_flux_dn_dif_f_g, flux_dn.ptr(), flux_dn_dir.ptr(),
+                        calc_diffuse_radiation<<<gridGPU_2d, blockGPU_2d>>>(
+                                sw_flux_dn_dif_f_g, flux_dn.ptr(), flux_dn_dir.ptr(),
+                                gd.istart, gd.iend,
+                                gd.jstart, gd.jend,
+                                gd.igc, gd.jgc,
+                                gd.icells, gd.imax);
+
+                        boundary_cyclic.exec_2d_g(sw_flux_dn_dif_f_g);
+
+                        for (int n = 0; n < n_filter_iterations; ++n) {
+                            // Misuse `t_lay`'s surface fields as tmp fields..
+                            filter_diffuse_radiation_y<<<gridGPU_2d_igc, blockGPU_2d>>>(
+                                    sw_flux_dn_dif_f_g, t_lay->fld_bot_g, filter_kernel_y_g,
                                     gd.istart, gd.iend,
                                     gd.jstart, gd.jend,
                                     gd.igc, gd.jgc,
-                                    gd.icells, gd.imax);
+                                    gd.icells);
+
+                            filter_diffuse_radiation_x<<<gridGPU_2d, blockGPU_2d>>>(
+                                    sw_flux_dn_dif_f_g, t_lay->fld_bot_g, filter_kernel_x_g,
+                                    gd.istart, gd.iend,
+                                    gd.jstart, gd.jend,
+                                    gd.igc, gd.jgc,
+                                    gd.icells);
 
                             boundary_cyclic.exec_2d_g(sw_flux_dn_dif_f_g);
-
-                            for (int n = 0; n < n_filter_iterations; ++n) {
-                                // Misuse `t_lay`'s surface fields as tmp fields..
-                                filter_diffuse_radiation_y<<<gridGPU_2d_igc, blockGPU_2d>>>(
-                                        sw_flux_dn_dif_f_g, t_lay->fld_bot_g, filter_kernel_y_g,
-                                        gd.istart, gd.iend,
-                                        gd.jstart, gd.jend,
-                                        gd.igc, gd.jgc,
-                                        gd.icells);
-
-                                filter_diffuse_radiation_x<<<gridGPU_2d, blockGPU_2d>>>(
-                                        sw_flux_dn_dif_f_g, t_lay->fld_bot_g, filter_kernel_x_g,
-                                        gd.istart, gd.iend,
-                                        gd.jstart, gd.jend,
-                                        gd.igc, gd.jgc,
-                                        gd.icells);
-
-                                boundary_cyclic.exec_2d_g(sw_flux_dn_dif_f_g);
-                            }
-
-                            calc_global_radiation<<<gridGPU_2d, blockGPU_2d>>>(
-                                    sw_flux_dn_dif_f_g, sw_flux_dn_sfc_g, sw_flux_up_sfc_g, flux_dn_dir.ptr(),
-                                    sfc_alb_dir_g.ptr(), sfc_alb_dif_g.ptr(),
-                                    gd.istart, gd.iend,
-                                    gd.jstart, gd.jend,
-                                    gd.igc, gd.jgc,
-                                    gd.icells, gd.imax);
                         }
+
+                        calc_global_radiation<<<gridGPU_2d, blockGPU_2d>>>(
+                                sw_flux_dn_dif_f_g, sw_flux_dn_sfc_g, sw_flux_up_sfc_g, flux_dn_dir.ptr(),
+                                sfc_alb_dir_g.ptr(), sfc_alb_dif_g.ptr(),
+                                gd.istart, gd.iend,
+                                gd.jstart, gd.jend,
+                                gd.igc, gd.jgc,
+                                gd.icells, gd.imax);
+//                        }
                     }
                 }
 

@@ -1872,32 +1872,32 @@ void Radiation_rrtmgp<TF>::exec(
                         Float cloud_cover = TF(n_cloudy) / (gd.itot * gd.jtot);
                         Float sigma_filter_t = fac_filter * cloud_cover;
                         // Misuse `t_lay`'s surface fields as tmp fields..
-                        if (sigma_filter_t > 0)
-                        {
-                            // const int ngc = gd.igc;
-                            // int n_filter_iterations = 0;
-                            // std::vector<Float> filter_kernel_x;
-                            // std::vector<Float> filter_kernel_y;
-                            // filter_kernel_x.resize(2*ngc+1);
-                            // filter_kernel_y.resize(2*ngc+1);
+//                        if (sigma_filter_t > 0)
+//                        {
+                        // const int ngc = gd.igc;
+                        // int n_filter_iterations = 0;
+                        // std::vector<Float> filter_kernel_x;
+                        // std::vector<Float> filter_kernel_y;
+                        // filter_kernel_x.resize(2*ngc+1);
+                        // filter_kernel_y.resize(2*ngc+1);
 
-                            create_diffuse_filter(sigma_filter_t);
-                            filter_diffuse_radiation<TF>(
-                                 sw_flux_dn_dif_f.data(),
-                                 sw_flux_dn_sfc.data(),
-                                 sw_flux_up_sfc.data(),
-                                 t_lay->fld_bot.data(), t_lay->flux_bot.data(),
-                                 flux_dn.ptr(), flux_dn_dir.ptr(),
-                                 filter_kernel_x.data(), filter_kernel_y.data(),
-                                 n_filter_iterations,
-                                 sfc_alb_dir.ptr(), sfc_alb_dif.ptr(),
-                                 gd.istart, gd.iend,
-                                 gd.jstart, gd.jend,
-                                 gd.igc, gd.jgc,
-                                 gd.icells, gd.jcells,
-                                 gd.ijcells, gd.imax,
-                                 boundary_cyclic);
-                        }
+                        create_diffuse_filter(sigma_filter_t);
+                        filter_diffuse_radiation<TF>(
+                             sw_flux_dn_dif_f.data(),
+                             sw_flux_dn_sfc.data(),
+                             sw_flux_up_sfc.data(),
+                             t_lay->fld_bot.data(), t_lay->flux_bot.data(),
+                             flux_dn.ptr(), flux_dn_dir.ptr(),
+                             filter_kernel_x.data(), filter_kernel_y.data(),
+                             n_filter_iterations,
+                             sfc_alb_dir.ptr(), sfc_alb_dif.ptr(),
+                             gd.istart, gd.iend,
+                             gd.jstart, gd.jend,
+                             gd.igc, gd.jgc,
+                             gd.icells, gd.jcells,
+                             gd.ijcells, gd.imax,
+                             boundary_cyclic);
+//                        }
                     }
                 }
                 else
