@@ -109,6 +109,7 @@ namespace Thermo_moist_functions
 
         // return TF(611.21)*std::exp(TF(17.502)*x / (TF(240.97)+x));
         return c00<TF>+x*(c10<TF>+x*(c20<TF>+x*(c30<TF>+x*(c40<TF>+x*(c50<TF>+x*(c60<TF>+x*(c70<TF>+x*(c80<TF>+x*(c90<TF>+x*c100<TF>)))))))));
+	// return TF(610.78)*std::exp(TF(17.269)*x / (TF(237.29)+x));
     }
 
     template<typename TF>
