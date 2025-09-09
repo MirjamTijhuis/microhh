@@ -126,7 +126,10 @@ namespace
                 {
                     const int ijk = i + j*jj + k*kk;
                     const int ij  = i + j*jj;
-                    wt[ijk] += buoyancy<TF, sw_satadjust>(exnh, thlh[ij], qth[ij], ql[ij], qi[ij], thvrefh[k]);
+                    Struct_sat_adjust<TF> ssa =
+                            sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh);
+
+                    wt[ijk] += buoyancy<TF, sw_satadjust>(exnh, thlh[ij], qth[ij], ql[ij], qi[ij], thvrefh[k], ssa.t);
                 }
         }
     }
@@ -181,7 +184,9 @@ namespace
                 for (int i=istart; i<iend; i++)
                 {
                     const int ijk = i + j*jj + k*kk;
-                    b[ijk] = buoyancy<TF, sw_satadjust>(ex, thl[ijk], qt[ijk], ql[ijk], qi[ijk], thvref[k]);
+                    Struct_sat_adjust<TF> ssa =
+                            sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex);
+                    b[ijk] = buoyancy<TF, sw_satadjust>(ex, thl[ijk], qt[ijk], ql[ijk], qi[ijk], thvref[k], ssa.t);
                 }
         }
     }
@@ -253,7 +258,10 @@ namespace
                     const int ijk = i + j*jj + k*kk;
                     const int ij  = i + j*jj;
 
-                    bh[ijk] = buoyancy<TF, sw_satadjust>(exnh, thlh[ij], qth[ij], ql[ij], qi[ij], thvrefh[k]);
+                    Struct_sat_adjust<TF> ssa =
+                            sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh);
+
+                    bh[ijk] = buoyancy<TF, sw_satadjust>(exnh, thlh[ij], qth[ij], ql[ij], qi[ij], thvrefh[k], ssa.t);
                 }
         }
     }
@@ -598,7 +606,7 @@ namespace
                     Struct_sat_adjust<TF> ssa =
                             sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex);
 
-                    thv[ijk] = virtual_temperature<TF, sw_satadjust>(ex, thl[ijk], qt[ijk], ssa.ql, ssa.qi);
+                    thv[ijk] = virtual_temperature<TF, sw_satadjust>(ex, thl[ijk], qt[ijk], ssa.ql, ssa.qi, ssa.t);
                 }
         }
     }

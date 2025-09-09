@@ -45,7 +45,7 @@ namespace Thermo_moist_functions
 
     // INLINE FUNCTIONS
     template<typename TF, Satadjust_type sw_satadjust>
-    CUDA_MACRO inline TF virtual_temperature(const TF exn, const TF thl, const TF qt, const TF ql, const TF qi)
+    CUDA_MACRO inline TF virtual_temperature(const TF exn, const TF thl, const TF qt, const TF ql, const TF qi, const TF T)
     {
         if (sw_satadjust == Satadjust_type::Disabled)
         {
@@ -53,7 +53,8 @@ namespace Thermo_moist_functions
         }
         else if (sw_satadjust == Satadjust_type::Liquid)
         {
-            const TF th = thl + Lv<TF>*ql/(cp<TF>*exn);
+            // const TF th = thl + Lv<TF>*ql/(cp<TF>*exn);
+            const TF th = T / exn;
             return th * (TF(1.) - (TF(1.) - Rv<TF>/Rd<TF>)*qt - Rv<TF>/Rd<TF>*(ql));
         }
         else if (sw_satadjust == Satadjust_type::Liquid_ice)
@@ -70,9 +71,9 @@ namespace Thermo_moist_functions
     }
 
     template<typename TF, Satadjust_type sw_satadjust>
-    CUDA_MACRO inline TF buoyancy(const TF exn, const TF thl, const TF qt, const TF ql, const TF qi, const TF thvref)
+    CUDA_MACRO inline TF buoyancy(const TF exn, const TF thl, const TF qt, const TF ql, const TF qi, const TF thvref, const TF T)
     {
-        return grav<TF> * (virtual_temperature<TF, sw_satadjust>(exn, thl, qt, ql, qi) - thvref) / thvref;
+        return grav<TF> * (virtual_temperature<TF, sw_satadjust>(exn, thl, qt, ql, qi, T) - thvref) / thvref;
     }
 
     template<typename TF>
@@ -192,6 +193,43 @@ namespace Thermo_moist_functions
     }
 
     template<typename TF>
+    CUDA_MACRO inline TF f_pro(const TF p, const TF T, const TF qt, const TF thl)
+    {
+        const TF chi = (Rd<TF> + Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
+        const TF gamma = (Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
+        const TF epsilon = Rd<TF>  / Rv<TF>;
+        const TF ql = qt - qsat_liq(p, T);
+
+        const TF f = -thl + T * pow((p0<TF>/p), chi) * pow((1 - ql / (epsilon + qt)), chi) * pow((1 - ql / qt), -gamma)
+                * std::exp((-Lv<TF> * ql) / ((cp<TF> + cpv<TF> * qt) * T));
+
+        return f;
+    }
+
+    template<typename TF>
+    CUDA_MACRO inline TF f_prime_pro(const TF p, const TF T, const TF qt)
+    {
+        const TF chi = (Rd<TF> + Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
+        const TF gamma = (Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
+        const TF epsilon = Rd<TF> / Rv<TF>;
+        const TF exponent = std::exp(-((Lv<TF> * (qt - qsat_liq(p, T))) / (T * (cpv<TF> * qt + cp<TF>))));
+        const TF term1 = 1 - (qt - qsat_liq(p, T)) / (epsilon + qt);
+        const TF term2 = 1 - (qt - qsat_liq(p, T)) / qt;
+        const TF pres = pow((p0<TF>/p), chi);
+        const TF denom = pow(term2, gamma);
+        const TF lv1 = (Lv<TF> * (qt - qsat_liq(p, T))) / (pow2(T) * (cpv<TF> * qt + cp<TF>));
+        const TF lv2 = Lv<TF> * (dqsatdT_liq(p, T)) / (T * (cpv<TF> * qt + cp<TF>));
+
+        const TF dft = (exponent * T * (dqsatdT_liq(p, T) * pres * pow(term1, (chi - 1)) * chi)) / (denom * (epsilon + qt))
+          - (exponent * T * dqsatdT_liq(p, T) * pres * pow(term2, (-gamma - 1)) * gamma * pow(term1, chi)) / qt
+          + (exponent * pres * pow(term1, chi)) / denom
+          + (exponent * T * pres * (lv1 + lv2 * pow(term1, chi)) / denom);
+
+        return dft;
+    }
+
+
+    template<typename TF>
     struct Struct_sat_adjust
     {
         TF ql;
@@ -238,8 +276,10 @@ namespace Thermo_moist_functions
                 ++niter;
                 tnr_old = tnr;
                 qs = qsat_liq(p, tnr);
-                const TF f = tnr - tl - Lv<TF>/cp<TF>*(qt - qs);
-                const TF f_prime = TF(1.) + Lv<TF>/cp<TF>*dqsatdT_liq(p, tnr);
+                // const TF f = tnr - tl - Lv<TF>/cp<TF>*(qt - qs);
+                // const TF f_prime = TF(1.) + Lv<TF>/cp<TF>*dqsatdT_liq(p, tnr);
+                const TF f = f_pro(p, tnr, qt, thl);
+                const TF f_prime = f_prime_pro(p, tnr, qt);
                 tnr -= f / f_prime;
             }
 
@@ -334,7 +374,7 @@ namespace Thermo_moist_functions
         Struct_sat_adjust<TF> ssa =
             sat_adjust<TF, sw_satadjust>(thlsurf, qtsurf, prefh[kstart], exh[kstart]);
 
-        thvh[kstart] = virtual_temperature<TF, sw_satadjust>(exh[kstart], thlsurf, qtsurf, ssa.ql, ssa.qi);
+        thvh[kstart] = virtual_temperature<TF, sw_satadjust>(exh[kstart], thlsurf, qtsurf, ssa.ql, ssa.qi, ssa.t);
         rhoh[kstart] = pbot / (Rd<TF> * exh[kstart] * thvh[kstart]);
 
         // Calculate the first full level pressure
@@ -345,7 +385,7 @@ namespace Thermo_moist_functions
             // 1. Calculate remaining values (thv and rho) at full-level[k-1]
             ex[k-1]  = exner(pref[k-1]);
             ssa = sat_adjust<TF, sw_satadjust>(thlmean[k-1], qtmean[k-1], pref[k-1], ex[k-1]);
-            thv[k-1] = virtual_temperature<TF, sw_satadjust>(ex[k-1], thlmean[k-1], qtmean[k-1], ssa.ql, ssa.qi);
+            thv[k-1] = virtual_temperature<TF, sw_satadjust>(ex[k-1], thlmean[k-1], qtmean[k-1], ssa.ql, ssa.qi, ssa.t);
             rho[k-1] = pref[k-1] / (Rd<TF> * ex[k-1] * thv[k-1]);
 
             // 2. Calculate pressure at half-level[k]
@@ -358,7 +398,7 @@ namespace Thermo_moist_functions
 
             ssa = sat_adjust<TF, sw_satadjust>(thli, qti, prefh[k], exh[k]);
 
-            thvh[k] = virtual_temperature<TF, sw_satadjust>(exh[k], thli, qti, ssa.ql, ssa.qi);
+            thvh[k] = virtual_temperature<TF, sw_satadjust>(exh[k], thli, qti, ssa.ql, ssa.qi, ssa.t);
             rhoh[k] = prefh[k] / (Rd<TF> * exh[k] * thvh[k]);
 
             // 4. Calculate pressure at full-level[k]
