@@ -200,34 +200,35 @@ namespace Thermo_moist_functions
         const TF gamma = (Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
         const TF epsilon = Rd<TF>  / Rv<TF>;
         const TF ql = qt - qsat_liq(p, T);
+        const TF rh = std::min(qt / qsat_liq(p, T), TF(1.));
 
         const TF f = -thl + T * pow((p0<TF>/p), chi) * pow((1 - ql / (epsilon + qt)), chi) * pow((1 - ql / qt), -gamma)
-                * std::exp((-Lv<TF> * ql) / ((cp<TF> + cpv<TF> * qt) * T));
+                * std::exp(((-Lv<TF> * ql) / ((cp<TF> + cpv<TF> * qt) * T)) + + ((Rv<TF> * ql * std::log(rh))/(cp<TF> + cpv<TF> * qt)));
 
         return f;
     }
 
-    template<typename TF>
-    CUDA_MACRO inline TF f_prime_pro(const TF p, const TF T, const TF qt)
-    {
-        const TF chi = (Rd<TF> + Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
-        const TF gamma = (Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
-        const TF epsilon = Rd<TF> / Rv<TF>;
-        const TF exponent = std::exp(-((Lv<TF> * (qt - qsat_liq(p, T))) / (T * (cpv<TF> * qt + cp<TF>))));
-        const TF term1 = 1 - (qt - qsat_liq(p, T)) / (epsilon + qt);
-        const TF term2 = 1 - (qt - qsat_liq(p, T)) / qt;
-        const TF pres = pow((p0<TF>/p), chi);
-        const TF denom = pow(term2, gamma);
-        const TF lv1 = (Lv<TF> * (qt - qsat_liq(p, T))) / (pow2(T) * (cpv<TF> * qt + cp<TF>));
-        const TF lv2 = Lv<TF> * (dqsatdT_liq(p, T)) / (T * (cpv<TF> * qt + cp<TF>));
-
-        const TF dft = (exponent * T * (dqsatdT_liq(p, T) * pres * pow(term1, (chi - 1)) * chi)) / (denom * (epsilon + qt))
-          - (exponent * T * dqsatdT_liq(p, T) * pres * pow(term2, (-gamma - 1)) * gamma * pow(term1, chi)) / qt
-          + (exponent * pres * pow(term1, chi)) / denom
-          + (exponent * T * pres * (lv1 + lv2 * pow(term1, chi)) / denom);
-
-        return dft;
-    }
+//    template<typename TF>
+//    CUDA_MACRO inline TF f_prime_pro(const TF p, const TF T, const TF qt)
+//    {
+//        const TF chi = (Rd<TF> + Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
+//        const TF gamma = (Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
+//        const TF epsilon = Rd<TF> / Rv<TF>;
+//        const TF exponent = std::exp(-((Lv<TF> * (qt - qsat_liq(p, T))) / (T * (cpv<TF> * qt + cp<TF>))));
+//        const TF term1 = 1 - (qt - qsat_liq(p, T)) / (epsilon + qt);
+//        const TF term2 = 1 - (qt - qsat_liq(p, T)) / qt;
+//        const TF pres = pow((p0<TF>/p), chi);
+//        const TF denom = pow(term2, gamma);
+//        const TF lv1 = (Lv<TF> * (qt - qsat_liq(p, T))) / (pow2(T) * (cpv<TF> * qt + cp<TF>));
+//        const TF lv2 = Lv<TF> * (dqsatdT_liq(p, T)) / (T * (cpv<TF> * qt + cp<TF>));
+//
+//        const TF dft = (exponent * T * (dqsatdT_liq(p, T) * pres * pow(term1, (chi - 1)) * chi)) / (denom * (epsilon + qt))
+//          - (exponent * T * dqsatdT_liq(p, T) * pres * pow(term2, (-gamma - 1)) * gamma * pow(term1, chi)) / qt
+//          + (exponent * pres * pow(term1, chi)) / denom
+//          + (exponent * T * pres * (lv1 + lv2 * pow(term1, chi)) / denom);
+//
+//        return dft;
+//    }
 
 
     template<typename TF>
@@ -280,7 +281,9 @@ namespace Thermo_moist_functions
                 // const TF f = tnr - tl - Lv<TF>/cp<TF>*(qt - qs);
                 // const TF f_prime = TF(1.) + Lv<TF>/cp<TF>*dqsatdT_liq(p, tnr);
                 const TF f = f_pro(p, tnr, qt, thl);
-                const TF f_prime = f_prime_pro(p, tnr, qt);
+                // const TF f_prime = f_prime_pro(p, tnr, qt);
+                const TF epsilon = 0.01;
+                const TF f_prime = (f_pro(p, tnr+epsilon, qt, thl) - f_pro(p, tnr-epsilon, qt, thl))/(2*epsilon);
                 tnr -= f / f_prime;
             }
 
