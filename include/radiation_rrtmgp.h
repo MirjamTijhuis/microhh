@@ -129,6 +129,7 @@ class Radiation_rrtmgp : public Radiation<TF>
                 Input&, Netcdf_handle&, Thermo<TF>&, Stats<TF>&, Column<TF>&,
                 const Gas_concs&);
         void create_diffuse_filter(const float);
+        void calc_displacement();
 
     void solve_shortwave_column(
             std::unique_ptr<Optical_props_arry>&,
@@ -233,6 +234,7 @@ class Radiation_rrtmgp : public Radiation<TF>
         Float tsi_scaling; // Total solar irradiance scaling factor.
         Float t_sfc;       // Surface absolute temperature in K.
         Float mu0;         // Cosine of solar zenith angle.
+        Float azimuth;         // Azimuth angle.
         Float Nc0;         // Total droplet number concentration.
 
         // The reference column for the full profile.
@@ -306,7 +308,8 @@ class Radiation_rrtmgp : public Radiation<TF>
 
         Float* sw_flux_dn_sfc_g;
         Float* sw_flux_up_sfc_g;
-        Float* sw_flux_dn_dif_f_g;
+        Float* sw_flux_dn_dif_sfc_g;
+        Float* sw_flux_dn_dir_sfc_g;
 
         Float* sw_flux_dn_dir_inc_g;
         Float* sw_flux_dn_dif_inc_g;
@@ -316,17 +319,26 @@ class Radiation_rrtmgp : public Radiation<TF>
         bool sw_tica;
         // Surface diffuse radiation filtering
         bool sw_diffuse_filter;
+        // surface field displacement
+        bool sw_displace_sw;
+        bool sw_displace_dir;
+        bool sw_displace_dif;
 
         Float fac_filter;
         Float sigma_filter_small;
         int n_filter_iterations;
 
-        std::vector<Float> sw_flux_dn_dif_f;
+        int shift_x;
+        int shift_y;
+
+        std::vector<Float> sw_flux_dn_dif_sfc;
+        std::vector<Float> sw_flux_dn_dir_sfc;
 
         std::vector<Float> filter_kernel_x;
         std::vector<Float> filter_kernel_y;
         Float* filter_kernel_x_g;
         Float* filter_kernel_y_g;
+        std::vector<Float> mean_lwp;
 
         // timedependent gases
         std::map<std::string, Timedep<TF>*> tdep_gases;

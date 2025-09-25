@@ -763,6 +763,14 @@ Radiation_rrtmgp<TF>::Radiation_rrtmgp(
         grid.set_minimum_ghost_cells(igc, jgc, kgc);
     }
 
+    // surface radiation displacement
+    sw_displace_dir = inputin.get_item<bool>("radiation", "swdisplacedir", "", false);
+    sw_displace_dif = inputin.get_item<bool>("radiation", "swdisplacedif", "", false);
+    if (sw_displace_dir || sw_displace_dif)
+        sw_displace_sw = true;
+    else
+        sw_displace_sw = false;
+
     gaslist = inputin.get_list<std::string>("radiation", "timedeplist_gas", "", std::vector<std::string>());
 
     const std::vector<std::string> possible_gases = {
@@ -827,14 +835,21 @@ void Radiation_rrtmgp<TF>::init(Timeloop<TF>& timeloop)
     sw_flux_up_sfc.resize(gd.ijcells);
 
     // Surface diffuse radiation filtering
-    if (sw_diffuse_filter)
+    if (sw_diffuse_filter || sw_displace_sw)
     {
         const int ngc = gd.igc;
 
-        sw_flux_dn_dif_f.resize(gd.ijcells);
-        filter_kernel_x.resize(2*ngc+1);
-        filter_kernel_y.resize(2*ngc+1);
+        sw_flux_dn_dif_sfc.resize(gd.ijcells);
+        sw_flux_dn_dir_sfc.resize(gd.ijcells);
+
+        if (sw_diffuse_filter)
+        {
+            filter_kernel_x.resize(2*ngc+1);
+            filter_kernel_y.resize(2*ngc+1);
+        }
     }
+    if (sw_displace_sw)
+        mean_lwp.resize(gd.kcells);
 
     // initialize timedependent gasses
     for (auto& it : gaslist)
@@ -939,8 +954,11 @@ void Radiation_rrtmgp<TF>::create(
             allowed_crossvars_radiation.push_back("sw_flux_dn_dir_clear");
         }
 
-        if (sw_diffuse_filter)
-            allowed_crossvars_radiation.push_back("sw_flux_dn_diff_filtered");
+        if (sw_diffuse_filter || sw_displace_sw)
+        {
+            allowed_crossvars_radiation.push_back("sw_flux_dn_dif_sfc");
+            allowed_crossvars_radiation.push_back("sw_flux_dn_dir_sfc");
+        }
     }
 
     if (sw_longwave)
@@ -1211,6 +1229,95 @@ void Radiation_rrtmgp<TF>::create_diffuse_filter(const float sigma_filter_t)
         filter_kernel_x[i+ngc] /= filter_sum_x;
         filter_kernel_y[i+ngc] /= filter_sum_y;
     }
+}
+
+template<typename TF>
+void Radiation_rrtmgp<TF>::calc_displacement()
+{
+    if (!sw_displace_sw)
+        return;
+
+    auto& gd = grid.get_grid_data();
+    const TF pi    = TF(M_PI);
+
+    // calc cloud base height
+    Float cbh = 0;
+    for (int k=gd.kstart; k<gd.kend; k++)
+    {
+        if(mean_lwp[k] > TF(0))
+        {
+            cbh = gd.z[k];
+            break;
+        }
+    }
+    // std::cout<<cbh<<std::endl;
+
+    // calc displacement in x and y from cbh, sza, azimuth
+    Float sza = acos(this->mu0);
+    Float azi = this->azimuth;
+
+    Float epsilon = 1e-8;         // Small value to handle floating - point precision
+    // these are the directions from the tilted columns, looking from the surface upwards
+    // displacement here is in the opposite direction
+    Float dir_x = std::sin(sza) * std::sin(azi);    // azi 0 is from the north
+    Float dir_y = std::sin(sza) * std::cos(azi);
+    Float dist = std::tan(sza) * cbh;
+
+    if (dist < std::min(gd.dx, gd.dy))
+    {
+        // no displacement is the total distance is less than 1 cell
+        shift_x = 0;
+        shift_y = 0;
+    }
+    else {
+        if (std::abs(dir_y) < epsilon) {
+            if (std::abs(dir_x) < epsilon) {
+                // both dir_x and dir_y are practically zero
+                // occurs only when sza is practically zero, hence no shift
+                shift_x = 0;
+                shift_y = 0;
+            } else if (dir_x < 0) {
+                // dir y is close to zero, displacement only in x (positive)
+                shift_x = int(dist / gd.dx);
+                shift_y = 0;
+            } else {
+                // dir y is close to zero, displacement only in x (negative)
+                shift_x = gd.itot - int(dist / gd.dx);
+                shift_y = 0;
+            }
+        } else if (dir_y < 0) {
+            if (std::abs(dir_x) < epsilon) {
+                // dir x is close to zero, displacement only in y (positive)
+                shift_x = 0;
+                shift_y = int(dist / gd.dy);
+            } else if (dir_x < 0) {
+                shift_x = int((std::sin(azi - pi) * dist) / gd.dx);
+                shift_y = int((std::cos(azi - pi) * dist) / gd.dy);
+            } else {
+                shift_x = gd.itot - int((std::sin(pi - azi) * dist) / gd.dx);
+                shift_y = int((std::cos(pi - azi) * dist) / gd.dy);
+            }
+        } else {
+            if (std::abs(dir_x) < epsilon) {
+                // dir x is close to zero, displacement only in y (negative)
+                shift_x = 0;
+                shift_y = gd.jtot - int(dist / gd.dy);
+            } else if (dir_x < 0) {
+                //dir_y positive and dir_x negative
+                shift_x = int((std::sin(2 * pi - azi) * dist) / gd.dx);
+                shift_y = gd.jtot - int(std::cos(2 * pi - azi) * dist / gd.dy);
+            } else {
+                // both dir_x and dir_y are positive
+                shift_x = gd.itot - int((std::sin(azi) * dist) / gd.dx);
+                shift_y = gd.jtot - int((std::cos(azi) * dist) / gd.dy);
+            }
+        }
+    }
+
+    master.print_message(
+            "Setup surface flux displacement: cloud base=%f m, shift_x=%d, shift_y=%d\n",
+            cbh, shift_x, shift_y);
+
 }
 
 template<typename TF>
@@ -1591,11 +1698,11 @@ void Radiation_rrtmgp<TF>::set_sun_location(Timeloop<TF>& timeloop)
     const int day_of_year = int(timeloop.calc_day_of_year());
     const int year = timeloop.get_year();
     const TF seconds_after_midnight = TF(timeloop.calc_hour_of_day()*3600);
-    Float azimuth_dummy;
+    // Float azimuth_dummy;
 
     auto& gd = grid.get_grid_data();
 
-    std::tie(this->mu0, azimuth_dummy) = calc_cos_zenith_angle(gd.lat, gd.lon, day_of_year, seconds_after_midnight, year);
+    std::tie(this->mu0, this->azimuth) = calc_cos_zenith_angle(gd.lat, gd.lon, day_of_year, seconds_after_midnight, year);
 
     // Calculate correction factor for impact Sun's distance on the solar "constant"
     const TF frac_day_of_year = TF(day_of_year) + seconds_after_midnight / TF(86400);
@@ -1883,7 +1990,7 @@ void Radiation_rrtmgp<TF>::exec(
 
                         create_diffuse_filter(sigma_filter_t);
                         filter_diffuse_radiation<TF>(
-                             sw_flux_dn_dif_f.data(),
+                             sw_flux_dn_dif_sfc.data(),
                              sw_flux_dn_sfc.data(),
                              sw_flux_up_sfc.data(),
                              t_lay->fld_bot.data(), t_lay->flux_bot.data(),
@@ -1907,7 +2014,7 @@ void Radiation_rrtmgp<TF>::exec(
                     std::fill(sw_flux_dn_sfc.begin(), sw_flux_dn_sfc.end(), Float(0));
 
                     if (sw_diffuse_filter)
-                        std::fill(sw_flux_dn_dif_f.begin(), sw_flux_dn_dif_f.end(), TF(0));
+                        std::fill(sw_flux_dn_dif_sfc.begin(), sw_flux_dn_dif_sfc.end(), TF(0));
                 }
 
                 if (do_radiation_stats)
@@ -2085,11 +2192,15 @@ void Radiation_rrtmgp<TF>::exec_all_stats(
                 save_stats_and_cross(*fields.sd.at("sw_flux_dn_dir_clear"), "sw_flux_dn_dir_clear", gd.wloc);
             }
 
-            bool cross_diff = std::find(crosslist.begin(), crosslist.end(), "sw_flux_dn_diff_filtered") != crosslist.end();
-            if (sw_diffuse_filter && do_cross && cross_diff)
+            bool cross_diff = std::find(crosslist.begin(), crosslist.end(), "sw_flux_dn_dif_sfc") != crosslist.end();
+            bool cross_dir = std::find(crosslist.begin(), crosslist.end(), "sw_flux_dn_dir_sfc") != crosslist.end();
+            if ((sw_diffuse_filter || sw_displace_sw) && do_cross)
             {
                 constexpr TF no_offset = TF(0);
-                cross.cross_plane(sw_flux_dn_dif_f.data(), no_offset, "sw_flux_dn_diff_filtered", iotime);
+                if (cross_diff)
+                    cross.cross_plane(sw_flux_dn_dif_sfc.data(), no_offset, "sw_flux_dn_dif_sfc", iotime);
+                if (cross_dir)
+                    cross.cross_plane(sw_flux_dn_dir_sfc.data(), no_offset, "sw_flux_dn_dir_sfc", iotime);
             }
 
             if (sw_aerosol)
