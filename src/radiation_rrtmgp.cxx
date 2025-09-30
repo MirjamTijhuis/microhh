@@ -1282,7 +1282,8 @@ void Radiation_rrtmgp<TF>::calc_displacement()
                 shift_y = 0;
             } else {
                 // dir y is close to zero, displacement only in x (negative)
-                shift_x = gd.itot - int(dist / gd.dx);
+                // shift_x = gd.itot - int(dist / gd.dx);
+                shift_x = (1 + int(dist/(gd.dx*gd.itot))) * gd.itot - int(dist / gd.dx);
                 shift_y = 0;
             }
         } else if (dir_y < 0) {
@@ -1294,22 +1295,27 @@ void Radiation_rrtmgp<TF>::calc_displacement()
                 shift_x = int((std::sin(azi - pi) * dist) / gd.dx);
                 shift_y = int((std::cos(azi - pi) * dist) / gd.dy);
             } else {
-                shift_x = gd.itot - int((std::sin(pi - azi) * dist) / gd.dx);
+                // shift_x = gd.itot - int((std::sin(pi - azi) * dist) / gd.dx);
+                shift_x = (1 + int((std::sin(pi - azi) * dist)/(gd.dx*gd.itot))) * gd.itot - int((std::sin(pi - azi) * dist) / gd.dx);
                 shift_y = int((std::cos(pi - azi) * dist) / gd.dy);
             }
         } else {
             if (std::abs(dir_x) < epsilon) {
                 // dir x is close to zero, displacement only in y (negative)
                 shift_x = 0;
-                shift_y = gd.jtot - int(dist / gd.dy);
+                // shift_y = gd.jtot - int(dist / gd.dy);
+                shift_y = (1 + int(dist/(gd.dy*gd.jtot))) * gd.jtot - int(dist / gd.dy);
             } else if (dir_x < 0) {
                 //dir_y positive and dir_x negative
                 shift_x = int((std::sin(2 * pi - azi) * dist) / gd.dx);
-                shift_y = gd.jtot - int(std::cos(2 * pi - azi) * dist / gd.dy);
+                // shift_y = gd.jtot - int(std::cos(2 * pi - azi) * dist / gd.dy);
+                shift_y = (1 + int(std::cos(2 * pi - azi) * dist/(gd.dy*gd.jtot))) * gd.jtot - int(std::cos(2 * pi - azi) * dist / gd.dy);
             } else {
                 // both dir_x and dir_y are positive
-                shift_x = gd.itot - int((std::sin(azi) * dist) / gd.dx);
-                shift_y = gd.jtot - int((std::cos(azi) * dist) / gd.dy);
+                // shift_x = gd.itot - int((std::sin(azi) * dist) / gd.dx);
+                // shift_y = gd.jtot - int((std::cos(azi) * dist) / gd.dy);
+                shift_x = (1 + int((std::sin(azi) * dist)/(gd.dx*gd.itot))) * gd.itot - int((std::sin(azi) * dist) / gd.dx);
+                shift_y = (1 + int((std::cos(azi) * dist) /(gd.dy*gd.jtot))) * gd.jtot - int((std::cos(azi) * dist) / gd.dy);
             }
         }
     }

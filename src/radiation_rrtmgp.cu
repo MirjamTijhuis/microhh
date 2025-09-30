@@ -1205,7 +1205,7 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
     Array_gpu<Float,1> mu0(mu0_cpu);
 
     gas_concs_gpu->set_vmr("h2o", h2o);
-    gas_concs.set_vmr("h2o", h2o);
+    // gas_concs.set_vmr("h2o", h2o);
 
     //MT: calculate rel and dei here, as this must be done before tilting columns
     Array_gpu<Float,2> rel({n_col, n_lay});
