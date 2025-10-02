@@ -2140,9 +2140,14 @@ void Radiation_rrtmgp<TF>::exec(
                         do_gcs(*fields.sd.at("sw_flux_dn_dir_clear"), flux_dn_dir);
                     }
 
-                    // copy diffuse radiation to cpu
-                    cudaMemcpy(sw_flux_dn_dif_sfc.data(), sw_flux_dn_dif_sfc_g, gd.ijcells*sizeof(Float), cudaMemcpyDeviceToHost);
-                    cudaMemcpy(sw_flux_dn_dir_sfc.data(), sw_flux_dn_dir_sfc_g, gd.ijcells*sizeof(Float), cudaMemcpyDeviceToHost);
+                    if (sw_diffuse_filter || sw_displace_sw)
+                    {
+                        // copy diffuse radiation to cpu
+                        cudaMemcpy(sw_flux_dn_dif_sfc.data(), sw_flux_dn_dif_sfc_g, gd.ijcells * sizeof(Float),
+                                   cudaMemcpyDeviceToHost);
+                        cudaMemcpy(sw_flux_dn_dir_sfc.data(), sw_flux_dn_dir_sfc_g, gd.ijcells * sizeof(Float),
+                                   cudaMemcpyDeviceToHost);
+                    }
                  }
              }
          } // End try block.
