@@ -2064,7 +2064,6 @@ void Radiation_rrtmgp<TF>::exec(
                                 boundary_cyclic.exec_2d_g(sw_flux_dn_dir_sfc_g);
                             }
                         }
-                    }
 
                     calc_global_radiation<<<gridGPU_2d, blockGPU_2d>>>(
                             sw_flux_dn_dif_sfc_g, sw_flux_dn_sfc_g, sw_flux_up_sfc_g, sw_flux_dn_dir_sfc_g,
@@ -2073,6 +2072,7 @@ void Radiation_rrtmgp<TF>::exec(
                             gd.jstart, gd.jend,
                             gd.igc, gd.jgc,
                             gd.icells, gd.imax);
+                    }
                 }
 
                 // Note: keep this as a separate `if()` instead of an `else`,
