@@ -1205,7 +1205,6 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
     Array_gpu<Float,1> mu0(mu0_cpu);
 
     gas_concs_gpu->set_vmr("h2o", h2o);
-    // gas_concs.set_vmr("h2o", h2o);
 
     //MT: calculate rel and dei here, as this must be done before tilting columns
     Array_gpu<Float,2> rel({n_col, n_lay});
@@ -1368,6 +1367,9 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
         Array<Float, 2> dei_out({n_col, n_z_in});
 
         // use cpu gas and aerosol concs for now
+        // therefore h2o has to be set here.
+        // This is dangerous in some cases because of the check for negative values which falls over very small negative
+        gas_concs.set_vmr("h2o", h2o);
         Gas_concs gas_concs_out = gas_concs;
         Aerosol_concs aerosol_concs_out = aerosol_concs;
 
