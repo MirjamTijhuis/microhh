@@ -1239,29 +1239,42 @@ void Radiation_rrtmgp<TF>::calc_displacement()
 
     auto& gd = grid.get_grid_data();
     const TF pi    = TF(M_PI);
+    Float epsilon = 1e-8;         // Small value to handle floating - point precision
 
-    // calc cloud base height
-    Float cbh = 0;
-    for (int k=gd.kstart; k<gd.kend; k++)
+//    // calc cloud base height
+//    Float cbh = 0;
+//    for (int k=gd.kstart; k<gd.kend; k++)
+//    {
+//        if(mean_lwp[k] > TF(0))
+//        {
+//            cbh = gd.z[k];
+//            break;
+//        }
+//    }
+
+    Float max_ql_height = 0;
+    Float max_ql = *std::max_element(mean_lwp.begin(), mean_lwp.end());;
+    if (max_ql > epsilon)
     {
-        if(mean_lwp[k] > TF(0))
+        for (int k=gd.kstart; k<gd.kend; k++)
         {
-            cbh = gd.z[k];
-            break;
+            if(std::abs(mean_lwp[k] - max_ql) < epsilon)
+            {
+                max_ql_height = gd.z[k];
+                break;
+            }
         }
     }
-    // std::cout<<cbh<<std::endl;
-
+    
     // calc displacement in x and y from cbh, sza, azimuth
     Float sza = acos(this->mu0);
     Float azi = this->azimuth;
 
-    Float epsilon = 1e-8;         // Small value to handle floating - point precision
     // these are the directions from the tilted columns, looking from the surface upwards
     // displacement here is in the opposite direction
     Float dir_x = std::sin(sza) * std::sin(azi);    // azi 0 is from the north
     Float dir_y = std::sin(sza) * std::cos(azi);
-    Float dist = std::tan(sza) * cbh;
+    Float dist = std::tan(sza) * max_ql_height;
 
     if (dist < std::min(gd.dx, gd.dy))
     {
@@ -1321,8 +1334,8 @@ void Radiation_rrtmgp<TF>::calc_displacement()
     }
 
     master.print_message(
-            "Setup surface flux displacement: cloud base=%f m, shift_x=%d, shift_y=%d\n",
-            cbh, shift_x, shift_y);
+            "Setup surface flux displacement: cloud height=%f m, shift_x=%d, shift_y=%d\n",
+            max_ql_height, shift_x, shift_y);
 
 }
 
