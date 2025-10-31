@@ -1636,35 +1636,6 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
 
         }
 
-        //Array<Float,2> flux_dn_cpu({gd.imax*gd.jmax, gd.ktot+1});
-        //Array<Float,2> flux_dn_dir_cpu({gd.imax*gd.jmax, gd.ktot+1});
-        //Array<Float,2> flux_up_cpu({gd.imax*gd.jmax, gd.ktot+1});
-        //Array<Float,2> flux_net_cpu({gd.imax*gd.jmax, gd.ktot+1});
-
-        //cuda_safe_call(cudaMemcpy(flux_dn_cpu.ptr(), flux_dn.ptr(),  ncollevsize, cudaMemcpyDeviceToHost));
-        //cuda_safe_call(cudaMemcpy(flux_dn_dir_cpu.ptr(), flux_dn_dir.ptr(),  ncollevsize, cudaMemcpyDeviceToHost));
-        //cuda_safe_call(cudaMemcpy(flux_up_cpu.ptr(), flux_up.ptr(),  ncollevsize, cudaMemcpyDeviceToHost));
-        //cuda_safe_call(cudaMemcpy(flux_net_cpu.ptr(), flux_net.ptr(),  ncollevsize, cudaMemcpyDeviceToHost));
-
-        //if (do_tilting)
-        //{
-        //    translate_fluxes(gd.itot, gd.jtot, n_lev, center_zh_tilt, zh_a, center_path.v(), flux_dn_cpu);
-        //    translate_fluxes(gd.itot, gd.jtot, n_lev, center_zh_tilt, zh_a, center_path.v(), flux_dn_dir_cpu);
-        //    translate_fluxes(gd.itot, gd.jtot, n_lev, center_zh_tilt, zh_a, center_path.v(), flux_up_cpu);
-        //    translate_fluxes(gd.itot, gd.jtot, n_lev, center_zh_tilt, zh_a, center_path.v(), flux_net_cpu);
-        //}
-        //else
-        //{
-        //    tica_mean(flux_dn_cpu, gd.itot, gd.jtot, n_lev);
-        //    tica_mean(flux_dn_dir_cpu, gd.itot, gd.jtot, n_lev);
-        //    tica_mean(flux_up_cpu, gd.itot, gd.jtot, n_lev);
-        //    tica_mean(flux_net_cpu, gd.itot, gd.jtot, n_lev);
-        //}
-
-        //cuda_safe_call(cudaMemcpy(flux_dn.ptr(), flux_dn_cpu.ptr(),  ncollevsize, cudaMemcpyHostToDevice));
-        //cuda_safe_call(cudaMemcpy(flux_dn_dir.ptr(), flux_dn_dir_cpu.ptr(),  ncollevsize, cudaMemcpyHostToDevice));
-        //cuda_safe_call(cudaMemcpy(flux_up.ptr(), flux_up_cpu.ptr(),  ncollevsize, cudaMemcpyHostToDevice));
-        //cuda_safe_call(cudaMemcpy(flux_net.ptr(), flux_net_cpu.ptr(),  ncollevsize, cudaMemcpyHostToDevice));
     }
 }
 #endif
