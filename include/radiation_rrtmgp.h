@@ -191,7 +191,7 @@ class Radiation_rrtmgp : public Radiation<TF>
                 Array_gpu<Float,2>&, Array_gpu<Float,2>&, Array_gpu<Float,2>&, Array_gpu<Float,2>&,
                 Array<Float, 1>&,
                 Array_gpu<Float,2>&, Array_gpu<Float,2>&,
-                const Array_gpu<Float,2>&, const Array_gpu<Float,2>&,
+                const Array_gpu<Float,2>&, Array_gpu<Float,2>&,
                 Array_gpu<Float,2>&, Array_gpu<Float,2>&,
                 const bool, const int);
         #endif
