@@ -1818,11 +1818,13 @@ void Radiation_rrtmgp_rt<TF>::exec_shortwave_rt(
             Array_gpu<Float,3> mie_angs_sub;
 
             const bool use_independent_column = false;
+            const bool use_independent_column_diffuse = false;
 
             const Int qrng_offset = Int(igpt - 1) + this->time_idx * Int(n_gpt);
             raytracer.trace_rays(
                     igpt,
                     use_independent_column,
+                    use_independent_column_diffuse,
                     this->rays_per_pixel,
                     grid_cells, grid_d, kn_grid,
                     mie_cdfs_sub,
