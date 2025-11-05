@@ -1350,11 +1350,14 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
                 "aermr01", "aermr02", "aermr03", "aermr04", "aermr05", "aermr06", "aermr07",
                 "aermr08", "aermr09", "aermr10", "aermr11" };
 
+
+
+        //printf("%f %f \n ",tica_sza,tica_azi);
         tica_tilt_gpu(
                 tica_sza, tica_azi,
                 gd.itot, gd.jtot, n_col,
                 n_lay, n_lev, gd.ktot, gd.ktot+1,
-                zh_a_gpu, z_a_gpu, // are these GPU?
+                z_a_gpu, zh_a_gpu,
                 p_lay, t_lay, p_lev, t_lev,
                 clwp, ciwp, rel, dei, rh,
                 center_path, center_path_bounds,
