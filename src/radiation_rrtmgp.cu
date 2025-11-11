@@ -1310,7 +1310,8 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
         Float tica_sza;
         Float tica_azi;
 
-        tica_scaling = mu0({1});
+        // tica_scaling = mu0({1});
+        tica_scaling = Float(1.);
         tica_sza = zenith_angle;
         tica_azi = azimuth_angle;
 
@@ -1333,9 +1334,9 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
 
         p_lev_tilt.set_dims({n_zh_tilt_center});
 
-        mu0.fill(1.0);
-        zenith_angle = std::acos(mu0({1}));
-        azimuth_angle = 0.0;
+//        mu0.fill(1.0);
+//        zenith_angle = std::acos(mu0({1}));
+//        azimuth_angle = 0.0;
 
         // switches
         const bool switch_liq_cloud_optics = compute_clouds;
