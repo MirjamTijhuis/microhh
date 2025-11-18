@@ -75,6 +75,34 @@ namespace
         }
     }
 
+
+    __global__
+    void calc_tendency_nogc(
+            Float* __restrict__ thlt_rad,  const Float* __restrict__ flux_up,
+            const Float* __restrict flux_dn, const Float* __restrict__ rho,
+            const Float* __restrict__ exner, const Float* __restrict__ dz,
+            const int istart, const int jstart, const int kstart,
+            const int iend, const int jend, const int kend,
+            const int igc, const int jgc, const int kgc,
+            const int jj, const int kk,
+            const int jj_nogc, const int kk_nogc)
+    {
+        const int i = blockIdx.x*blockDim.x + threadIdx.x + istart;
+        const int j = blockIdx.y*blockDim.y + threadIdx.y + jstart;
+        const int k = blockIdx.z + kstart;
+
+        if ( (i < iend) && (j < jend) && (k < kend) )
+        {
+            const Float fac = Float(1.) / (rho[k] * Constants::cp<Float> * exner[k] * dz[k]);
+
+            const int ijk = i + j*jj + k*kk;
+            const int ijk_nogc = (i-igc) + (j-jgc)*jj_nogc + (k-kgc)*kk_nogc;
+
+            thlt_rad[ijk_nogc] -= fac * ( flux_up[ijk_nogc + kk_nogc] - flux_up[ijk_nogc]
+                                     - flux_dn[ijk_nogc + kk_nogc] + flux_dn[ijk_nogc] );
+        }
+    }
+
     __global__
     void add_tendency(
             Float* __restrict__ thlt,  const Float* __restrict__ thlt_rad,
@@ -90,6 +118,27 @@ namespace
         {
             const int ijk = i + j*jj + k*kk;
             thlt[ijk] += thlt_rad[ijk];
+        }
+    }
+
+    __global__
+    void add_tendency_and_ghost_cells(
+            Float* __restrict__ thlt,  const Float* __restrict__ thlt_nogc,
+            const int istart, const int jstart, const int kstart,
+            const int iend, const int jend, const int kend,
+            const int igc, const int jgc, const int kgc,
+            const int jj, const int kk,
+            const int jj_nogc, const int kk_nogc)
+    {
+        const int i = blockIdx.x*blockDim.x + threadIdx.x + istart;
+        const int j = blockIdx.y*blockDim.y + threadIdx.y + jstart;
+        const int k = blockIdx.z + kstart;
+
+        if ( (i < iend) && (j < jend) && (k < kend) )
+        {
+            const int ijk = i + j*jj + k*kk;
+            const int ijk_nogc = (i-igc) + (j-jgc)*jj_nogc + (k-kgc)*kk_nogc;
+            thlt[ijk] += thlt_nogc[ijk_nogc];
         }
     }
 
@@ -1577,22 +1626,40 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
 
          if (do_tilting)
          {
-            Tilted_column_cuda::translate_twostream_fluxes_gpu<<<grid_3d_lev, block_3d_lev>>>(
-                    gd.itot, gd.jtot, gd.ktot, n_lev,
-                    center_path.ptr(), center_path_bounds.ptr(),
-                    flux_dn_tilt.ptr(), flux_dn.ptr());
-            Tilted_column_cuda::translate_twostream_fluxes_gpu<<<grid_3d_lev, block_3d_lev>>>(
-                    gd.itot, gd.jtot, gd.ktot, n_lev,
-                    center_path.ptr(), center_path_bounds.ptr(),
-                    flux_dn_dir_tilt.ptr(), flux_dn_dir.ptr());
-            Tilted_column_cuda::translate_twostream_fluxes_gpu<<<grid_3d_lev, block_3d_lev>>>(
-                    gd.itot, gd.jtot, gd.ktot, n_lev,
-                    center_path.ptr(), center_path_bounds.ptr(),
-                    flux_up_tilt.ptr(), flux_up.ptr());
-            Tilted_column_cuda::translate_twostream_fluxes_gpu<<<grid_3d_lev, block_3d_lev>>>(
-                    gd.itot, gd.jtot, gd.ktot, n_lev,
-                    center_path.ptr(), center_path_bounds.ptr(),
-                    flux_net_tilt.ptr(), flux_net.ptr());
+             // copy tilted fluxes into normal ones later
+             Tilted_column_cuda::copy_twostream_fluxes_gpu<<<grid_3d_lev, block_3d_lev>>>(
+                     gd.itot, gd.jtot, gd.ktot, n_lev,
+                     center_path.ptr(), center_path_bounds.ptr(),
+                     flux_dn_tilt.ptr(), flux_dn.ptr());
+             Tilted_column_cuda::copy_twostream_fluxes_gpu<<<grid_3d_lev, block_3d_lev>>>(
+                     gd.itot, gd.jtot, gd.ktot, n_lev,
+                     center_path.ptr(), center_path_bounds.ptr(),
+                     flux_dn_dir_tilt.ptr(), flux_dn_dir.ptr());
+             Tilted_column_cuda::copy_twostream_fluxes_gpu<<<grid_3d_lev, block_3d_lev>>>(
+                     gd.itot, gd.jtot, gd.ktot, n_lev,
+                     center_path.ptr(), center_path_bounds.ptr(),
+                     flux_up_tilt.ptr(), flux_up.ptr());
+             Tilted_column_cuda::copy_twostream_fluxes_gpu<<<grid_3d_lev, block_3d_lev>>>(
+                     gd.itot, gd.jtot, gd.ktot, n_lev,
+                     center_path.ptr(), center_path_bounds.ptr(),
+                     flux_net_tilt.ptr(), flux_net.ptr());
+
+//            Tilted_column_cuda::translate_twostream_fluxes_gpu<<<grid_3d_lev, block_3d_lev>>>(
+//                    gd.itot, gd.jtot, gd.ktot, n_lev,
+//                    center_path.ptr(), center_path_bounds.ptr(),
+//                    flux_dn_tilt.ptr(), flux_dn.ptr());
+//            Tilted_column_cuda::translate_twostream_fluxes_gpu<<<grid_3d_lev, block_3d_lev>>>(
+//                    gd.itot, gd.jtot, gd.ktot, n_lev,
+//                    center_path.ptr(), center_path_bounds.ptr(),
+//                    flux_dn_dir_tilt.ptr(), flux_dn_dir.ptr());
+//            Tilted_column_cuda::translate_twostream_fluxes_gpu<<<grid_3d_lev, block_3d_lev>>>(
+//                    gd.itot, gd.jtot, gd.ktot, n_lev,
+//                    center_path.ptr(), center_path_bounds.ptr(),
+//                    flux_up_tilt.ptr(), flux_up.ptr());
+//            Tilted_column_cuda::translate_twostream_fluxes_gpu<<<grid_3d_lev, block_3d_lev>>>(
+//                    gd.itot, gd.jtot, gd.ktot, n_lev,
+//                    center_path.ptr(), center_path_bounds.ptr(),
+//                    flux_net_tilt.ptr(), flux_net.ptr());
         }
         else
         {
@@ -1906,6 +1973,10 @@ void Radiation_rrtmgp<TF>::exec(
                             t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a,
                             compute_clouds, n_col);
 
+                    Array_gpu<ijk,1> center_path;
+                    Array_gpu<Float,1> center_zh_tilt;
+                    Array_gpu<int,1> center_path_bounds;
+
                     if (sw_homogenize_hr_sw)
                     {
                         auto thlt = fields.get_tmp_g();
@@ -1938,16 +2009,105 @@ void Radiation_rrtmgp<TF>::exec(
                     }
                     else
                     {
-                        calc_tendency<<<gridGPU_3d, blockGPU_3d>>>(
-                                fields.sd.at("thlt_rad")->fld_g,
-                                flux_up.ptr(), flux_dn.ptr(),
-                                fields.rhoref_g, thermo.get_basestate_fld_g("exner"),
-                                gd.dz_g,
-                                gd.istart, gd.jstart, gd.kstart,
-                                gd.iend, gd.jend, gd.kend,
-                                gd.igc, gd.jgc, gd.kgc,
-                                gd.icells, gd.ijcells,
-                                gd.imax, gd.imax*gd.jmax);
+                        if (!sw_tica || mu0 < 0.087)
+                        {
+                            calc_tendency<<<gridGPU_3d, blockGPU_3d>>>(
+                                    fields.sd.at("thlt_rad")->fld_g,
+                                    flux_up.ptr(), flux_dn.ptr(),
+                                    fields.rhoref_g, thermo.get_basestate_fld_g("exner"),
+                                    gd.dz_g,
+                                    gd.istart, gd.jstart, gd.kstart,
+                                    gd.iend, gd.jend, gd.kend,
+                                    gd.igc, gd.jgc, gd.kgc,
+                                    gd.icells, gd.ijcells,
+                                    gd.imax, gd.imax*gd.jmax);
+                        }
+                        else
+                        {
+                            // calc tendency straight and store in tmp
+                            auto thlt_tilt = fields.get_tmp_g();
+                            cudaMemset(thlt_tilt->fld_g, 0, gd.ntot*sizeof(Float));
+                            auto thlt_trans = fields.get_tmp_g();
+                            cudaMemset(thlt_trans->fld_g, 0, gd.ntot*sizeof(Float));
+
+                            Float zenith_angle = std::acos(mu0);
+                            Float azimuth_angle;
+                            Float mu0_dummy;
+                            const int day_of_year = int(timeloop.calc_day_of_year());
+                            const int year = timeloop.get_year();
+                            const Float seconds_after_midnight = Float(timeloop.calc_hour_of_day()*3600);
+                            std::tie(mu0_dummy, azimuth_angle) = calc_cos_zenith_angle(
+                                    gd.lat, gd.lon, day_of_year, seconds_after_midnight, year);
+
+                            std::vector<TF> zh_nogc(gd.zh.begin() + gd.kstart, gd.zh.begin() + gd.kend+1);
+                            Array<Float,1> zh_a(zh_nogc, {int(gd.ktot + 1)});
+                            Array_gpu<Float,1> zh_a_gpu(zh_a);
+
+                            std::vector<TF> z_nogc (gd.z. begin() + gd.kstart, gd.z. begin() + gd.kend  );
+                            std::vector<TF> xh_nogc(gd.xh.begin() + gd.istart, gd.xh.begin() + gd.iend+1);
+                            std::vector<TF> yh_nogc(gd.yh.begin() + gd.jstart, gd.yh.begin() + gd.jend+1);
+
+                            Array<Float,1> xh_a(xh_nogc, {int(gd.itot + 1)});
+                            Array<Float,1> yh_a(yh_nogc, {int(gd.jtot + 1)});
+                            Array<Float,1> z_a(z_nogc, {int(gd.ktot)});
+                            Array_gpu<Float,1> z_a_gpu(z_a);
+
+                            Float tica_sza;
+                            Float tica_azi;
+
+                            tica_sza = zenith_angle;
+                            tica_azi = azimuth_angle;
+
+                            // calculate center path for tilted columns
+                            Array<ijk,1> center_path_cpu;
+                            Array<Float,1> center_zh_tilt_cpu;
+                            Array<int,1> center_path_bounds_cpu({gd.ktot + 1});
+
+                            create_tilted_path(xh_a.v(),yh_a.v(),zh_a.v(),z_a.v(),tica_sza, tica_azi, 0.5, 0.5, center_path_cpu.v(), center_zh_tilt_cpu.v());
+
+                            int n_zh_tilt_center = center_zh_tilt_cpu.v().size();
+                            center_path_cpu.set_dims({n_zh_tilt_center});
+                            center_zh_tilt_cpu.set_dims({n_zh_tilt_center});
+
+                            get_tilted_path_bounds(n_zh_tilt_center, center_path_cpu.v(), center_path_bounds_cpu.v());
+
+                            center_path = center_path_cpu;
+                            center_path_bounds = center_path_bounds_cpu;
+                            center_zh_tilt = center_zh_tilt_cpu;
+
+                            calc_tendency_nogc<<<gridGPU_3d, blockGPU_3d>>>(
+                                    thlt_tilt->fld_g,
+                                    flux_up.ptr(), flux_dn.ptr(),
+                                    fields.rhoref_g, thermo.get_basestate_fld_g("exner"),
+                                    gd.dz_g,
+                                    gd.istart, gd.jstart, gd.kstart,
+                                    gd.iend, gd.jend, gd.kend,
+                                    gd.igc, gd.jgc, gd.kgc,
+                                    gd.icells, gd.ijcells,
+                                    gd.imax, gd.imax*gd.jmax);
+
+                            Tilted_column_cuda::translate_absorption_gpu_simple<<<gridGPU_3d, blockGPU_3d>>>(
+                                    gd.imax, gd.jmax, gd.kmax, gd.kmax,
+                                    center_path.ptr(), center_path_bounds.ptr(),
+                                    thlt_tilt->fld_g, thlt_trans->fld_g);
+
+//                            Array_gpu<Float, 2> tmp_tilt(thlt_tilt->fld_g, {gd.imax*gd.jmax, gd.kmax});
+//                            tmp_tilt.dump("thlt_tilt");
+//                            Array_gpu<Float, 2> tmp_trans(thlt_trans->fld_g, {gd.imax*gd.jmax, gd.kmax});
+//                            tmp_trans.dump("thlt_trans");
+
+                            add_tendency_and_ghost_cells<<<gridGPU_3d, blockGPU_3d>>>(
+                                    fields.sd.at("thlt_rad")->fld_g,
+                                    thlt_trans->fld_g,
+                                    gd.istart, gd.jstart, gd.kstart,
+                                    gd.iend, gd.jend, gd.kend,
+                                    gd.igc, gd.jgc, gd.kgc,
+                                    gd.icells, gd.ijcells,
+                                    gd.imax, gd.imax*gd.jmax);
+
+                            fields.release_tmp_g(thlt_tilt);
+                            fields.release_tmp_g(thlt_trans);
+                        }
                         cuda_check_error();
                     }
 
