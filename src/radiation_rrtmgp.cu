@@ -1531,7 +1531,7 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
         fluxes.reduce(gpt_flux_up, gpt_flux_dn, gpt_flux_dn_dir, optical_props_subset_in, top_at_1);
 
         // Copy the data to the output.
-        if (do_tilting)
+        if (sw_tica && compute_clouds)
         {
             Subset_kernels_cuda::get_from_subset(
                     n_col, n_lev, n_col_in, col_s_in, flux_up_tilt.ptr(), flux_dn_tilt.ptr(), flux_dn_dir_tilt.ptr(), flux_net_tilt.ptr(),
