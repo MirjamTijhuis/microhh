@@ -214,6 +214,26 @@ namespace Thermo_moist_functions
         return f;
     }
 
+    template<typename TF>
+    CUDA_MACRO inline TF f_E(const TF p, const TF T, const TF qt, const TF tl)
+    {
+
+        const TF ql = qt - qsat_liq(p, T);
+        const TF f = - tl + T * pow(1 + (Lv<TF> * ql) / (cp<TF> * T), -1) ;
+
+        return f;
+    }
+
+    template<typename TF>
+    CUDA_MACRO inline TF f_F(const TF p, const TF T, const TF qt, const TF tl)
+    {
+
+        const TF ql = qt - qsat_liq(p, T);
+        const TF f = - tl + T * pow(1 + (Lv<TF> * ql) / (cp<TF> * std::max(T, TF(253))), -1) ;
+
+        return f;
+    }
+
 //    template<typename TF>
 //    CUDA_MACRO inline TF f_prime_pro(const TF p, const TF T, const TF qt)
 //    {
@@ -283,13 +303,26 @@ namespace Thermo_moist_functions
             {
                 ++niter;
                 tnr_old = tnr;
-                qs = qsat_liq(p, tnr);
+                const TF epsilon = 0.01;
+
+                // BF04 D
+                // qs = qsat_liq(p, tnr);
                 // const TF f = tnr - tl - Lv<TF>/cp<TF>*(qt - qs);
                 // const TF f_prime = TF(1.) + Lv<TF>/cp<TF>*dqsatdT_liq(p, tnr);
-                const TF f = f_pro(p, tnr, qt, thl);
+
+                // BF04 H
+                // const TF f = f_pro(p, tnr, qt, thl);
                 // const TF f_prime = f_prime_pro(p, tnr, qt);
-                const TF epsilon = 0.01;
-                const TF f_prime = (f_pro(p, tnr+epsilon, qt, thl) - f_pro(p, tnr-epsilon, qt, thl))/(2*epsilon);
+                // const TF f_prime = (f_pro(p, tnr+epsilon, qt, thl) - f_pro(p, tnr-epsilon, qt, thl))/(2*epsilon);
+
+                // BF04 E
+                // const TF f = f_E(p, tnr, qt, tl);
+                // const TF f_prime = (f_E(p, tnr + epsilon, qt, tl) - f_E(p, tnr - epsilon, qt, tl))/(2*epsilon);
+
+                // BF04 F
+                const TF f = f_F(p, tnr, qt, tl);
+                const TF f_prime = (f_F(p, tnr + epsilon, qt, tl) - f_F(p, tnr - epsilon, qt, tl))/(2*epsilon);
+
                 tnr -= f / f_prime;
             }
 
