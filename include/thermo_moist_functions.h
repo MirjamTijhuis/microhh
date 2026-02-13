@@ -104,12 +104,13 @@ namespace Thermo_moist_functions
         const TF x = fmin(fmax(TF(-75.), T-T0<TF>), TF(50.));       // Limit the temperature range to avoid numerical errors
         #else
         // const TF x = std::max(TF(-75.), T-T0<TF>);
-        const TF x = std::min(std::max(TF(-75.), T-T0<TF>), TF(50.));     // Limit the temperature range to avoid numerical errors
+        // const TF x = std::min(std::max(TF(-75.), T-T0<TF>), TF(50.));     // Limit the temperature range to avoid numerical errors
+        const TF x = std::min(std::max(TF(-100.), T-T0<TF>), TF(50.));
         #endif
 
-        // return TF(611.21)*std::exp(TF(17.502)*x / (TF(240.97)+x));
-        return c00<TF>+x*(c10<TF>+x*(c20<TF>+x*(c30<TF>+x*(c40<TF>+x*(c50<TF>+x*(c60<TF>+x*(c70<TF>+x*(c80<TF>+x*(c90<TF>+x*c100<TF>)))))))));
-	// return TF(610.78)*std::exp(TF(17.269)*x / (TF(237.29)+x));
+        return TF(611.21)*std::exp(TF(17.502)*x / (TF(240.97)+x));
+        //return c00<TF>+x*(c10<TF>+x*(c20<TF>+x*(c30<TF>+x*(c40<TF>+x*(c50<TF>+x*(c60<TF>+x*(c70<TF>+x*(c80<TF>+x*(c90<TF>+x*c100<TF>)))))))));
+	    // return TF(610.78)*std::exp(TF(17.269)*x / (TF(237.29)+x));
     }
 
     template<typename TF>
@@ -202,8 +203,13 @@ namespace Thermo_moist_functions
         const TF ql = qt - qsat_liq(p, T);
         const TF rh = std::min(qt / qsat_liq(p, T), TF(1.));
 
+        const TF cl = TF(4186);
+        const TF lv1 = Lv<TF> + (cl - cpv<TF>) * T0<TF>;
+        const TF lv2 = cl - cpv<TF>;
+        const TF lv = lv1 - lv2 * T;
+
         const TF f = -thl + T * pow((p0<TF>/p), chi) * pow((1 - ql / (epsilon + qt)), chi) * pow((1 - ql / qt), -gamma)
-                * std::exp(((-Lv<TF> * ql) / ((cp<TF> + cpv<TF> * qt) * T)) + + ((Rv<TF> * ql * std::log(rh))/(cp<TF> + cpv<TF> * qt)));
+                * std::exp(((-lv * ql) / ((cp<TF> + cpv<TF> * qt) * T)) + + ((Rv<TF> * ql * std::log(rh))/(cp<TF> + cpv<TF> * qt)));
 
         return f;
     }
