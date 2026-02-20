@@ -234,6 +234,24 @@ namespace Thermo_moist_functions
         return f;
     }
 
+    template<typename TF>
+    CUDA_MACRO inline TF f_G(const TF p, const TF T, const TF qt, const TF thl)
+    {
+        const TF chi = (Rd<TF> + Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
+        const TF gamma = (Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
+        const TF epsilon = Rd<TF>  / Rv<TF>;
+        const TF ql = qt - qsat_liq(p, T);
+
+        const TF cl = TF(4186);
+        const TF lv1 = Lv<TF> + (cl - cpv<TF>) * T0<TF>;
+        const TF lv2 = cl - cpv<TF>;
+        // const TF lv = lv1 - lv2 * T;
+
+        const TF f = -thl + T * pow((p0<TF>/p), chi) * pow((1 - ql / (epsilon + qt)), chi) * pow((1 - ql / qt), -gamma)
+                            * std::exp(((-Lv<TF> * ql) / ((cp<TF> + cpv<TF> * qt) * T)));
+        return f;
+    }
+
 //    template<typename TF>
 //    CUDA_MACRO inline TF f_prime_pro(const TF p, const TF T, const TF qt)
 //    {
@@ -306,9 +324,9 @@ namespace Thermo_moist_functions
                 const TF epsilon = 0.01;
 
                 // BF04 D
-                // qs = qsat_liq(p, tnr);
-                // const TF f = tnr - tl - Lv<TF>/cp<TF>*(qt - qs);
-                // const TF f_prime = TF(1.) + Lv<TF>/cp<TF>*dqsatdT_liq(p, tnr);
+                qs = qsat_liq(p, tnr);
+                const TF f = tnr - tl - Lv<TF>/cp<TF>*(qt - qs);
+                const TF f_prime = TF(1.) + Lv<TF>/cp<TF>*dqsatdT_liq(p, tnr);
 
                 // BF04 H
                 // const TF f = f_pro(p, tnr, qt, thl);
@@ -320,8 +338,12 @@ namespace Thermo_moist_functions
                 // const TF f_prime = (f_E(p, tnr + epsilon, qt, tl) - f_E(p, tnr - epsilon, qt, tl))/(2*epsilon);
 
                 // BF04 F
-                const TF f = f_F(p, tnr, qt, tl);
-                const TF f_prime = (f_F(p, tnr + epsilon, qt, tl) - f_F(p, tnr - epsilon, qt, tl))/(2*epsilon);
+                // const TF f = f_F(p, tnr, qt, tl);
+                // const TF f_prime = (f_F(p, tnr + epsilon, qt, tl) - f_F(p, tnr - epsilon, qt, tl))/(2*epsilon);
+
+                //BF04 G
+                // const TF f = f_G(p, tnr, qt, thl);
+                // const TF f_prime = (f_G(p, tnr+epsilon, qt, thl) - f_G(p, tnr-epsilon, qt, thl))/(2*epsilon);
 
                 tnr -= f / f_prime;
             }

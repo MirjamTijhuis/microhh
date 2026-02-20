@@ -330,6 +330,63 @@ namespace Sb_common
     }
 
     template<typename TF>
+    void calc_thermo_tendencies_from_T(
+            TF* const restrict thlt,
+            TF* const restrict qtt,
+            const TF* const restrict qrt,
+            const TF* const restrict qvt,
+            const TF* const restrict qct,
+            const TF* const restrict T_start,
+            const TF* const restrict qt,
+            const TF* const restrict qc_end,
+            const TF* const restrict thl_start,
+            const double dt,
+            const TF* const restrict p,
+            const TF* const restrict exner,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int jstride, const int kstride,
+            const int k)
+    {
+        const TF cl = 4186;
+        const TF lv1 = Lv<TF> + (cl - cpv<TF>) * T0<TF>;
+        const TF lv2 = cl - cpv<TF>;
+
+        for (int j = jstart; j < jend; j++)
+        #pragma ivdep
+                for (int i = istart; i < iend; i++)
+                {
+                    const int ij  = i + j * jstride;
+                    const int ijk = i + j * jstride + k*kstride;
+
+                    // absolute temperature change as in ICON using constant Lv and Lf as in ICON
+                    const TF dT = -(Ls<TF>/cp<TF>) * qvt[ij] - (Lf<TF>/cp<TF>) * (qrt[ij] + qct[ij]);
+                    const TF T_end = T_start[ij] + dT;
+
+                    // thl4 / G from BF04 incl. temperature dependent latent heat
+                    // const TF Lv_T = lv1 - lv2 * T_end;
+
+                    const TF chi = (Rd<TF> + Rv<TF> * qt[ij]) / (cp<TF> + cpv<TF> * qt[ij]);
+                    const TF gamma = (Rv<TF> * qt[ij]) / (cp<TF> + cpv<TF> * qt[ij]);
+                    const TF epsilon = Rd<TF>  / Rv<TF>;
+
+                    // const TF thl_end = T_end * pow((p0<TF>/p[k]), chi) * pow((1 - qc_end[ij] / (epsilon + qt[ij])), chi)
+                    //         * pow((1 - qc_end[ij] / qt[ij]), -gamma) * std::exp((-Lv<TF> * qc_end[ij]) / ((cp<TF> + cpv<TF> * qt[ij]) * T_end));
+
+                    // thl1/D from BF04
+                    const TF thl_end = T_end/exner[k] - Lv<TF>*qc_end[ij]/(cp<TF> * exner[k]);
+
+                    // tendencies
+                    TF qtt_mcr = (qvt[ij] + qct[ij])/dt;
+                    TF thlt_mcr = (thl_end - thl_start[ij])/dt;
+
+                    qtt[ijk] += qtt_mcr;
+                    thlt[ijk] += thlt_mcr;
+
+                }
+    }
+
+    template<typename TF>
     void diagnose_tendency(
             TF* const restrict tend,
             TF* const restrict fld_old,
@@ -410,6 +467,56 @@ namespace Sb_common
                     const int ij = i + j * jstride;
                     tend[ij] += rho_i * (fld_new[ij] - fld_old[ij]) * dt_i;
 
+                }
+    }
+
+    template<typename TF>
+    void diagnose_conversion_temp(
+            TF* const restrict temp_conv,
+            const TF* const restrict tend,
+            const TF* const restrict fld_old,
+            const TF* const restrict fld_new,
+            const TF* const restrict rho,
+            const double dt,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int jstride, const int kstride,
+            const int k)
+    {
+        const TF rho_i = TF(1) / rho[k];
+
+        for (int j = jstart; j < jend; j++)
+        #pragma ivdep
+                for (int i = istart; i < iend; i++)
+                {
+                    const int ij = i + j * jstride;
+                    const int ijk= i + j * jstride + k*kstride;
+
+                    // Evaluate tendencies. This includes the tendencies only from conversions not from implicit sedimentation.
+                    // `Old` versions are integrated first with only the dynamics tendencies to avoid double counting.
+                    temp_conv[ij] += rho_i * (fld_new[ij] - (fld_old[ijk] + dt*rho[k]*tend[ijk]));
+                }
+    }
+
+    template<typename TF>
+    void diagnose_conversion_2d(
+            TF* const restrict conv,
+            TF* const restrict fld_old,
+            const TF* const restrict fld_new,
+            const TF* const restrict rho,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int jstride, const int kstride,
+            const int k)
+    {
+        const TF rho_i = TF(1) / rho[k];
+
+        for (int j = jstart; j < jend; j++)
+        #pragma ivdep
+                for (int i = istart; i < iend; i++)
+                {
+                    const int ij = i + j * jstride;
+                    conv[ij] += rho_i * (fld_new[ij] - fld_old[ij]);
                 }
     }
 }

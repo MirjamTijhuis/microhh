@@ -2288,31 +2288,67 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
         // diagnose tendencies in qc, qv, qr and qi for thl and qt tendency
         // MT: this is done before the implicit_time, as it is also done in ICON
-        Sb_common::diagnose_tendency_2d(
+//        Sb_common::diagnose_tendency_2d(
+//                (*qv_conversion_tend).data(),
+//                (*qv_old).data(),
+//                (*qv_new).data(),
+//                rho.data(),
+//                dt,
+//                gd.istart, gd.iend,
+//                gd.jstart, gd.jend,
+//                gd.icells, gd.ijcells,
+//                k
+//        );
+//
+//        Sb_common::diagnose_tendency_2d(
+//                (*qc_conversion_tend).data(),
+//                (*ql_old).data(),
+//                (*ql_new).data(),
+//                rho.data(),
+//                dt,
+//                gd.istart, gd.iend,
+//                gd.jstart, gd.jend,
+//                gd.icells, gd.ijcells,
+//                k
+//        );
+//
+//        Sb_common::diagnose_tendency_temp(
+//                (*qr_conversion_tend).data(),
+//                fields.st.at("qr")->fld.data(),
+//                fields.sp.at("qr")->fld.data(),
+//                hydro_types.at("qr").slice,
+//                rho.data(),
+//                dt,
+//                gd.istart, gd.iend,
+//                gd.jstart, gd.jend,
+//                gd.icells, gd.ijcells,
+//                k
+//        );
+
+        // MT: diagnose the conversion rather than the tendency to compute dT as in ICON
+        Sb_common::diagnose_conversion_2d(
                 (*qv_conversion_tend).data(),
                 (*qv_old).data(),
                 (*qv_new).data(),
                 rho.data(),
-                dt,
                 gd.istart, gd.iend,
                 gd.jstart, gd.jend,
                 gd.icells, gd.ijcells,
                 k
         );
 
-        Sb_common::diagnose_tendency_2d(
+        Sb_common::diagnose_conversion_2d(
                 (*qc_conversion_tend).data(),
                 (*ql_old).data(),
                 (*ql_new).data(),
                 rho.data(),
-                dt,
                 gd.istart, gd.iend,
                 gd.jstart, gd.jend,
                 gd.icells, gd.ijcells,
                 k
         );
 
-        Sb_common::diagnose_tendency_temp(
+        Sb_common::diagnose_conversion_temp(
                 (*qr_conversion_tend).data(),
                 fields.st.at("qr")->fld.data(),
                 fields.sp.at("qr")->fld.data(),
@@ -2373,13 +2409,35 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         // Calculate thermodynamic tendencies `thl` and `qt`,
         // from microphysics tendencies excluding sedimentation.
 
-        Sb_common::calc_thermo_tendencies_cloud_ice<TF>(
+//        Sb_common::calc_thermo_tendencies_cloud_ice<TF>(
+//                fields.st.at("thl")->fld.data(),
+//                fields.st.at("qt")->fld.data(),
+//                (*qr_conversion_tend).data(),
+//                (*qv_conversion_tend).data(),
+//                (*qc_conversion_tend).data(),
+//                rho.data(),
+//                exner.data(),
+//                gd.istart, gd.iend,
+//                gd.jstart, gd.jend,
+//                gd.icells, gd.ijcells,
+//                k);
+
+        // convert qt and ql back `kg m-3` to `kg kg-1`
+        convert_units_short_slice((*ql_new).data(), !to_kgm3, k);
+        convert_units_short_slice((*qt_slice).data(), !to_kgm3, k);
+
+        Sb_common::calc_thermo_tendencies_from_T(
                 fields.st.at("thl")->fld.data(),
                 fields.st.at("qt")->fld.data(),
                 (*qr_conversion_tend).data(),
                 (*qv_conversion_tend).data(),
                 (*qc_conversion_tend).data(),
-                rho.data(),
+                (*T_slice).data(),
+                (*qt_slice).data(),
+                (*ql_new).data(),
+                (*thl_slice).data(),
+                dt,
+                p.data(),
                 exner.data(),
                 gd.istart, gd.iend,
                 gd.jstart, gd.jend,
