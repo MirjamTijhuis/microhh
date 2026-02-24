@@ -195,27 +195,6 @@ namespace Thermo_moist_functions
     }
 
     template<typename TF>
-    CUDA_MACRO inline TF f_pro(const TF p, const TF T, const TF qt, const TF thl)
-    {
-        const TF chi = (Rd<TF> + Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
-        const TF gamma = (Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
-        const TF epsilon = Rd<TF>  / Rv<TF>;
-        const TF ql = qt - qsat_liq(p, T);
-        const TF rh = std::min(qt / qsat_liq(p, T), TF(1.));
-
-        const TF cl = TF(4186);
-        const TF lv1 = Lv<TF> + (cl - cpv<TF>) * T0<TF>;
-        const TF lv2 = cl - cpv<TF>;
-        const TF lv = lv1 - lv2 * T;
-
-        const TF f = -thl + T * pow((p0<TF>/p), chi) * pow((1 - ql / (epsilon + qt)), chi) * pow((1 - ql / qt), -gamma)
-                * std::exp(((-lv * ql) / ((cp<TF> + cpv<TF> * qt) * T)) + + ((Rv<TF> * ql * std::log(rh))/(cp<TF> + cpv<TF> * qt)));
-
-        return f;
-    }
-
-
-    template<typename TF>
     CUDA_MACRO inline TF f_D(const TF p, const TF T, const TF qt, const TF tl)
     {
         const TF qs = qsat_liq(p, T);
@@ -262,7 +241,30 @@ namespace Thermo_moist_functions
         return f;
     }
 
-//    template<typename TF>
+    template<typename TF>
+    CUDA_MACRO inline TF f_H(const TF p, const TF T, const TF qt, const TF thl)
+    {
+        const TF chi = (Rd<TF> + Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
+        const TF gamma = (Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
+        const TF epsilon = Rd<TF>  / Rv<TF>;
+        const TF ql = std::max(qt - qsat_liq(p, T), TF(0));
+        const TF qv = std::min(qt, qsat_liq(p, T));
+
+        const TF rh = qv / qsat_liq(p, T);
+
+        const TF cl = TF(4186);
+        const TF lv1 = Lv<TF> + (cl - cpv<TF>) * T0<TF>;
+        const TF lv2 = cl - cpv<TF>;
+        const TF Lv_T = lv1 - lv2 * T;
+
+        const TF f = -thl + T * pow((p0<TF>/p), chi) * pow((1 - ql / (epsilon + qt)), chi) * pow((1 - ql / qt), -gamma)
+                            * std::exp(((-Lv_T * ql) / ((cp<TF> + cpv<TF> * qt) * T)) + + ((Rv<TF> * ql * std::log(rh))/(cp<TF> + cpv<TF> * qt)));
+
+        return f;
+    }
+
+
+    //    template<typename TF>
 //    CUDA_MACRO inline TF f_prime_pro(const TF p, const TF T, const TF qt)
 //    {
 //        const TF chi = (Rd<TF> + Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
@@ -355,13 +357,12 @@ namespace Thermo_moist_functions
                 // const TF f_prime = (f_F(p, tnr + epsilon, qt, tl) - f_F(p, tnr - epsilon, qt, tl))/(2*epsilon);
 
                 //BF04 G
-                const TF f = f_G(p, tnr, qt, thl);
-                const TF f_prime = (f_G(p, tnr+epsilon, qt, thl) - f_G(p, tnr-epsilon, qt, thl))/(2*epsilon);
+                // const TF f = f_G(p, tnr, qt, thl);
+                // const TF f_prime = (f_G(p, tnr+epsilon, qt, thl) - f_G(p, tnr-epsilon, qt, thl))/(2*epsilon);
 
                 // BF04 H
-                // const TF f = f_pro(p, tnr, qt, thl);
-                // const TF f_prime = f_prime_pro(p, tnr, qt);
-                // const TF f_prime = (f_pro(p, tnr+epsilon, qt, thl) - f_pro(p, tnr-epsilon, qt, thl))/(2*epsilon);
+                 const TF f = f_H(p, tnr, qt, thl);
+                 const TF f_prime = (f_H(p, tnr+epsilon, qt, thl) - f_H(p, tnr-epsilon, qt, thl))/(2*epsilon);
 
                 tnr -= f / f_prime;
             }
