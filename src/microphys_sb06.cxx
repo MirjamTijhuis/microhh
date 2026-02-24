@@ -2425,6 +2425,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         // convert qt and ql back `kg m-3` to `kg kg-1`
         convert_units_short_slice((*ql_new).data(), !to_kgm3, k);
         convert_units_short_slice((*qt_slice).data(), !to_kgm3, k);
+        convert_units_short_slice((*qv_new).data(), !to_kgm3, k);
 
         Sb_common::calc_thermo_tendencies_from_T(
                 fields.st.at("thl")->fld.data(),
@@ -2435,6 +2436,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 (*T_slice).data(),
                 (*qt_slice).data(),
                 (*ql_new).data(),
+                (*qv_new).data(),
                 (*thl_slice).data(),
                 dt,
                 p.data(),
