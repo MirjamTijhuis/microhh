@@ -380,9 +380,6 @@ void Model<TF>::exec()
                 // Calculate the thermodynamics and the buoyancy tendency.
                 thermo->exec(timeloop->get_sub_time_step(), *stats);
 
-                // Calculate the microphysics.
-                microphys->exec(*thermo, *timeloop, *stats);
-
                 // Calculate the radiation fluxes and the related heating rate.
                 radiation->exec(*thermo, timeloop->get_time(), *timeloop, *stats, *aerosol, *background, *microphys);
 
@@ -428,6 +425,9 @@ void Model<TF>::exec()
 
                 // Apply the limiter as the last tendency.
                 limiter->exec(timeloop->get_sub_time_step(), *stats);
+
+                // Calculate the microphysics.
+                microphys->exec(*thermo, *timeloop, *stats);
 
                 // Calculate the total tendency statistics, if necessary
                 for (auto& it: fields->at)

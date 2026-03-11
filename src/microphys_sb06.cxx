@@ -127,7 +127,9 @@ Microphys_sb06<TF>::Microphys_sb06(
         NOTE2:  Unlike ICON, we don't support interpolation of the LUT inside the
                 code. `dmin_wetgrowth_lookup_61.nc` is the LUT from ICON, but
                 interpolated offline using `interpolate_dmin_table.py` in
-                microhh_root/misc.
+                microhh_root/misc/lookup_tables_sb06.
+        NOTE3:  ICON can generate a lookup table on the fly if a_geo/b_geo/a_vel/b_vel are changed.
+                We don't have that option, hence the coefficients cannot be changed ...
     */
     const std::string dmin_file_name = "dmin_wetgrowth_lookup_61.nc";
 
@@ -1045,6 +1047,10 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
     }
 
+    if (sw_debug)
+        for (auto& it : hydro_types)
+            it.second.negatives = 0;
+
     // Store tendencies `qv` and `qc` (which are not prognostic variables),
     // for calculating the `thl` and `qt` tendencies.
     auto qv_conversion_tend = fields.get_tmp_xy();
@@ -1083,34 +1089,88 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
     auto check = [&](const std::string& name,
             const TF* const restrict qv_new,
             const TF* const restrict ql_new,
-            const TF q_sum_old)
+            const TF q_sum_old,
+            const bool check_conservation)
     {
         if (!sw_debug)
             return;
 
         // Check if sum of all qx is equal to the sum of all qx at the beginning of the microphysics
         // i.e. if total q is conserved.
+        // and check if all qx > 0 (ICON uses -1e-12)
+        // const TF meps = -std::numeric_limits<TF>::epsilon();
+        const TF meps = -1e-12;
+        // const TF meps = - std::numeric_limits<TF>::epsilon();
+        int negatives_vapour = 0;
+        int negatives_cloud = 0;
+
         TF q_sum_new = TF(0);
 
         for (int j=gd.jstart; j<gd.jend; ++j)
+        #pragma ivdep
             for (int i=gd.istart; i<gd.iend; ++i)
             {
                 const int ij = i + j*gd.icells;
 
                 for (auto& it : hydro_types)
+                {
                     if (it.second.is_mass)
+                    {
                         q_sum_new += it.second.slice[ij];
+                    }
+                }
 
                 // Add diagnosed qv and qc tendencies
-                q_sum_new += (qv_new)[ij];
-                q_sum_new += (ql_new)[ij];
+                q_sum_new += qv_new[ij];
+                q_sum_new += ql_new[ij];
+
+                if (qv_new[ij] < meps)
+                    negatives_vapour += 1;
+
+                if (ql_new[ij] < meps)
+                    negatives_cloud += 1;
+
+                for (auto& it : hydro_types)
+                {
+                    if (it.second.slice[ij] < meps)
+                    {
+                        it.second.negatives += 1;
+                    }
+                }
             }
 
-        if (std::abs(q_sum_old - q_sum_new) > 1e-16)
+        master.sum(&q_sum_new, 1);
+        master.sum(&negatives_vapour, 1);
+        master.sum(&negatives_cloud, 1);
+        for (auto& it : hydro_types)
+            master.sum(&it.second.negatives, 1);
+
+        if (check_conservation && std::abs(q_sum_old - q_sum_new)/q_sum_old > TF(1e-4))
         {
             std::string error = "ERROR, SB06 water not conserved after " + name + ", difference in sum q = " +
                     std::to_string(std::abs(q_sum_old - q_sum_new));
             throw std::runtime_error(error);
+        }
+
+        if (negatives_vapour > 0)
+        {
+            std::string error = "ERROR, SB06 qv became negative after " + name;
+            throw std::runtime_error(error);
+        }
+
+        if (negatives_cloud > 0)
+        {
+            std::string error = "ERROR, SB06 qc became negative after " + name;
+            throw std::runtime_error(error);
+        }
+
+        for (auto& it : hydro_types)
+        {
+            if (it.second.negatives > 0)
+            {
+                std::string error = "ERROR, SB06 " + it.second.long_name + " became negative after " + name;
+                throw std::runtime_error(error);
+            }
         }
     };
 
@@ -1208,29 +1268,31 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
     for (auto& it : hydro_types)
         convert_units_short(fields.ap.at(it.first)->fld.data(), to_kgm3);
 
-    // Set to default values where qnx=0 and qx0>0
-    timer.start("set_default_n");
-    Sb_cold::set_default_n_warm(
-            fields.ap.at("qr")->fld.data(),
-            fields.ap.at("nr")->fld.data(),
-            gd.istart, gd.iend,
-            gd.jstart, gd.jend,
-            gd.kstart, gd.kend,
-            gd.icells, gd.ijcells);
-
-    if (sw_ice)
-        Sb_cold::set_default_n_cold(
-                fields.ap.at("qi")->fld.data(),
-                fields.ap.at("ni")->fld.data(),
-                fields.ap.at("qs")->fld.data(),
-                fields.ap.at("ns")->fld.data(),
-                fields.ap.at("qg")->fld.data(),
-                fields.ap.at("ng")->fld.data(),
-                gd.istart, gd.iend,
-                gd.jstart, gd.jend,
-                gd.kstart, gd.kend,
-                gd.icells, gd.ijcells);
-    timer.stop("set_default_n");
+//    // Set to default values where qnx=0 and qx0>0
+//    // MT: this basically acts also as a limiter as it also applies when qnx < 0
+//    // would be better after integration
+//    timer.start("set_default_n");
+//    Sb_cold::set_default_n_warm(
+//            fields.ap.at("qr")->fld.data(),
+//            fields.ap.at("nr")->fld.data(),
+//            gd.istart, gd.iend,
+//            gd.jstart, gd.jend,
+//            gd.kstart, gd.kend,
+//            gd.icells, gd.ijcells);
+//
+//    if (sw_ice)
+//        Sb_cold::set_default_n_cold(
+//                fields.ap.at("qi")->fld.data(),
+//                fields.ap.at("ni")->fld.data(),
+//                fields.ap.at("qs")->fld.data(),
+//                fields.ap.at("ns")->fld.data(),
+//                fields.ap.at("qg")->fld.data(),
+//                fields.ap.at("ng")->fld.data(),
+//                gd.istart, gd.iend,
+//                gd.jstart, gd.jend,
+//                gd.kstart, gd.kend,
+//                gd.icells, gd.ijcells);
+//    timer.stop("set_default_n");
 
     // auto ql = fields.get_tmp();
     // auto T = fields.get_tmp();
@@ -1311,6 +1373,9 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 gd.icells, gd.ijcells,
                 k);
 
+        check("start", (*qv_new).data(), (*ql_new).data(), TF(0), false);
+        // check_nx("pre-integration");
+
         for (auto& it : hydro_types)
         {
             // Copy 3D fields to 2D slices, and do partial
@@ -1341,23 +1406,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     // (*ql_old).data()[ij] = ql->fld.data()[k*gd.ijcells + ij];
                     // (*ql_new).data()[ij] = ql->fld.data()[k*gd.ijcells + ij];
                 }
-
-
-        // calculate the sum of all q's for mass conservation check
-        TF q_sum_old = TF(0);
-        for (int j=gd.jstart; j<gd.jend; ++j)
-            for (int i=gd.istart; i<gd.iend; ++i)
-            {
-                const int ij = i + j*gd.icells;
-
-                for (auto& it : hydro_types)
-                    if (it.second.is_mass)
-                        q_sum_old += it.second.slice[ij];
-
-                // Add diagnosed qv and qc tendencies
-                q_sum_old += (*qv_old).data()[ij];
-                q_sum_old += (*ql_old).data()[ij];
-            }
 
         // Zero diagnostic qx tendencies.
         zero_tmp_xy(qv_conversion_tend);
@@ -1425,6 +1473,19 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 micro_budget.set_humidities(specie, sum, k);
             }
         }
+
+        // limit here
+        // it seems the best way to guarantee positive values only at the start of the microphysical processes, without creating more than needed
+        for (auto& it : hydro_types)
+        {
+            Sb_common::limit_slice(it.second.slice,
+                                   gd.istart, gd.iend,
+                                   gd.jstart, gd.jend,
+                                   gd.icells);
+        }
+
+        check("integration", (*qv_new).data(), (*ql_new).data(), TF(0), false);
+        // check_nx("post-integration");
 
         // Density correction fall speeds
         // In ICON, `rhocorr` is written into the cloud/rain/etc particle types as `rho_v`.
@@ -1532,7 +1593,26 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
            Calculate microphysics processes.
            These are the new kernels ported from ICON.
         */
-        check("start", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+
+        // calculate the sum of all q's AFTER IMPLICIT CORE for mass conservation check per level
+        TF q_sum_old = TF(0);
+        for (int j=gd.jstart; j<gd.jend; ++j)
+        #pragma ivdep
+                for (int i=gd.istart; i<gd.iend; ++i)
+                {
+                    const int ij = i + j*gd.icells;
+
+                    for (auto& it : hydro_types)
+                        if (it.second.is_mass)
+                            q_sum_old += it.second.slice[ij];
+
+                    // Add diagnosed qv and qc tendencies
+                    q_sum_old += (*qv_old).data()[ij];
+                    q_sum_old += (*ql_old).data()[ij];
+                }
+        master.sum(&q_sum_old, 1);
+
+        check("implicit core", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
 
         if (nuc_c_typ == 0)
             std::fill((*nc_fld).begin(), (*nc_fld).end(), this->Nc0);
@@ -1552,6 +1632,32 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         //      CALL ccn_activation_sk_4d(ik_slice,ccn_coeffs,atmo,cloud)
         //   END IF
         //END IF
+
+        // Set to default values where qnx=0 and qx0>0
+        timer.start("set_default_n");
+        Sb_cold::set_default_n_warm_slice(
+                hydro_types.at("qr").slice,
+                hydro_types.at("nr").slice,
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.kstart, gd.kend,
+                gd.icells, gd.ijcells);
+
+        if (sw_ice)
+            Sb_cold::set_default_n_cold_slice(
+                    hydro_types.at("qi").slice,
+                    hydro_types.at("ni").slice,
+                    hydro_types.at("qs").slice,
+                    hydro_types.at("ns").slice,
+                    hydro_types.at("qg").slice,
+                    hydro_types.at("ng").slice,
+                    hydro_types.at("qh").slice,
+                    hydro_types.at("nh").slice,
+                    gd.istart, gd.iend,
+                    gd.jstart, gd.jend,
+                    gd.kstart, gd.kend,
+                    gd.icells, gd.ijcells);
+        timer.stop("set_default_n");
 
         if (sw_ice)
         {
@@ -1582,7 +1688,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("ice_nucleation");
-            check("ice_nucleation", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("ice_nucleation", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("nucleation_ice", {"qv", "qi", "ni"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Homogeneous freezing of cloud droplets
@@ -1599,7 +1705,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("cloud_freeze");
-            check("cloud_freeze", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("cloud_freeze", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("cloud_freeze", {"qc", "nc", "qi", "ni"}, (*qv_new).data(), (*ql_new).data(), k);
 
 
@@ -1642,7 +1748,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("vapor_dep");
-            check("vapor_dep_relaxation", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("vapor_dep_relaxation", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("vapor_deposition", {"qv", "qi", "ni", "qs", "ns", "qg", "ng", "qh", "nh"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Ice-ice collisions -> forms snow.
@@ -1663,7 +1769,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qi_selfc");
-            check("ice_selfcollection", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("ice_selfcollection", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("selfcollection_ice", {"qi", "ni", "qs", "ns"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Selfcollection of snow
@@ -1680,7 +1786,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qs_selfc");
-            check("snow_selfcollection", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("snow_selfcollection", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("selfcollection_snow", {"ns"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Selfcollection of graupel.
@@ -1697,7 +1803,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qg_selfc");
-            check("graupel_selfcollection", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("graupel_selfcollection", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("selfcollection_graupel", {"ng"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Collection of ice by snow.
@@ -1716,7 +1822,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qiqs_coll");
-            check("particle_particle_collection snow-ice", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("particle_particle_collection snow-ice", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("pp_collection_ice_to_snow", {"qs", "qi", "ni"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Collection of ice by graupel.
@@ -1735,7 +1841,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qiqg_coll");
-            check("particle_particle_collection graupel-ice", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("particle_particle_collection graupel-ice", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("pp_collection_ice_to_graupel", {"qg", "qi", "ni"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Collection of snow by graupel.
@@ -1754,7 +1860,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qsqg_coll");
-            check("particle_particle_collection graupel-snow", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("particle_particle_collection graupel-snow", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("pp_collection_snow_to_graupel", {"qg", "qs", "ns"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Collection of ice by hail.
@@ -1773,7 +1879,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qiqh_coll");
-            check("particle_particle_collection hail-ice", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("particle_particle_collection hail-ice", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("pp_collection_ice_to_hail", {"qh", "qi", "ni"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Collection of snow by hail.
@@ -1792,7 +1898,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qsqh_coll");
-            check("particle_particle_collection hail-snow", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("particle_particle_collection hail-snow", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("pp_collection_snow_to_hail", {"qh", "qs", "ns"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Conversion of graupel to hail in wet growth regime
@@ -1820,7 +1926,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qgqh_conv");
-            check("graupel_hail_conv_wet_gamlook", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("graupel_hail_conv_wet_gamlook", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("conversion_graupel_to_hail", {"qg", "ng", "qh", "nh"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Riming of ice with cloud droplets and rain drops, and conversion to graupel
@@ -1852,7 +1958,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qi_riming");
-            check("ice_riming", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("ice_riming", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("riming_ice", {"qc", "nc", "qi", "ni", "qr", "nr", "qg", "ng"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Riming of snow with cloud droplets and rain drops, and conversion to graupel
@@ -1886,7 +1992,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qs_riming");
-            check("snow_riming", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("snow_riming", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("riming_snow", {"qc", "nc", "qs", "ns", "qi", "ni", "qr", "nr", "qg", "ng"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Hail-cloud riming
@@ -1912,7 +2018,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qhqc_riming");
-            check("particle_cloud_riming hail-cloud", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("particle_cloud_riming hail-cloud", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("riming_hail_cloud", {"qh", "nh", "qc", "nc", "qi", "ni", "qr", "nr"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Hail-rain riming
@@ -1935,7 +2041,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qhqr_riming");
-            check("particle_rain_riming hail-rain", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("particle_rain_riming hail-rain", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("riming_hail_rain", {"qh", "nh", "qr", "nr", "qi", "ni"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Graupel-cloud riming
@@ -1961,7 +2067,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qgqc_riming");
-            check("particle_cloud_riming graupel-cloud", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("particle_cloud_riming graupel-cloud", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("riming_graupel_cloud", {"qg", "ng", "qc", "nc", "qi", "ni", "qr", "nr"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Graupel-rain riming
@@ -1984,7 +2090,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qgqr_riming");
-            check("particle_rain_riming graupel-rain", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("particle_rain_riming graupel-rain", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("riming_graupel_rain", {"qg", "ng", "qr", "nr", "qi", "ni"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Freezing of rain and conversion to ice/graupel/hail
@@ -2015,7 +2121,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qr_freeze");
-            check("rain_freeze_gamlook", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("rain_freeze_gamlook", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("freezing_rain", {"qi", "ni", "qr", "nr", "qg", "ng", "qh", "nh"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Melting of ice
@@ -2034,7 +2140,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qi_melt");
-            check("ice_melting", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("ice_melting", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("melting_ice", {"qi", "ni", "qr", "nr", "qc", "nc"}, (*qv_new).data(), (*ql_new).data(), k);
 
             timer.start("qs_melt");
@@ -2053,7 +2159,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qs_melt");
-            check("snow_melting", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("snow_melting", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("melting_snow", {"qs", "ns", "qr", "nr"}, (*qv_new).data(), (*ql_new).data(), k);
 
             // Melting of graupel and hail can be simple or LWF-based
@@ -2076,7 +2182,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qg_melt");
-            check("graupel_melting", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("graupel_melting", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("melting_graupel", {"qg", "ng", "qr", "nr"}, (*qv_new).data(), (*ql_new).data(), k);
 
             //TYPE IS (particle_lwf)
@@ -2104,7 +2210,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qh_melt");
-            check("hail_melting", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("hail_melting", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("melting_hail", {"qh", "nh", "qr", "nr"}, (*qv_new).data(), (*ql_new).data(), k);
 
             //TYPE IS (particle_lwf)
@@ -2126,7 +2232,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qi_evap");
-            check("evaporation of snow", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("evaporation of snow", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("evaporation_ice", {"qv", "qs", "ns"}, (*qv_new).data(), (*ql_new).data(), k);
 
             timer.start("qg_evap");
@@ -2143,7 +2249,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qg_evap");
-            check("evaporation of graupel", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("evaporation of graupel", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("evaporation_graupel", {"qv", "qg", "ng"}, (*qv_new).data(), (*ql_new).data(), k);
 
             timer.start("qh_evap");
@@ -2160,7 +2266,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.jstart, gd.jend,
                     gd.icells);
             timer.stop("qh_evap");
-            check("evaporation of hail", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("evaporation of hail", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("evaporation_hail", {"qv", "qh", "nh"}, (*qv_new).data(), (*ql_new).data(), k);
         }
 
@@ -2196,7 +2302,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.icells, gd.ijcells,
                     k);
             timer.stop("qr_auto");
-            check("autoconversionSB", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("autoconversionSB", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("autoconversion_rain", {"qc", "qr", "nr"}, (*qv_new).data(), (*ql_new).data(), k);
 
             timer.start("qr_accr");
@@ -2210,7 +2316,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.icells, gd.ijcells,
                     k);
             timer.stop("qr_accr");
-            check("accretionSB", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("accretionSB", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("accretion_rain", {"qc", "qr"}, (*qv_new).data(), (*ql_new).data(), k);
 
             timer.start("qr_selfc");
@@ -2225,7 +2331,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.icells, gd.ijcells,
                     k);
             timer.stop("qr_selfc");
-            check("rain_selfcollectionSB", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+            check("rain_selfcollectionSB", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
             tendencies("selfcollection_rain", {"nr"}, (*qv_new).data(), (*ql_new).data(), k);
         }
 
@@ -2250,7 +2356,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 gd.icells, gd.ijcells,
                 k);
         timer.stop("qr_evap");
-        check("rain_evaporation", (*qv_new).data(), (*ql_new).data(), q_sum_old);
+        check("rain_evaporation", (*qv_new).data(), (*ql_new).data(), q_sum_old, true);
         tendencies("evaporation_rain", {"qv", "qr", "nr"}, (*qv_new).data(), (*ql_new).data(), k);
 
         auto limit_sizes_wrapper = [&](

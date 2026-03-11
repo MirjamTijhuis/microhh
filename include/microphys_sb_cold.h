@@ -269,13 +269,22 @@ namespace Sb_cold
     }
 
     template<typename TF>
-    inline TF set_qnh(const TF qh)
+    inline TF set_qnh_Dmean(const TF qh)
     {
         const TF Dmean = TF(5e-3);    // Diameter of mean particle mass
         const TF rhob_hail = TF(750); // assumed bulk density of hail
 
         //!set_qnh = qh * 6.0_wp / (pi * rhob_hail * Dmean**3.0_wp)
         return qh * TF(6) / (Constants::pi<TF> * rhob_hail * std::exp(std::log(Dmean)*TF(3)) );
+    }
+
+    template<typename TF>
+    inline TF set_qnh_expPSD_N0const(const TF qh, const TF rhobulk_hail, const TF N0_h)
+    {
+        if (qh >= TF(1e-20))
+                return N0_h * std::exp( std::log ( qh / ( Constants::pi<TF> * rhobulk_hail * N0_h) ) * (TF(0.25)) );
+        else
+            return TF(0);
     }
 
 
@@ -316,6 +325,41 @@ namespace Sb_cold
     }
 
     template<typename TF>
+    void set_default_n_warm_slice(
+            TF* const restrict qr,
+            TF* const restrict nr,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int jstride, const int kstride)
+    {
+        // Set to a default number concentration in places with qnx = 0 and qx !=0
+
+        const TF eps = TF(1e-3);
+
+        // TODO for prognostic qc/nc:
+        //if (qc && nc)
+        //{
+        //    for (int j=jstart; j<jend; ++j)
+        //        for (int i=istart; i<iend; ++i)
+        //        {
+        //            const int ij = i + j*jstride;
+        //            if (qc[ij] > TF(0) && nc[ij] < eps)
+        //                nc[ij] = set_qnc(qc[ij]);
+        //        }
+        //}
+
+        for (int j=jstart; j<jend; ++j)
+            for (int i=istart; i<iend; ++i)
+            {
+                const int ij = i + j*jstride;
+
+                if (qr[ij] > TF(0) && nr[ij] < eps)
+                    nr[ij] = set_qnr(qr[ij]);
+            }
+    }
+
+    template<typename TF>
     void set_default_n_cold(
             TF* const restrict qi,
             TF* const restrict ni,
@@ -349,6 +393,46 @@ namespace Sb_cold
 
                     // BvS: What about qh/nh? There is a `set_qnh()` function,
                     //      but is never called in ICON.
+                }
+    }
+
+    template<typename TF>
+    void set_default_n_cold_slice(
+            TF* const restrict qi,
+            TF* const restrict ni,
+            TF* const restrict qs,
+            TF* const restrict ns,
+            TF* const restrict qg,
+            TF* const restrict ng,
+            TF* const restrict qh,
+            TF* const restrict nh,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int jstride, const int kstride)
+    {
+        // Set to a default number concentration in places with qnx = 0 and qx !=0
+
+        const TF eps = TF(1e-3);
+
+        for (int j=jstart; j<jend; ++j)
+            for (int i=istart; i<iend; ++i)
+            {
+                const int ij = i + j*jstride;
+
+                if (qi[ij] > TF(0) && ni[ij] < eps)
+                    ni[ij] = set_qni(qi[ij]);
+
+                if (qs[ij] > TF(0) && ns[ij] < eps)
+                    ns[ij] = set_qns(qs[ij]);
+
+                if (qg[ij] > TF(0) && ng[ij] < eps)
+                {
+                    ng[ij] = set_qng(qg[ij]);
+                }
+
+                if (qh[ij] > TF(0) && nh[ij] < eps)
+                    nh[ij] = set_qnh_expPSD_N0const(qh[ij], TF(750), TF(1e6));
                 }
     }
 
@@ -865,7 +949,25 @@ namespace Sb_cold
                 if (qi[ij] > Sb_cold::q_crit<TF> && qp[ij] > Sb_cold::q_crit<TF>)
                 {
                     //.. Sticking efficiency of Lin (1983)
-                    const TF e_coll = std::min(std::exp(TF(0.09) * (Ta[ij] - Constants::T0<TF>)), TF(1));
+                    // const TF e_coll = std::min(std::exp(TF(0.09) * (Ta[ij] - Constants::T0<TF>)), TF(1));
+
+                    // piecewise linear sticking efficiency with maximum at -15 C,
+                    // inspired by Figure 14 of Connolly et al. ACP 2012, doi:10.5194/acp-12-2055-2012
+                    // ! Value at -40 C is based on Kajikawa and Heymsfield as cited by Philips et al. (2015, JAS)
+                    const TF T_c = Ta[ij] - Constants::T0<TF>;
+                    TF e_coll;
+                    if (T_c >= TF(0))
+                        e_coll = TF(0.14);
+                    else if (T_c >= TF(-10))
+                        e_coll = -TF(0.01)*(T_c+TF(10))+TF(0.24);
+                    else if (T_c >= TF(-15))
+                        e_coll = TF(-0.08)*(T_c+TF(15))+TF(0.64);
+                    else if (T_c >= TF(-20))
+                        e_coll =  TF(0.10)*(T_c+TF(20))+TF(0.14);
+                    else if (T_c >= TF(-40))
+                        e_coll = TF(0.005)*(T_c+TF(40))+TF(0.04);
+                    else
+                        e_coll =  TF(0.04);
 
                     const TF xp = particle_meanmass(ptype, qp[ij], np[ij]);
                     const TF dp = particle_diameter(ptype, xp);
@@ -1258,7 +1360,28 @@ namespace Sb_cold
                 if (qs[ij] > q_crit<TF>)
                 {
                     //.. Temperaturabhaengige sticking efficiency nach Lin (1983)
-                    const TF e_coll = std::min(std::exp(TF(0.09)*(T[ij]-Constants::T0<TF>)), TF(1.0));
+                    // const TF e_coll = std::min(std::exp(TF(0.09)*(T[ij]-Constants::T0<TF>)), TF(1.0));
+
+                    // piecewise linear sticking efficiency with maximum at -15 C,
+                    // inspired by Figure 14 of Connolly et al. ACP 2012, doi:10.5194/acp-12-2055-2012
+                    // ! Value at -40 C is based on Kajikawa and Heymsfield as cited by Philips et al. (2015, JAS)
+                    const TF T_c = T[ij] - Constants::T0<TF>;
+                    TF e_coll;
+                    if (T_c >= TF(0))
+                        e_coll = TF(0.14);
+                    else if (T_c >= TF(-10))
+                        e_coll = -TF(0.01)*(T_c+TF(10))+TF(0.24);
+                    else if (T_c >= TF(-15))
+                        e_coll = TF(-0.08)*(T_c+TF(15))+TF(0.64);
+                    else if (T_c >= TF(-20))
+                        e_coll =  TF(0.10)*(T_c+TF(20))+TF(0.14);
+                    else if (T_c >= TF(-40))
+                        e_coll = TF(0.005)*(T_c+TF(40))+TF(0.04);
+                    else
+                        e_coll =  TF(0.04);
+
+                    // with factor 0.5, i.e., the lower range of Figure 14
+                    e_coll *= TF(0.5);
 
                     const TF x_s = particle_meanmass(snow, qs[ij], ns[ij]);
                     const TF D_s = particle_diameter(snow, x_s);
@@ -2482,7 +2605,7 @@ namespace Sb_cold
                     }
 
                     qr[ij] -= fr_q;
-                    nr[ij] -= fr_n;
+                    nr[ij] = n_r - fr_n;
 
                     //if (use_prog_in) then;
                     //   n_inact[ij] = n_inact[ij] + fr_n;
@@ -2504,12 +2627,19 @@ namespace Sb_cold
                     // ! clipping of small negatives is necessary here
                     if (lclipping)
                     {
-                        if (qr[ij] < 0 and std::abs(qr[ij]) < eps){qr[ij] = TF(0);}
-                        if (nr[ij] < 0 and std::abs(nr[ij]) < eps){nr[ij] = TF(0);}
-                        if (qg[ij] < 0 and std::abs(qg[ij]) < eps){qg[ij] = TF(0);}
-                        if (ng[ij] < 0 and std::abs(ng[ij]) < eps){ng[ij] = TF(0);}
-                        if (qh[ij] < 0 and std::abs(qh[ij]) < eps){qh[ij] = TF(0);}
-                        if (nh[ij] < 0 and std::abs(nh[ij]) < eps){nh[ij] = TF(0);}
+                        if (qr[ij] < 0){qr[ij] = TF(0);}
+                        if (nr[ij] < 0){nr[ij] = TF(0);}
+                        if (qg[ij] < 0){qg[ij] = TF(0);}
+                        if (ng[ij] < 0){ng[ij] = TF(0);}
+                        if (qh[ij] < 0){qh[ij] = TF(0);}
+                        if (nh[ij] < 0){nh[ij] = TF(0);}
+
+//                        if (qr[ij] < 0 and std::abs(qr[ij]) < eps){qr[ij] = TF(0);}
+//                        if (nr[ij] < 0 and std::abs(nr[ij]) < eps){nr[ij] = TF(0);}
+//                        if (qg[ij] < 0 and std::abs(qg[ij]) < eps){qg[ij] = TF(0);}
+//                        if (ng[ij] < 0 and std::abs(ng[ij]) < eps){ng[ij] = TF(0);}
+//                        if (qh[ij] < 0 and std::abs(qh[ij]) < eps){qh[ij] = TF(0);}
+//                        if (nh[ij] < 0 and std::abs(nh[ij]) < eps){nh[ij] = TF(0);}
                     }
                 }
             } // i

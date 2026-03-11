@@ -237,6 +237,9 @@ struct Hydro_type
     TF* slice;
     TF* conversion_tend;
     TF* tmp1;
+
+    // integer to count negatives
+    int negatives;
 };
 
 template<typename TF>
