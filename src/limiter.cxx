@@ -98,18 +98,33 @@ void Limiter<TF>::exec(double dt, Stats<TF>& stats)
     // Add epsilon, to make sure the final result ends just above zero.
     // NOTE: don't use `eps<TF>` here; `eps<float>` is too large
     //       as a lower limit for e.g. hydrometeors or chemical species.
-    constexpr TF min_value = std::numeric_limits<double>::epsilon();
 
     for (auto& name : limit_list)
     {
-        tendency_limiter<TF>(
-                fields.at.at(name)->fld.data(),
-                fields.ap.at(name)->fld.data(),
-                min_value, dt,
-                gd.istart, gd.iend,
-                gd.jstart, gd.jend,
-                gd.kstart, gd.kend,
-                gd.icells, gd.ijcells);
+        if (name == "nr" || name == "ni" || name == "ns" || name == "nh" || name == "ng")
+        {
+            constexpr TF min_value = 1e-3;
+            tendency_limiter<TF>(
+                    fields.at.at(name)->fld.data(),
+                    fields.ap.at(name)->fld.data(),
+                    min_value, dt,
+                    gd.istart, gd.iend,
+                    gd.jstart, gd.jend,
+                    gd.kstart, gd.kend,
+                    gd.icells, gd.ijcells);
+        }
+        else
+        {
+            constexpr TF min_value = std::numeric_limits<double>::epsilon();
+            tendency_limiter<TF>(
+                    fields.at.at(name)->fld.data(),
+                    fields.ap.at(name)->fld.data(),
+                    min_value, dt,
+                    gd.istart, gd.iend,
+                    gd.jstart, gd.jend,
+                    gd.kstart, gd.kend,
+                    gd.icells, gd.ijcells);
+        }
 
         stats.calc_tend(*fields.at.at(name), tend_name);
     }

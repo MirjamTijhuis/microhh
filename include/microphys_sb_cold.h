@@ -2444,7 +2444,8 @@ namespace Sb_cold
         const TF a_HET = 6.5e-1;      // Data of Barklie and Gokhale (PK S.350)
         const TF b_HET = 2.0e+2;      //         Barklie and Gokhale (PK S.350)
 
-        const TF eps = 1e-15;         // for clipping
+        const TF eps_q = 1e-15;         // for clipping
+        const TF eps_n = 1e-3;         // for clipping
         const bool lclipping = true;
 
         const TF xmax_ice = std::pow( std::pow(cfg_params.D_rainfrz_ig / rain.a_geo, TF(1) / rain.b_geo), rain.mu);
@@ -2627,19 +2628,20 @@ namespace Sb_cold
                     // ! clipping of small negatives is necessary here
                     if (lclipping)
                     {
-                        if (qr[ij] < 0){qr[ij] = TF(0);}
-                        if (nr[ij] < 0){nr[ij] = TF(0);}
-                        if (qg[ij] < 0){qg[ij] = TF(0);}
-                        if (ng[ij] < 0){ng[ij] = TF(0);}
-                        if (qh[ij] < 0){qh[ij] = TF(0);}
-                        if (nh[ij] < 0){nh[ij] = TF(0);}
+//                        if (qr[ij] < 0){qr[ij] = TF(0);}
+//                        if (nr[ij] < 0){nr[ij] = TF(0);}
+//                        if (qg[ij] < 0){qg[ij] = TF(0);}
+//                        if (ng[ij] < 0){ng[ij] = TF(0);}
+//                        if (qh[ij] < 0){qh[ij] = TF(0);}
+//                        if (nh[ij] < 0){nh[ij] = TF(0);}
 
-//                        if (qr[ij] < 0 and std::abs(qr[ij]) < eps){qr[ij] = TF(0);}
-//                        if (nr[ij] < 0 and std::abs(nr[ij]) < eps){nr[ij] = TF(0);}
-//                        if (qg[ij] < 0 and std::abs(qg[ij]) < eps){qg[ij] = TF(0);}
-//                        if (ng[ij] < 0 and std::abs(ng[ij]) < eps){ng[ij] = TF(0);}
-//                        if (qh[ij] < 0 and std::abs(qh[ij]) < eps){qh[ij] = TF(0);}
-//                        if (nh[ij] < 0 and std::abs(nh[ij]) < eps){nh[ij] = TF(0);}
+                        if (qr[ij] < 0 and std::abs(qr[ij]) < eps_q){qr[ij] = TF(0);}
+                        if (qg[ij] < 0 and std::abs(qg[ij]) < eps_q){qg[ij] = TF(0);}
+                        if (qh[ij] < 0 and std::abs(qh[ij]) < eps_q){qh[ij] = TF(0);}
+
+                        if (nr[ij] < 0 and std::abs(nr[ij]) < eps_n){nr[ij] = TF(0);}
+                        if (ng[ij] < 0 and std::abs(ng[ij]) < eps_n){ng[ij] = TF(0);}
+                        if (nh[ij] < 0 and std::abs(nh[ij]) < eps_n){nh[ij] = TF(0);}
                     }
                 }
             } // i
