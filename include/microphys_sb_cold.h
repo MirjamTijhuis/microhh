@@ -299,7 +299,7 @@ namespace Sb_cold
     {
         // Set to a default number concentration in places with qnx = 0 and qx !=0
 
-        const TF eps = TF(1e-3);
+        const TF eps = std::nextafter<TF>(Constants::ni_lim<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_lim<TF>;
 
         // TODO for prognostic qc/nc:
         //if (qc && nc)
@@ -335,7 +335,7 @@ namespace Sb_cold
     {
         // Set to a default number concentration in places with qnx = 0 and qx !=0
 
-        const TF eps = TF(1e-3);
+        const TF eps = std::nextafter<TF>(Constants::ni_lim<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_lim<TF>;
 
         // TODO for prognostic qc/nc:
         //if (qc && nc)
@@ -374,7 +374,7 @@ namespace Sb_cold
     {
         // Set to a default number concentration in places with qnx = 0 and qx !=0
 
-        const TF eps = TF(1e-3);
+        const TF eps = std::nextafter<TF>(Constants::ni_lim<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_lim<TF>;
 
         for (int k=kstart; k<kend; ++k)
             for (int j=jstart; j<jend; ++j)
@@ -413,7 +413,7 @@ namespace Sb_cold
     {
         // Set to a default number concentration in places with qnx = 0 and qx !=0
 
-        const TF eps = TF(1e-3);
+        const TF eps = std::nextafter<TF>(Constants::ni_lim<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_lim<TF>;
 
         for (int j=jstart; j<jend; ++j)
             for (int i=istart; i<iend; ++i)
@@ -2445,7 +2445,7 @@ namespace Sb_cold
         const TF b_HET = 2.0e+2;      //         Barklie and Gokhale (PK S.350)
 
         const TF eps_q = 1e-15;         // for clipping
-        const TF eps_n = 1e-3;         // for clipping
+        const TF eps_n = std::nextafter<TF>(Constants::ni_lim<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_lim<TF>;
         const bool lclipping = true;
 
         const TF xmax_ice = std::pow( std::pow(cfg_params.D_rainfrz_ig / rain.a_geo, TF(1) / rain.b_geo), rain.mu);

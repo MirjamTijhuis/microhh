@@ -100,5 +100,8 @@ namespace Constants
     const double        dbig   = 1.e9;
     const double        dhuge  = 1.e30;
     const unsigned long ulhuge = ~0UL; //== ULONG_MAX;
+
+    // MT: typical values for hydrometeors used to define limits in limiter and microphys_sb06
+    template<typename TF> constexpr TF ni_lim    = 1e6;
 }
 #endif

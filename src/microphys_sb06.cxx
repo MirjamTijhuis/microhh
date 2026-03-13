@@ -1100,6 +1100,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         // and check if all qx > 0 (ICON uses -1e-12)
         // const TF meps = -std::numeric_limits<TF>::epsilon();
         const TF meps = -1e-12;
+        const TF n_eps = std::nextafter<TF>(Constants::ni_lim<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_lim<TF>;
         // const TF meps = - std::numeric_limits<TF>::epsilon();
         int negatives_vapour = 0;
         int negatives_cloud = 0;
@@ -1132,9 +1133,19 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
                 for (auto& it : hydro_types)
                 {
-                    if (it.second.slice[ij] < meps)
+                    if (!it.second.is_mass)
                     {
-                        it.second.negatives += 1;
+                        if (it.second.slice[ij] < -n_eps)
+                        {
+                            it.second.negatives += 1;
+                        }
+                    }
+                    else
+                    {
+                        if (it.second.slice[ij] < meps)
+                        {
+                            it.second.negatives += 1;
+                        }
                     }
                 }
             }

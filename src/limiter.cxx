@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <cmath>
 #include "master.h"
 #include "grid.h"
 #include "fields.h"
@@ -103,7 +104,7 @@ void Limiter<TF>::exec(double dt, Stats<TF>& stats)
     {
         if (name == "nr" || name == "ni" || name == "ns" || name == "nh" || name == "ng")
         {
-            constexpr TF min_value = 1e-3;
+            const TF min_value = std::nextafter<TF>(Constants::ni_lim<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_lim<TF>;
             tendency_limiter<TF>(
                     fields.at.at(name)->fld.data(),
                     fields.ap.at(name)->fld.data(),
