@@ -299,7 +299,7 @@ namespace Sb_cold
     {
         // Set to a default number concentration in places with qnx = 0 and qx !=0
 
-        const TF eps = std::nextafter<TF>(Constants::ni_lim<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_lim<TF>;
+        const TF eps = std::nextafter<TF>(Constants::nr_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nr_ref<TF>;
 
         // TODO for prognostic qc/nc:
         //if (qc && nc)
@@ -335,7 +335,7 @@ namespace Sb_cold
     {
         // Set to a default number concentration in places with qnx = 0 and qx !=0
 
-        const TF eps = std::nextafter<TF>(Constants::ni_lim<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_lim<TF>;
+        const TF eps = std::nextafter<TF>(Constants::nr_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nr_ref<TF>;
 
         // TODO for prognostic qc/nc:
         //if (qc && nc)
@@ -367,6 +367,8 @@ namespace Sb_cold
             TF* const restrict ns,
             TF* const restrict qg,
             TF* const restrict ng,
+            TF* const restrict qh,
+            TF* const restrict nh,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int kstart, const int kend,
@@ -374,7 +376,7 @@ namespace Sb_cold
     {
         // Set to a default number concentration in places with qnx = 0 and qx !=0
 
-        const TF eps = std::nextafter<TF>(Constants::ni_lim<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_lim<TF>;
+        TF eps;
 
         for (int k=kstart; k<kend; ++k)
             for (int j=jstart; j<jend; ++j)
@@ -382,17 +384,21 @@ namespace Sb_cold
                 {
                     const int ijk = i + j*jstride + k*kstride;
 
+                    eps = std::nextafter<TF>(Constants::ni_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_ref<TF>;
                     if (qi[ijk] > TF(0) && ni[ijk] < eps)
                         ni[ijk] = set_qni(qi[ijk]);
 
+                    eps = std::nextafter<TF>(Constants::ns_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ns_ref<TF>;
                     if (qs[ijk] > TF(0) && ns[ijk] < eps)
                         ns[ijk] = set_qns(qs[ijk]);
 
+                    eps = std::nextafter<TF>(Constants::ng_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ng_ref<TF>;
                     if (qg[ijk] > TF(0) && ng[ijk] < eps)
                         ng[ijk] = set_qng(qg[ijk]);
 
-                    // BvS: What about qh/nh? There is a `set_qnh()` function,
-                    //      but is never called in ICON.
+                    eps = std::nextafter<TF>(Constants::nh_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nh_ref<TF>;
+                    if (qh[ijk] > TF(0) && nh[ijk] < eps)
+                        nh[ijk] = set_qnh_expPSD_N0const(qh[ijk], TF(750), TF(1e6));
                 }
     }
 
@@ -413,24 +419,28 @@ namespace Sb_cold
     {
         // Set to a default number concentration in places with qnx = 0 and qx !=0
 
-        const TF eps = std::nextafter<TF>(Constants::ni_lim<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_lim<TF>;
+        TF eps;
 
         for (int j=jstart; j<jend; ++j)
             for (int i=istart; i<iend; ++i)
             {
                 const int ij = i + j*jstride;
 
+                eps = std::nextafter<TF>(Constants::ni_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_ref<TF>;
                 if (qi[ij] > TF(0) && ni[ij] < eps)
                     ni[ij] = set_qni(qi[ij]);
 
+                eps = std::nextafter<TF>(Constants::ns_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ns_ref<TF>;
                 if (qs[ij] > TF(0) && ns[ij] < eps)
                     ns[ij] = set_qns(qs[ij]);
 
+                eps = std::nextafter<TF>(Constants::ng_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ng_ref<TF>;
                 if (qg[ij] > TF(0) && ng[ij] < eps)
                 {
                     ng[ij] = set_qng(qg[ij]);
                 }
 
+                eps = std::nextafter<TF>(Constants::nh_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nh_ref<TF>;
                 if (qh[ij] > TF(0) && nh[ij] < eps)
                     nh[ij] = set_qnh_expPSD_N0const(qh[ij], TF(750), TF(1e6));
                 }
@@ -2445,7 +2455,9 @@ namespace Sb_cold
         const TF b_HET = 2.0e+2;      //         Barklie and Gokhale (PK S.350)
 
         const TF eps_q = 1e-15;         // for clipping
-        const TF eps_n = std::nextafter<TF>(Constants::ni_lim<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_lim<TF>;
+        // Clipping of number concentrations with largest n_ref (better too much clipped than continuing with negative values)
+        const TF eps_n = std::nextafter<TF>(Constants::ni_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_ref<TF>;
+
         const bool lclipping = true;
 
         const TF xmax_ice = std::pow( std::pow(cfg_params.D_rainfrz_ig / rain.a_geo, TF(1) / rain.b_geo), rain.mu);
@@ -2628,13 +2640,6 @@ namespace Sb_cold
                     // ! clipping of small negatives is necessary here
                     if (lclipping)
                     {
-//                        if (qr[ij] < 0){qr[ij] = TF(0);}
-//                        if (nr[ij] < 0){nr[ij] = TF(0);}
-//                        if (qg[ij] < 0){qg[ij] = TF(0);}
-//                        if (ng[ij] < 0){ng[ij] = TF(0);}
-//                        if (qh[ij] < 0){qh[ij] = TF(0);}
-//                        if (nh[ij] < 0){nh[ij] = TF(0);}
-
                         if (qr[ij] < 0 and std::abs(qr[ij]) < eps_q){qr[ij] = TF(0);}
                         if (qg[ij] < 0 and std::abs(qg[ij]) < eps_q){qg[ij] = TF(0);}
                         if (qh[ij] < 0 and std::abs(qh[ij]) < eps_q){qh[ij] = TF(0);}

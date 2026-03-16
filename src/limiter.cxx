@@ -102,31 +102,28 @@ void Limiter<TF>::exec(double dt, Stats<TF>& stats)
 
     for (auto& name : limit_list)
     {
-        if (name == "nr" || name == "ni" || name == "ns" || name == "nh" || name == "ng")
-        {
-            const TF min_value = std::nextafter<TF>(Constants::ni_lim<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_lim<TF>;
-            tendency_limiter<TF>(
-                    fields.at.at(name)->fld.data(),
-                    fields.ap.at(name)->fld.data(),
-                    min_value, dt,
-                    gd.istart, gd.iend,
-                    gd.jstart, gd.jend,
-                    gd.kstart, gd.kend,
-                    gd.icells, gd.ijcells);
-        }
+        TF min_value;
+        if (name == "nr")
+            min_value = std::nextafter<TF>(Constants::nr_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nr_ref<TF>;
+        else if (name == "ni")
+            min_value = std::nextafter<TF>(Constants::ni_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_ref<TF>;
+        else if (name == "ns")
+            min_value = std::nextafter<TF>(Constants::ns_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ns_ref<TF>;
+        else if (name == "nh")
+            min_value = std::nextafter<TF>(Constants::nh_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nh_ref<TF>;
+        else if (name == "ng")
+            min_value = std::nextafter<TF>(Constants::ng_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ng_ref<TF>;
         else
-        {
-            constexpr TF min_value = std::numeric_limits<double>::epsilon();
-            tendency_limiter<TF>(
-                    fields.at.at(name)->fld.data(),
-                    fields.ap.at(name)->fld.data(),
-                    min_value, dt,
-                    gd.istart, gd.iend,
-                    gd.jstart, gd.jend,
-                    gd.kstart, gd.kend,
-                    gd.icells, gd.ijcells);
-        }
+            min_value = std::numeric_limits<double>::epsilon();
 
+        tendency_limiter<TF>(
+                fields.at.at(name)->fld.data(),
+                fields.ap.at(name)->fld.data(),
+                min_value, dt,
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.kstart, gd.kend,
+                gd.icells, gd.ijcells);
         stats.calc_tend(*fields.at.at(name), tend_name);
     }
 
