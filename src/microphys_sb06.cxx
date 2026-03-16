@@ -1316,10 +1316,11 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
     // slices of ql to determine the tendency at the end
     auto ql_new = fields.get_tmp_xy();
     auto ql_old = fields.get_tmp_xy();
-    // slices to store integrated values of thl and qt
+    // slices to store integrated values of thl and qt and w
     auto qt_slice = fields.get_tmp_xy();
     auto thl_slice = fields.get_tmp_xy();
     auto T_slice = fields.get_tmp_xy();
+    auto w_slice = fields.get_tmp_xy();
 
     for (int k=gd.kend-1; k>=gd.kstart; --k)
     {
@@ -1339,6 +1340,15 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 (*thl_slice).data(),
                 fields.ap.at("thl")->fld.data(),
                 fields.st.at("thl")->fld.data(),
+                TF(dt),
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.icells, gd.ijcells, k);
+
+        Sb_common::copy_slice_and_integrate(
+                (*w_slice).data(),
+                fields.mp.at("w")->fld.data(),
+                fields.mt.at("w")->fld.data(),
                 TF(dt),
                 gd.istart, gd.iend,
                 gd.jstart, gd.jend,
@@ -1685,7 +1695,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     &fields.st.at("ina")->fld.data()[k*gd.ijcells],
                     (*ql_new).data(),
                     (*T_slice).data(),
-                    &fields.mp.at("w")->fld.data()[k*gd.ijcells],
+                    (*w_slice).data(),
                     afrac_dust.data(),
                     afrac_soot.data(),
                     afrac_orga.data(),
@@ -2617,6 +2627,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
     fields.release_tmp_xy(thl_slice);
     fields.release_tmp_xy(qt_slice);
     fields.release_tmp_xy(T_slice);
+    fields.release_tmp_xy(w_slice);
 
     fields.release_tmp_xy(tmpxy1);
     fields.release_tmp_xy(tmpxy2);
