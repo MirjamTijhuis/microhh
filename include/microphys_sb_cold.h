@@ -1684,8 +1684,13 @@ namespace Sb_cold
                     // .. Ice_cloud_riming
                     if (rime_rate_qc[ij] > TF(0))
                     {
-                        qi[ij] += rime_rate_qc[ij];
-                        qc[ij] -= rime_rate_qc[ij];
+                        TF rime_q = rime_rate_qc[ij];
+                        TF rime_n = rime_rate_nc[ij];
+                        rime_q = std::min(rime_q, qc[ij]);
+                        rime_n = std::min(rime_n, nc[ij]);
+
+                        qi[ij] += rime_q;
+                        qc[ij] -= rime_q;
                         // nc[ij] -= rime_rate_nc[ij];
 
                         if (Ta[ij] < Constants::T0<TF> && ice_multiplication)
@@ -1694,7 +1699,7 @@ namespace Sb_cold
                             TF mult_2 = (Ta[ij] - T_mult_max<TF>) * const4;
                             mult_1 = std::max(TF(0), std::min(mult_1, TF(1)));
                             mult_2 = std::max(TF(0), std::min(mult_2, TF(1)));
-                            const TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qc[ij];
+                            const TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_q;
 
                             ni[ij] += mult_n;
                         }
@@ -1703,9 +1708,14 @@ namespace Sb_cold
                     // .. Ice_rain_riming
                     if (rime_rate_qr[ij] > TF(0))
                     {
-                        qi[ij] += rime_rate_qr[ij];
-                        qr[ij] -= rime_rate_qr[ij];
-                        nr[ij] -= rime_rate_nr[ij];
+                        TF rime_q = rime_rate_qr[ij];
+                        TF rime_n = rime_rate_nr[ij];
+                        rime_q = std::min(qr[ij], rime_q);
+                        rime_n = std::min(nr[ij], rime_n);
+
+                        qi[ij] += rime_q;
+                        qr[ij] -= rime_q;
+                        nr[ij] -= rime_n;
 
                         // .. Ice multiplication
                         if (Ta[ij] < Constants::T0<TF> && ice_multiplication)
@@ -1714,7 +1724,7 @@ namespace Sb_cold
                             TF mult_2 = (Ta[ij] - T_mult_max<TF>) * const4;
                             mult_1 = std::max(TF(0), std::min(mult_1, TF(1)));
                             mult_2 = std::max(TF(0), std::min(mult_2, TF(1)));
-                            const TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qr[ij];
+                            const TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_q;
 
                             ni[ij] += mult_n;
                         }
@@ -1731,8 +1741,13 @@ namespace Sb_cold
                         const TF x_i = particle_meanmass(ice, qi[ij], ni[ij]);
                         const TF D_i = particle_diameter(ice, x_i);
 
-                        qi[ij] += rime_rate_qc[ij];
-                        qc[ij] -= rime_rate_qc[ij];
+                        TF rime_q = rime_rate_qc[ij];
+                        TF rime_n = rime_rate_nc[ij];
+                        rime_q = std::min(rime_q, qc[ij]);
+                        rime_n = std::min(rime_n, nc[ij]);
+
+                        qi[ij] += rime_q;
+                        qc[ij] -= rime_q;
                         // nc[ij] -= rime_rate_nc[ij];
 
                         // Ice multiplication;
@@ -1743,7 +1758,7 @@ namespace Sb_cold
                             TF mult_2 = (Ta[ij] - T_mult_max<TF>) * const4;
                             mult_1 = std::max(TF(0), std::min(mult_1, TF(1)));
                             mult_2 = std::max(TF(0), std::min(mult_2, TF(1)));
-                            const TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qc[ij];
+                            const TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_q;
 
                             ni[ij] += mult_n;
                         }
@@ -1752,7 +1767,7 @@ namespace Sb_cold
                         TF conv_q, conv_n;
                         if (D_i > D_conv_ig<TF> && Ta[ij] < cfg_params.Tmax_gr_rime)
                         {
-                            conv_q = (rime_rate_qc[ij] - mult_q) /
+                            conv_q = (rime_q - mult_q) /
                                 (const5 * (pi6<TF> * rho_i<TF> * fm::pow3(D_i) / x_i - TF(1)) );
                             conv_q = std::min(qi[ij], conv_q);
                             const TF x_i = particle_meanmass(ice, qi[ij], ni[ij]);
@@ -1801,7 +1816,7 @@ namespace Sb_cold
                             TF mult_2 = (Ta[ij] - T_mult_max<TF>) * const4;
                             mult_1 = std::max(TF(0), std::min(mult_1, TF(1)));
                             mult_2 = std::max(TF(0), std::min(mult_2, TF(1)));
-                            mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qr[ij];
+                            mult_n = C_mult<TF> * mult_1 * mult_2 * rime_qr;
                             mult_q = mult_n * ice.x_min;
                             mult_q = std::min(rime_qr, mult_q);
                         }
