@@ -113,6 +113,12 @@ void Limiter<TF>::exec(double dt, Stats<TF>& stats)
             min_value = std::nextafter<TF>(Constants::nh_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nh_ref<TF>;
         else if (name == "ng")
             min_value = std::nextafter<TF>(Constants::ng_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ng_ref<TF>;
+        else if (name == "qr" || name == "qi" || name == "qs" || name == "qh" || name == "qg")
+        #ifdef FLOAT_SINGLE
+            min_value = std::nextafter<TF>(Constants::q_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::q_ref<TF>;
+        #else
+            min_value = std::numeric_limits<double>::epsilon();
+        #endif
         else
             min_value = std::numeric_limits<double>::epsilon();
 

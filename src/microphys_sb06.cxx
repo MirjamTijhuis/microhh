@@ -1047,10 +1047,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
     }
 
-    if (sw_debug)
-        for (auto& it : hydro_types)
-            it.second.negatives = 0;
-
     // Store tendencies `qv` and `qc` (which are not prognostic variables),
     // for calculating the `thl` and `qt` tendencies.
     auto qv_conversion_tend = fields.get_tmp_xy();
@@ -1098,11 +1094,19 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         // Check if sum of all qx is equal to the sum of all qx at the beginning of the microphysics i.e. if total q is conserved.
         // and check if all qx > 0 (ICON uses -1e-12)
 
-        const TF meps = -1e-12;
+        TF meps;
+        #ifdef FLOAT_SINGLE
+        meps = -1e-10;
+        #else
+        meps = -1e-12;
+        #endif
+
         // MT: note that this n check is rather loose for e.g. hail this would be a huge negative number concentration
         const TF n_eps = std::nextafter<TF>(Constants::ni_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_ref<TF>;
         int negatives_vapour = 0;
         int negatives_cloud = 0;
+        for (auto& it : hydro_types)
+            it.second.negatives = 0;
 
         TF q_sum_new = TF(0);
 
