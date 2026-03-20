@@ -109,5 +109,6 @@ namespace Constants
     template<typename TF> constexpr TF ns_ref    = 1e10;
     template<typename TF> constexpr TF nh_ref    = 1e7;
     template<typename TF> constexpr TF ng_ref    = 1e8;
+    template<typename TF> constexpr TF q_ref     = 1e-3;
 }
 #endif
