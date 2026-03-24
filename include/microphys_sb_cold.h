@@ -2824,8 +2824,8 @@ namespace Sb_cold
                         conv_n = std::min(conv_n, n_g);
                         conv_q = std::min(conv_q, q_g);
 
-                        qg[ij] -= conv_q;
-                        ng[ij] -= conv_n;
+                        qg[ij] = q_g - conv_q;
+                        ng[ij] = n_g - conv_n;
 
                         qh[ij] += conv_q;
                         nh[ij] += conv_n;
