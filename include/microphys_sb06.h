@@ -348,6 +348,8 @@ class Microphys_sb06 : public Microphys<TF>
         bool sw_ice;            // Switch to enable the ice/snow/graupel/hail part of SB06.
         bool sw_microbudget;    // Output full microphysics budget terms
         bool sw_debug;          // Print debug info.
+        bool sw_check;          // Check for water conservations and negative values once per timestep
+        bool sw_thl_deep;       // Switch for thl formulation
         Satadjust_type sw_satadjust;      // satadjust liquid, ice or both
 
         //const int cloud_type = 2673;

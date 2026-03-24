@@ -64,6 +64,7 @@ Microphys_sb06<TF>::Microphys_sb06(
     // Read microphysics switches and settings
     sw_microbudget = inputin.get_item<bool>("micro", "swmicrobudget", "", false);
     sw_debug = inputin.get_item<bool>("micro", "swdebug", "", false);
+    sw_check = inputin.get_item<bool>("micro", "swcheck", "", false);
     sw_ice = inputin.get_item<bool>("micro", "swice", "", true);
 
     Nc0 = inputin.get_item<TF>("micro", "Nc0", "");
@@ -158,22 +159,29 @@ Microphys_sb06<TF>::Microphys_sb06(
     // Option to disable saturation adjustment ql and qi
     bool sw_satadjust_ql = inputin.get_item<bool>("thermo", "swsatadjust_ql", "", true);
     bool sw_satadjust_qi = inputin.get_item<bool>("thermo", "swsatadjust_qi", "", true);
+    sw_thl_deep = inputin.get_item<bool>("thermo", "swthldeep", "", false);
 
     // Option to disable saturation adjustment ql and qi (new).
     if (sw_satadjust_ql && sw_satadjust_qi)
-        sw_satadjust = Satadjust_type::Liquid_ice;
+        if (sw_thl_deep)
+            throw std::runtime_error("thl for deep convection not implemented for ice from saturation adjustment");
+        else
+            sw_satadjust = Satadjust_type::Liquid_ice;
     else if (sw_satadjust_ql)
-        sw_satadjust = Satadjust_type::Liquid;
+        if (!sw_thl_deep)
+            sw_satadjust = Satadjust_type::Liquid_shallow;
+        else
+            sw_satadjust = Satadjust_type::Liquid_deep;
     else
         sw_satadjust = Satadjust_type::Disabled;
-
 
     // Checks.
     if (sw_satadjust_qi)
         throw std::runtime_error("SB06 microphysics has prognostic ice, so diagnostic ice (swsatadjust_qi=true) is not allowed");
     if (!sw_satadjust_ql)
         throw std::runtime_error("SB06 microphysics requires liquid water from saturation adjustment, so swsatadjust_ql=false is not allowed");
-
+    if (sw_debug && sw_check)
+        throw std::runtime_error("Debug is the extended version of check, so combining them in not allowed");
 }
 
 template<typename TF>
@@ -1088,7 +1096,9 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             const TF q_sum_old,
             const bool check_conservation)
     {
-        if (!sw_debug)
+        if (!sw_debug and !sw_check)
+            return;
+        if (sw_check && name != "rain_evaporation")
             return;
 
         // Check if sum of all qx is equal to the sum of all qx at the beginning of the microphysics i.e. if total q is conserved.
@@ -1377,8 +1387,10 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
         if (sw_satadjust == Satadjust_type::Liquid_ice)
             calc_sat_adjust_wrapper.template operator()<Satadjust_type::Liquid_ice>();
-        else if (sw_satadjust == Satadjust_type::Liquid)
-            calc_sat_adjust_wrapper.template operator()<Satadjust_type::Liquid>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_sat_adjust_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_sat_adjust_wrapper.template operator()<Satadjust_type::Liquid_deep>();
         else
             calc_sat_adjust_wrapper.template operator()<Satadjust_type::Disabled>();
 
@@ -2574,7 +2586,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 gd.istart, gd.iend,
                 gd.jstart, gd.jend,
                 gd.icells, gd.ijcells,
-                k);
+                k, sw_thl_deep);
     }
 
     for (auto& it : hydro_types)

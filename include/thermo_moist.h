@@ -46,7 +46,7 @@ template<typename> class Timeloop;
  * the acceleration by buoyancy.
  */
 
-enum class Satadjust_type {Disabled, Liquid_ice, Liquid};
+enum class Satadjust_type {Disabled, Liquid_ice, Liquid_shallow, Liquid_deep};
 enum class Satadjust_field {Liquid, Ice, Liquid_ice, Temperature, Saturation_vapor};
 
 template<typename TF>

@@ -1023,12 +1023,19 @@ Thermo_moist<TF>::Thermo_moist(Master& masterin, Grid<TF>& gridin, Fields<TF>& f
     // Option to disable saturation adjustment ql and qi
     bool sw_satadjust_ql = inputin.get_item<bool>("thermo", "swsatadjust_ql", "", true);
     bool sw_satadjust_qi = inputin.get_item<bool>("thermo", "swsatadjust_qi", "", true);
+    bool sw_thl_deep = inputin.get_item<bool>("thermo", "swthldeep", "", false);
 
     // Option to disable saturation adjustment ql and qi (new).
     if (sw_satadjust_ql && sw_satadjust_qi)
-        sw_satadjust = Satadjust_type::Liquid_ice;
+        if (sw_thl_deep)
+            throw std::runtime_error("thl for deep convection not implemented for ice from saturation adjustment");
+        else
+            sw_satadjust = Satadjust_type::Liquid_ice;
     else if (sw_satadjust_ql)
-        sw_satadjust = Satadjust_type::Liquid;
+        if (!sw_thl_deep)
+            sw_satadjust = Satadjust_type::Liquid_shallow;
+        else
+            sw_satadjust = Satadjust_type::Liquid_deep;
     else
         sw_satadjust = Satadjust_type::Disabled;
 
@@ -1245,8 +1252,10 @@ void Thermo_moist<TF>::create_basestate(Input& inputin, Netcdf_handle& input_nc)
 
     if (sw_satadjust == Satadjust_type::Liquid_ice)
         calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_ice>();
-    else if (sw_satadjust == Satadjust_type::Liquid)
-        calc_base_state_wrapper.template operator()<Satadjust_type::Liquid>();
+    else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+        calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+    else if (sw_satadjust == Satadjust_type::Liquid_deep)
+        calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_deep>();
     else
         calc_base_state_wrapper.template operator()<Satadjust_type::Disabled>();
 
@@ -1326,8 +1335,10 @@ void Thermo_moist<TF>::exec(const double dt, Stats<TF>& stats)
 
         if (sw_satadjust == Satadjust_type::Liquid_ice)
             calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_ice>();
-        else if (sw_satadjust == Satadjust_type::Liquid)
-            calc_base_state_wrapper.template operator()<Satadjust_type::Liquid>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_deep>();
         else
             calc_base_state_wrapper.template operator()<Satadjust_type::Disabled>();
     }
@@ -1353,8 +1364,10 @@ void Thermo_moist<TF>::exec(const double dt, Stats<TF>& stats)
 
     if (sw_satadjust == Satadjust_type::Liquid_ice)
         calc_buoyancy_tend_2nd_wrapper.template operator()<Satadjust_type::Liquid_ice>();
-    else if (sw_satadjust == Satadjust_type::Liquid)
-        calc_buoyancy_tend_2nd_wrapper.template operator()<Satadjust_type::Liquid>();
+    else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+        calc_buoyancy_tend_2nd_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+    else if (sw_satadjust == Satadjust_type::Liquid_deep)
+        calc_buoyancy_tend_2nd_wrapper.template operator()<Satadjust_type::Liquid_deep>();
     else
         calc_buoyancy_tend_2nd_wrapper.template operator()<Satadjust_type::Disabled>();
 
@@ -1512,8 +1525,10 @@ void Thermo_moist<TF>::get_thermo_field(
 
         if (sw_satadjust == Satadjust_type::Liquid_ice)
             calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_ice>();
-        else if (sw_satadjust == Satadjust_type::Liquid)
-            calc_base_state_wrapper.template operator()<Satadjust_type::Liquid>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_deep>();
         else
             calc_base_state_wrapper.template operator()<Satadjust_type::Disabled>();
 
@@ -1559,8 +1574,10 @@ void Thermo_moist<TF>::get_thermo_field(
 
         if (sw_satadjust == Satadjust_type::Liquid_ice)
             calc_buoyancy_wrapper.template operator()<Satadjust_type::Liquid_ice>();
-        else if (sw_satadjust == Satadjust_type::Liquid)
-            calc_buoyancy_wrapper.template operator()<Satadjust_type::Liquid>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_buoyancy_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_buoyancy_wrapper.template operator()<Satadjust_type::Liquid_deep>();
         else
             calc_buoyancy_wrapper.template operator()<Satadjust_type::Disabled>();
 
@@ -1591,8 +1608,10 @@ void Thermo_moist<TF>::get_thermo_field(
 
         if (sw_satadjust == Satadjust_type::Liquid_ice)
             calc_buoyancy_h_wrapper.template operator()<Satadjust_type::Liquid_ice>();
-        else if (sw_satadjust == Satadjust_type::Liquid)
-            calc_buoyancy_h_wrapper.template operator()<Satadjust_type::Liquid>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_buoyancy_h_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_buoyancy_h_wrapper.template operator()<Satadjust_type::Liquid_deep>();
         else
             calc_buoyancy_h_wrapper.template operator()<Satadjust_type::Disabled>();
 
@@ -1604,8 +1623,10 @@ void Thermo_moist<TF>::get_thermo_field(
 
         if (sw_satadjust == Satadjust_type::Liquid_ice)
             calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid_ice, satadjust_field>();
-        else if (sw_satadjust == Satadjust_type::Liquid)
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid, satadjust_field>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid_shallow, satadjust_field>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid_deep, satadjust_field>();
         else
             calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Disabled, satadjust_field>();
     }
@@ -1630,8 +1651,10 @@ void Thermo_moist<TF>::get_thermo_field(
 
         if (sw_satadjust == Satadjust_type::Liquid_ice)
             calc_liquid_water_h_wrapper.template operator()<Satadjust_type::Liquid_ice>();
-        else if (sw_satadjust == Satadjust_type::Liquid)
-            calc_liquid_water_h_wrapper.template operator()<Satadjust_type::Liquid>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_liquid_water_h_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_liquid_water_h_wrapper.template operator()<Satadjust_type::Liquid_deep>();
         else
             calc_liquid_water_h_wrapper.template operator()<Satadjust_type::Disabled>();
 
@@ -1643,8 +1666,10 @@ void Thermo_moist<TF>::get_thermo_field(
 
         if (sw_satadjust == Satadjust_type::Liquid_ice)
             calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid_ice, satadjust_field>();
-        else if (sw_satadjust == Satadjust_type::Liquid)
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid, satadjust_field>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid_shallow, satadjust_field>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid_deep, satadjust_field>();
         else
             calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Disabled, satadjust_field>();
     }
@@ -1654,8 +1679,10 @@ void Thermo_moist<TF>::get_thermo_field(
 
         if (sw_satadjust == Satadjust_type::Liquid_ice)
             calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid_ice, satadjust_field>();
-        else if (sw_satadjust == Satadjust_type::Liquid)
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid, satadjust_field>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid_shallow, satadjust_field>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid_deep, satadjust_field>();
         else
             calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Disabled, satadjust_field>();
     }
@@ -1665,8 +1692,10 @@ void Thermo_moist<TF>::get_thermo_field(
 
         if (sw_satadjust == Satadjust_type::Liquid_ice)
             calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid_ice, satadjust_field>();
-        else if (sw_satadjust == Satadjust_type::Liquid)
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid, satadjust_field>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid_shallow, satadjust_field>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid_deep, satadjust_field>();
         else
             calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Disabled, satadjust_field>();
     }
@@ -1687,8 +1716,10 @@ void Thermo_moist<TF>::get_thermo_field(
 
         if (sw_satadjust == Satadjust_type::Liquid_ice)
             calc_relative_humidity_wrapper.template operator()<Satadjust_type::Liquid_ice>();
-        else if (sw_satadjust == Satadjust_type::Liquid)
-            calc_relative_humidity_wrapper.template operator()<Satadjust_type::Liquid>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_relative_humidity_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_relative_humidity_wrapper.template operator()<Satadjust_type::Liquid_deep>();
         else
             calc_relative_humidity_wrapper.template operator()<Satadjust_type::Disabled>();
 
@@ -1711,8 +1742,10 @@ void Thermo_moist<TF>::get_thermo_field(
 
         if (sw_satadjust == Satadjust_type::Liquid_ice)
             calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid_ice, satadjust_field>();
-        else if (sw_satadjust == Satadjust_type::Liquid)
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid, satadjust_field>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid_shallow, satadjust_field>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Liquid_deep, satadjust_field>();
         else
             calc_satadjust_fld_wrapper.template operator()<Satadjust_type::Disabled, satadjust_field>();
     }
@@ -1738,8 +1771,10 @@ void Thermo_moist<TF>::get_thermo_field(
 
         if (sw_satadjust == Satadjust_type::Liquid_ice)
             calc_Th_wrapper.template operator()<Satadjust_type::Liquid_ice>();
-        else if (sw_satadjust == Satadjust_type::Liquid)
-            calc_Th_wrapper.template operator()<Satadjust_type::Liquid>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_Th_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_Th_wrapper.template operator()<Satadjust_type::Liquid_deep>();
         else
             calc_Th_wrapper.template operator()<Satadjust_type::Disabled>();
 
@@ -1763,8 +1798,10 @@ void Thermo_moist<TF>::get_thermo_field(
 
         if (sw_satadjust == Satadjust_type::Liquid_ice)
             calc_thv_wrapper.template operator()<Satadjust_type::Liquid_ice>();
-        else if (sw_satadjust == Satadjust_type::Liquid)
-            calc_thv_wrapper.template operator()<Satadjust_type::Liquid>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_thv_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_thv_wrapper.template operator()<Satadjust_type::Liquid_deep>();
         else
             calc_thv_wrapper.template operator()<Satadjust_type::Disabled>();
     }
@@ -1820,8 +1857,10 @@ void Thermo_moist<TF>::get_radiation_fields(
 
     if (sw_satadjust == Satadjust_type::Liquid_ice)
         calc_radiation_fields_wrapper.template operator()<Satadjust_type::Liquid_ice>();
-    else if (sw_satadjust == Satadjust_type::Liquid)
-        calc_radiation_fields_wrapper.template operator()<Satadjust_type::Liquid>();
+    else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+        calc_radiation_fields_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+    else if (sw_satadjust == Satadjust_type::Liquid_deep)
+        calc_radiation_fields_wrapper.template operator()<Satadjust_type::Liquid_deep>();
     else
         calc_radiation_fields_wrapper.template operator()<Satadjust_type::Disabled>();
 }
@@ -1861,8 +1900,10 @@ void Thermo_moist<TF>::get_radiation_columns(
 
     if (sw_satadjust == Satadjust_type::Liquid_ice)
         calc_radiation_columns_wrapper.template operator()<Satadjust_type::Liquid_ice>();
-    else if (sw_satadjust == Satadjust_type::Liquid)
-        calc_radiation_columns_wrapper.template operator()<Satadjust_type::Liquid>();
+    else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+        calc_radiation_columns_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+    else if (sw_satadjust == Satadjust_type::Liquid_deep)
+        calc_radiation_columns_wrapper.template operator()<Satadjust_type::Liquid_deep>();
     else
         calc_radiation_columns_wrapper.template operator()<Satadjust_type::Disabled>();
 }
@@ -1899,8 +1940,10 @@ void Thermo_moist<TF>::get_land_surface_fields(
 
     if (sw_satadjust == Satadjust_type::Liquid_ice)
         calc_land_surface_fields_wrapper.template operator()<Satadjust_type::Liquid_ice>();
-    else if (sw_satadjust == Satadjust_type::Liquid)
-        calc_land_surface_fields_wrapper.template operator()<Satadjust_type::Liquid>();
+    else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+        calc_land_surface_fields_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+    else if (sw_satadjust == Satadjust_type::Liquid_deep)
+        calc_land_surface_fields_wrapper.template operator()<Satadjust_type::Liquid_deep>();
     else
         calc_land_surface_fields_wrapper.template operator()<Satadjust_type::Disabled>();
 }
