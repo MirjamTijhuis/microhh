@@ -2063,7 +2063,7 @@ namespace Sb_cold
                             conv_q = std::min(conv_q, qs[ij]);
                             const TF x_s = particle_meanmass(snow, qs[ij], ns[ij]);
                             conv_n = conv_q / std::max(x_s, x_conv<TF>);
-                            std::min(ns[ij], conv_n);
+                            conv_n = std::min(ns[ij], conv_n);
                         }
                         else
                         {
@@ -3476,8 +3476,7 @@ namespace Sb_cold
                             // MT suggestion of alberto to reduce the nucleation if it is too much:
                             // TF nuc_n = std::max(std::min(ni_hom-ni, ni_hom_max<TF>-ni), TF(0));
                             TF nuc_n = std::max(std::min(ni_hom, ni_hom_max<TF>), TF(0));
-                            nuc_n = std::min(nuc_n * mi_hom, qv[ij]);
-                            TF nuc_q = nuc_n * mi_hom;
+                            TF nuc_q = std::min(nuc_n * mi_hom, qv[ij]);
 
                             // From absolute change -> tendency.
                             // NOTE: there is no `*dt` in ICON, but `nuc_q` and `nuc_n` are assumed to
