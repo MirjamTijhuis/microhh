@@ -76,10 +76,11 @@ class Micro_budget {
                 const std::string& process,
                 const std::string& specie,
                 const TF humidity,
-                const int k)
+                const int k,
+                const TF dt)
         {
             const std::string full_name = specie + "_" + process;
-            this->tendencies.at(full_name)[k] += (humidity - this->prev_humidities.at(specie)[k]);
+            this->tendencies.at(full_name)[k] += (humidity - this->prev_humidities.at(specie)[k])/dt;
             this->prev_humidities.at(specie)[k] = humidity;
         }
 
