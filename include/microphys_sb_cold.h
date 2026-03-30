@@ -335,7 +335,8 @@ namespace Sb_cold
     {
         // Set to a default number concentration in places with qnx = 0 and qx !=0
 
-        const TF eps = std::nextafter<TF>(Constants::nr_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nr_ref<TF>;
+        // const TF eps = std::nextafter<TF>(Constants::nr_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nr_ref<TF>;
+        const TF eps = TF(1e-3);
 
         // TODO for prognostic qc/nc:
         //if (qc && nc)
@@ -419,28 +420,30 @@ namespace Sb_cold
     {
         // Set to a default number concentration in places with qnx = 0 and qx !=0
 
-        TF eps;
+        // TF eps;
 
         for (int j=jstart; j<jend; ++j)
             for (int i=istart; i<iend; ++i)
             {
                 const int ij = i + j*jstride;
 
-                eps = std::nextafter<TF>(Constants::ni_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_ref<TF>;
+                const TF eps = TF(1e-3);
+
+                // eps = std::nextafter<TF>(Constants::ni_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_ref<TF>;
                 if (qi[ij] > TF(0) && ni[ij] < eps)
                     ni[ij] = set_qni(qi[ij]);
 
-                eps = std::nextafter<TF>(Constants::ns_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ns_ref<TF>;
+                // eps = std::nextafter<TF>(Constants::ns_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ns_ref<TF>;
                 if (qs[ij] > TF(0) && ns[ij] < eps)
                     ns[ij] = set_qns(qs[ij]);
 
-                eps = std::nextafter<TF>(Constants::ng_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ng_ref<TF>;
+                // eps = std::nextafter<TF>(Constants::ng_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ng_ref<TF>;
                 if (qg[ij] > TF(0) && ng[ij] < eps)
                 {
                     ng[ij] = set_qng(qg[ij]);
                 }
 
-                eps = std::nextafter<TF>(Constants::nh_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nh_ref<TF>;
+                // eps = std::nextafter<TF>(Constants::nh_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nh_ref<TF>;
                 if (qh[ij] > TF(0) && nh[ij] < eps)
                     nh[ij] = set_qnh_expPSD_N0const(qh[ij], TF(750), TF(1e6));
                 }
