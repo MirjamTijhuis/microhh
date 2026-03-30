@@ -1400,12 +1400,13 @@ namespace Sb_cold
                     const TF D_s = particle_diameter(snow, x_s);
                     const TF v_s = particle_velocity(snow, x_s) * rho_v;
 
-                    const TF self_n =
+                    TF self_n =
                             pi8<TF> * e_coll * ns[ij] * ns[ij] *
                             snow_coeffs.sc_delta_n * D_s * D_s *
                             sqrt(snow_coeffs.sc_theta_n * v_s * v_s + TF(2) *
                             fm::pow2(snow.s_vel) ) * dt; // * dt in ICON
 
+                    self_n = std::min(self_n, ns[ij]);
                     ns[ij] -= self_n;
                 }
             }
@@ -1444,6 +1445,7 @@ namespace Sb_cold
                     // Sticking efficiency does only distinguish dry and wet based on T_3;
                     self_n = Ta[ij] > Constants::T0<TF> ? self_n * ecoll_gg_wet<TF> : self_n * ecoll_gg<TF>;
 
+                    self_n = std::min(self_n, ng[ij]);
                     ng[ij] -= self_n;
                 }
             }
@@ -2799,7 +2801,7 @@ namespace Sb_cold
                 // Supercooled liquid water in the cloud environment = sum of rain and cloud water;
                 const TF qw_a = qr[ij] + qc[ij];
 
-                if (Ta[ij] < Constants::T0<TF> && q_g > graupel.q_crit_c && qw_a > 1e-3)
+                if (Ta[ij] < Constants::T0<TF> && q_g > graupel.q_crit_c && qw_a > TF(1e-3))
                 {
                     // Umgebungsgehalt Eispartikel (vernachl. werden Graupel und Hagel wg. geringer Kollisionseff.);
                     // koennte problematisch sein, weil in konvekt. Wolken viel mehr Graupel und Hagel enthalten ist;
