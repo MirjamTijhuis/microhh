@@ -1517,12 +1517,15 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
         // limit here
         // it seems the best way to guarantee positive values only at the start of the microphysical processes, without creating more than needed
-        for (auto& it : hydro_types)
+        if (sw_debug || sw_check)
         {
-            Sb_common::limit_slice(it.second.slice,
-                                   gd.istart, gd.iend,
-                                   gd.jstart, gd.jend,
-                                   gd.icells);
+            for (auto& it : hydro_types)
+            {
+                Sb_common::limit_slice(it.second.slice,
+                                       gd.istart, gd.iend,
+                                       gd.jstart, gd.jend,
+                                       gd.icells);
+            }
         }
 
         check("integration", (*qv_new).data(), (*ql_new).data(), TF(0), false);

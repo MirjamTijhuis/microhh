@@ -103,24 +103,24 @@ void Limiter<TF>::exec(double dt, Stats<TF>& stats)
     for (auto& name : limit_list)
     {
         TF min_value;
-        if (name == "nr")
-            min_value = std::nextafter<TF>(Constants::nr_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nr_ref<TF>;
-        else if (name == "ni")
-            min_value = std::nextafter<TF>(Constants::ni_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_ref<TF>;
-        else if (name == "ns")
-            min_value = std::nextafter<TF>(Constants::ns_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ns_ref<TF>;
-        else if (name == "nh")
-            min_value = std::nextafter<TF>(Constants::nh_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nh_ref<TF>;
-        else if (name == "ng")
-            min_value = std::nextafter<TF>(Constants::ng_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ng_ref<TF>;
-        else if (name == "qr" || name == "qi" || name == "qs" || name == "qh" || name == "qg")
-        #ifdef FLOAT_SINGLE
-            min_value = std::nextafter<TF>(Constants::q_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::q_ref<TF>;
-        #else
-            min_value = std::numeric_limits<double>::epsilon();
-        #endif
-        else
-            min_value = std::numeric_limits<double>::epsilon();
+//        if (name == "nr")
+//            min_value = std::nextafter<TF>(Constants::nr_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nr_ref<TF>;
+//        else if (name == "ni")
+//            min_value = std::nextafter<TF>(Constants::ni_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_ref<TF>;
+//        else if (name == "ns")
+//            min_value = std::nextafter<TF>(Constants::ns_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ns_ref<TF>;
+//        else if (name == "nh")
+//            min_value = std::nextafter<TF>(Constants::nh_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nh_ref<TF>;
+//        else if (name == "ng")
+//            min_value = std::nextafter<TF>(Constants::ng_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ng_ref<TF>;
+//        else if (name == "qr" || name == "qi" || name == "qs" || name == "qh" || name == "qg")
+//        #ifdef FLOAT_SINGLE
+//            min_value = std::nextafter<TF>(Constants::q_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::q_ref<TF>;
+//        #else
+//            min_value = std::numeric_limits<double>::epsilon();
+//        #endif
+//        else
+        min_value = std::numeric_limits<double>::epsilon();
 
         tendency_limiter<TF>(
                 fields.at.at(name)->fld.data(),
