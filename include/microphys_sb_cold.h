@@ -962,25 +962,7 @@ namespace Sb_cold
                 if (qi[ij] > Sb_cold::q_crit<TF> && qp[ij] > Sb_cold::q_crit<TF>)
                 {
                     //.. Sticking efficiency of Lin (1983)
-                    // const TF e_coll = std::min(std::exp(TF(0.09) * (Ta[ij] - Constants::T0<TF>)), TF(1));
-
-                    // piecewise linear sticking efficiency with maximum at -15 C,
-                    // inspired by Figure 14 of Connolly et al. ACP 2012, doi:10.5194/acp-12-2055-2012
-                    // ! Value at -40 C is based on Kajikawa and Heymsfield as cited by Philips et al. (2015, JAS)
-                    const TF T_c = Ta[ij] - Constants::T0<TF>;
-                    TF e_coll;
-                    if (T_c >= TF(0))
-                        e_coll = TF(0.14);
-                    else if (T_c >= TF(-10))
-                        e_coll = -TF(0.01)*(T_c+TF(10))+TF(0.24);
-                    else if (T_c >= TF(-15))
-                        e_coll = TF(-0.08)*(T_c+TF(15))+TF(0.64);
-                    else if (T_c >= TF(-20))
-                        e_coll =  TF(0.10)*(T_c+TF(20))+TF(0.14);
-                    else if (T_c >= TF(-40))
-                        e_coll = TF(0.005)*(T_c+TF(40))+TF(0.04);
-                    else
-                        e_coll =  TF(0.04);
+                    const TF e_coll = std::min(std::exp(TF(0.09) * (Ta[ij] - Constants::T0<TF>)), TF(1));
 
                     const TF xp = particle_meanmass(ptype, qp[ij], np[ij]);
                     const TF dp = particle_diameter(ptype, xp);
@@ -1373,28 +1355,7 @@ namespace Sb_cold
                 if (qs[ij] > q_crit<TF>)
                 {
                     //.. Temperaturabhaengige sticking efficiency nach Lin (1983)
-                    // const TF e_coll = std::min(std::exp(TF(0.09)*(T[ij]-Constants::T0<TF>)), TF(1.0));
-
-                    // piecewise linear sticking efficiency with maximum at -15 C,
-                    // inspired by Figure 14 of Connolly et al. ACP 2012, doi:10.5194/acp-12-2055-2012
-                    // ! Value at -40 C is based on Kajikawa and Heymsfield as cited by Philips et al. (2015, JAS)
-                    const TF T_c = T[ij] - Constants::T0<TF>;
-                    TF e_coll;
-                    if (T_c >= TF(0))
-                        e_coll = TF(0.14);
-                    else if (T_c >= TF(-10))
-                        e_coll = -TF(0.01)*(T_c+TF(10))+TF(0.24);
-                    else if (T_c >= TF(-15))
-                        e_coll = TF(-0.08)*(T_c+TF(15))+TF(0.64);
-                    else if (T_c >= TF(-20))
-                        e_coll =  TF(0.10)*(T_c+TF(20))+TF(0.14);
-                    else if (T_c >= TF(-40))
-                        e_coll = TF(0.005)*(T_c+TF(40))+TF(0.04);
-                    else
-                        e_coll =  TF(0.04);
-
-                    // with factor 0.5, i.e., the lower range of Figure 14
-                    e_coll *= TF(0.5);
+                    const TF e_coll = std::min(std::exp(TF(0.09)*(T [ij]-Constants::T0<TF>)), TF(1.0));
 
                     const TF x_s = particle_meanmass(snow, qs[ij], ns[ij]);
                     const TF D_s = particle_diameter(snow, x_s);
@@ -1976,7 +1937,7 @@ namespace Sb_cold
                             mult_1 = std::max(TF(0), std::min(mult_1, TF(1)));
                             mult_2 = std::max(TF(0), std::min(mult_2, TF(1)));
 
-                            TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qc[ij];
+                            TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_q;
                             TF mult_q = mult_n * ice.x_min;
                             mult_q = std::min(rime_q, mult_q);
                             mult_n = mult_q / ice.x_min;
@@ -2008,7 +1969,7 @@ namespace Sb_cold
                             mult_1 = std::max(TF(0), std::min(mult_1, TF(1)));
                             mult_2 = std::max(TF(0), std::min(mult_2, TF(1)));
 
-                            TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qr[ij];
+                            TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_q;
                             TF mult_q = mult_n * ice.x_min;
                             mult_q = std::min(rime_q, mult_q);
                             mult_n = mult_q / ice.x_min;
@@ -2049,7 +2010,7 @@ namespace Sb_cold
                             mult_1 = std::max(TF(0), std::min(mult_1, TF(1)));
                             mult_2 = std::max(TF(0), std::min(mult_2, TF(1)));
 
-                            TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qc[ij];
+                            TF mult_n = C_mult<TF> * mult_1 * mult_2 * rime_q;
                             mult_q = mult_n * ice.x_min;
                             mult_q = std::min(rime_q, mult_q);
                             mult_n = mult_q / ice.x_min;
@@ -2114,7 +2075,7 @@ namespace Sb_cold
                             mult_1 = std::max(TF(0), std::min(mult_1, TF(1)));
                             mult_2 = std::max(TF(0), std::min(mult_2, TF(1)));
 
-                            mult_n = C_mult<TF> * mult_1 * mult_2 * rime_rate_qr[ij];
+                            mult_n = C_mult<TF> * mult_1 * mult_2 * rime_qr;
                             mult_q = mult_n * ice.x_min;
                             mult_q = std::min(rime_qr, mult_q);
                             mult_n = mult_q / ice.x_min;
@@ -2474,8 +2435,9 @@ namespace Sb_cold
         const TF a_HET = 6.5e-1;      // Data of Barklie and Gokhale (PK S.350)
         const TF b_HET = 2.0e+2;      //         Barklie and Gokhale (PK S.350)
 
-        const TF eps_q = 1e-15;         // for clipping
+        // const TF eps_q = 1e-15;         // for clipping
         // Clipping of number concentrations with largest n_ref (better too much clipped than continuing with negative values)
+        const TF eps_q = std::nextafter<TF>(Constants::q_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::q_ref<TF>;
         const TF eps_n = std::nextafter<TF>(Constants::ni_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_ref<TF>;
 
         const bool lclipping = true;
