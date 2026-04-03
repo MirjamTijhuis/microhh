@@ -988,8 +988,7 @@ void Microphys_nsw6<TF>::exec(Thermo<TF>& thermo, const double dt, Stats<TF>& st
     auto ql = fields.get_tmp();
     auto qi = fields.get_tmp();
 
-    thermo.get_thermo_field(*ql, "ql", false, false);
-    thermo.get_thermo_field(*qi, "qi", false, false);
+    thermo.get_ql_qi(ql->fld, qi->fld);
 
     const std::vector<TF>& p = thermo.get_basestate_vector("p");
     const std::vector<TF>& exner = thermo.get_basestate_vector("exner");

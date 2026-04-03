@@ -64,6 +64,8 @@ class Thermo_buoy : public Thermo<TF>
         void get_prog_vars(std::vector<std::string>&);  ///< Retrieve a list of prognostic variables.
         void get_thermo_field(
                 Field3d<TF>&, const std::string&, const bool, const bool); ///< Compute the buoyancy for usage in another routine.
+        void get_ql_qi(std::vector<TF>&, std::vector<TF>&)
+            { throw std::runtime_error("get_ql_qi not implemented in thermo_buoy"); }
         TF get_db_ref() const { return bs.n2; }
         int get_bl_depth();
         TF get_buoyancy_diffusivity();

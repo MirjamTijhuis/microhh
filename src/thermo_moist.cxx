@@ -434,6 +434,32 @@ namespace
     }
 
     template<typename TF>
+    void calc_ql_qi(
+            TF* restrict ql, TF* restrict qi,
+            TF* restrict thl, TF* restrict qt, TF* restrict p,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int jj, const int kk)
+    {
+        #pragma omp parallel for
+        for (int k=kstart; k<kend; k++)
+        {
+            const TF ex = exner(p[k]);
+            for (int j=jstart; j<jend; j++)
+                #pragma ivdep
+                for (int i=istart; i<iend; i++)
+                {
+                    const int ijk = i + j*jj + k*kk;
+
+                    const auto ssa = sat_adjust(thl[ijk], qt[ijk], p[k], ex);
+                    ql[ijk] = ssa.ql;
+                    qi[ijk] = ssa.qi;
+                }
+        }
+    }
+
+    template<typename TF>
     void calc_condensate(
             TF* restrict qc, TF* restrict thl, TF* restrict qt, TF* restrict p,
             const int istart, const int iend,
@@ -1669,6 +1695,23 @@ void Thermo_moist<TF>::get_thermo_field(
 
     if (cyclic)
         boundary_cyclic.exec(fld.fld.data());
+}
+
+template<typename TF>
+void Thermo_moist<TF>::get_ql_qi(std::vector<TF>& ql, std::vector<TF>& qi)
+{
+    auto& gd = grid.get_grid_data();
+
+    calc_ql_qi(
+            ql.data(), 
+            qi.data(),
+            fields.sp.at("thl")->fld.data(),
+            fields.sp.at("qt")->fld.data(),
+            bs.pref.data(),
+            gd.istart, gd.iend,
+            gd.jstart, gd.jend,
+            gd.kstart, gd.kend,
+            gd.icells, gd.ijcells);
 }
 
 template<typename TF>

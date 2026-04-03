@@ -76,6 +76,7 @@ class Thermo
         virtual bool check_field_exists(std::string name) = 0;
         virtual void get_thermo_field(
                 Field3d<TF>&, const std::string&, const bool, const bool) = 0;
+        virtual void get_ql_qi(std::vector<TF>&, std::vector<TF>&) = 0;
         virtual void get_buoyancy_surf(std::vector<TF>&, std::vector<TF>&, bool) = 0;
         virtual void get_buoyancy_surf(std::vector<TF>&, std::vector<TF>&, std::vector<TF>&) = 0;
         virtual void get_buoyancy_fluxbot(std::vector<TF>&, bool) = 0;

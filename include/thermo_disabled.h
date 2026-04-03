@@ -103,6 +103,8 @@ class Thermo_disabled : public Thermo<TF>
         // Empty functions that shall throw.
         void get_thermo_field(Field3d<TF>&, const std::string&, const bool, const bool)
             { throw std::runtime_error("Function get_thermo_field not implemented"); }
+        void get_ql_qi(std::vector<TF>&, std::vector<TF>&)
+            { throw std::runtime_error("get_ql_qi not implemented in thermo_disabled"); }
         void get_radiation_fields(Field3d<TF>&, Field3d<TF>&, Field3d<TF>&, Field3d<TF>&, Field3d<TF>&) const
             { throw std::runtime_error("Function get_radiation_fields not implemented"); }
         void get_radiation_fields(Field3d<TF>&, Field3d<TF>&, Field3d<TF>&, Field3d<TF>&, Field3d<TF>&, Field3d<TF>&) const
