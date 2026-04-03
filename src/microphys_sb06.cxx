@@ -1373,6 +1373,10 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 gd.jstart, gd.jend,
                 gd.icells, gd.ijcells, k);
 
+        Sb_common::limit_slice((*qt_slice).data(),
+                               gd.istart, gd.iend,
+                               gd.jstart, gd.jend,
+                               gd.icells);
 
         auto calc_sat_adjust_wrapper = [&]<Satadjust_type sw_satadjust>()
         {

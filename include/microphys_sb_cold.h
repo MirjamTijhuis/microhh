@@ -2024,7 +2024,7 @@ namespace Sb_cold
                         TF conv_q, conv_n;
                         if (D_s > D_conv_sg<TF> && Ta[ij] < cfg_params.Tmax_gr_rime)
                         {
-                            conv_q = (rime_rate_qc[ij] - mult_q) /
+                            conv_q = (rime_q - mult_q) /
                                 ( const5 * (pi6<TF> * rho_i<TF> * fm::pow3(D_s)/x_s - TF(1)) );
                             conv_q = std::min(conv_q, qs[ij]);
                             const TF x_s = particle_meanmass(snow, qs[ij], ns[ij]);
@@ -3506,6 +3506,7 @@ namespace Sb_cold
                             //  (note that log in Cotton and Field is log10, not ln)
                             if (T_c > TF(-30.0))
                             {
+                                // MT: How can this ever be reached with the if T_c < -30 above?
                                 // j_hom = 1.0e6_wp/rho_w * 10**(-7.63-2.996*(T_c+30.0))           !..J in 1/(kg s)
                                 j_hom = TF(1.0e6) * rhow_i * std::exp((TF(-7.63) - TF(2.996) * (T_c+TF(30)))*log_10);
                             }
