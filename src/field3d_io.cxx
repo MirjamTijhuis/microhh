@@ -88,8 +88,6 @@ int Field3d_io<TF>::save_field3d(
                 tmp1[ijkb] = data[ijk] + offset;
             }
 
-    Timer timer;
-
     if (sw_transpose)
     {
         // Transpose the 3D field
@@ -111,6 +109,8 @@ int Field3d_io<TF>::save_field3d(
         MPI_Type_create_subarray(3, totsize, subsize, substart, MPI_ORDER_C, mpi_fp_type<TF>(), &subarray);
         MPI_Type_commit(&subarray);
     }
+
+    Timer timer;
 
     MPI_File fh;
     if (MPI_File_open(md.commxy, filename, MPI_MODE_CREATE | MPI_MODE_WRONLY | MPI_MODE_EXCL, MPI_INFO_NULL, &fh))
@@ -140,7 +140,7 @@ int Field3d_io<TF>::save_field3d(
     MPI_Type_free(&subarray);
 
     const double elapsed = timer.elapsed();
-    const size_t bytes = gd.itot * gd.jtot * gd.ktot * sizeof(TF);
+    const size_t bytes = static_cast<size_t>(gd.itot) * gd.jtot * gd.ktot * sizeof(TF);
     const double trp = (bytes / (1024. * 1024. * 1024.)) / elapsed;
     master.print_message("%s: %.2f GB/s\n", filename, trp);
 
@@ -168,8 +168,6 @@ int Field3d_io<TF>::load_field3d(
     // For full 3D fields, use the transposed read to increase IO performance
     bool sw_transpose = (kmax == gd.kmax) ? true : false;
 
-    Timer timer;
-
     if (sw_transpose)
     {
         // Create MPI datatype for reading transposed field
@@ -188,6 +186,8 @@ int Field3d_io<TF>::load_field3d(
         MPI_Type_create_subarray(3, totsize, subsize, substart, MPI_ORDER_C, mpi_fp_type<TF>(), &subarray);
         MPI_Type_commit(&subarray);
     }
+
+    Timer timer;
 
     // Read the file
     MPI_File fh;
@@ -238,7 +238,7 @@ int Field3d_io<TF>::load_field3d(
     MPI_Type_free(&subarray);
 
     const double elapsed = timer.elapsed();
-    const size_t bytes = gd.itot * gd.jtot * gd.ktot * sizeof(TF);
+    const size_t bytes = static_cast<size_t>(gd.itot) * gd.jtot * gd.ktot * sizeof(TF);
     const double trp = (bytes / (1024. * 1024. * 1024.)) / elapsed;
     master.print_message("%s: %.2f GB/s\n", filename, trp);
 
