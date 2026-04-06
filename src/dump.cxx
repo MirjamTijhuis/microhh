@@ -109,8 +109,9 @@ void Dump<TF>::create()
     }
 
     // Check if coarse graining blocks fit on single MPI task.
-    if (gd.imax % ratio_x != 0 || gd.jmax % ratio_y != 0)
-        throw std::runtime_error("imax%ratio_x != or jmax%ratio_y != 0.");
+    if (!dumplist_c.empty())
+        if (gd.imax % ratio_x != 0 || gd.jmax % ratio_y != 0)
+            throw std::runtime_error("imax%ratio_x != or jmax%ratio_y != 0.");
 }
 
 template<typename TF>
