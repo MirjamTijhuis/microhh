@@ -54,9 +54,12 @@ namespace
 template<typename TF>
 int Field3d_io<TF>::save_field3d(
         TF* const restrict data,
-        TF* const restrict tmp1, TF* const restrict tmp2,
-        const char* filename, const TF offset,
-        const int kstart, const int kend)
+        TF* const restrict tmp1, 
+        TF* const restrict tmp2,
+        const char* filename, 
+        const TF offset,
+        const int kstart,
+        const int kend)
 {
     // Save the data in transposed order to have large chunks of contiguous disk space.
     // MPI-IO is not stable on Juqueen and Supermuc otherwise
@@ -141,6 +144,85 @@ int Field3d_io<TF>::save_field3d(
 
     const double elapsed = timer.elapsed();
     const size_t bytes = static_cast<size_t>(gd.itot) * gd.jtot * gd.ktot * sizeof(TF);
+    const double trp = (bytes / (1024. * 1024. * 1024.)) / elapsed;
+    master.print_message("%s: %.2f GB/s\n", filename, trp);
+
+    return 0;
+}
+
+template<typename TF>
+int Field3d_io<TF>::save_field3d_coarse(
+        TF* const restrict data,
+        TF* const restrict tmp1,
+        const char* filename,
+        const int ratio_x,
+        const int ratio_y,
+        const int kstart,
+        const int kend)
+{
+    auto& gd = grid.get_grid_data();
+    auto& md = master.get_MPI_data();
+
+    const int jj  = gd.icells;
+    const int kk  = gd.icells*gd.jcells;
+
+    const int imax_c = gd.imax / ratio_x;
+    const int jmax_c = gd.jmax / ratio_y;
+    const int kmax   = kend - kstart;
+
+    const int jjb = imax_c;
+    const int kkb = imax_c * jmax_c;
+
+    const TF norm = TF(1) / (ratio_x * ratio_y);
+
+    for (int k = 0; k < kmax; ++k)
+        for (int j = 0; j < jmax_c; ++j)
+            for (int i = 0; i < imax_c; ++i)
+            {
+                TF sum = TF(0);
+                for (int jj_c = 0; jj_c < ratio_y; ++jj_c)
+                    #pragma ivdep
+                    for (int ii_c = 0; ii_c < ratio_x; ++ii_c)
+                    {
+                        const int ijk = (i*ratio_x + ii_c + gd.igc)
+                                      + (j*ratio_y + jj_c + gd.jgc) * jj
+                                      + (k + kstart) * kk;
+                        sum += data[ijk];
+                    }
+                tmp1[i + j*jjb + k*kkb] = sum * norm;
+            }
+
+    const int count = imax_c * jmax_c * kmax;
+
+    int totsize [3] = {kmax, gd.jtot/ratio_y, gd.itot/ratio_x};
+    int subsize [3] = {kmax, jmax_c, imax_c};
+    int substart[3] = {0, md.mpicoordy*jmax_c, md.mpicoordx*imax_c};
+
+    Timer timer;
+
+    MPI_Datatype subarray;
+    MPI_Type_create_subarray(3, totsize, subsize, substart, MPI_ORDER_C, mpi_fp_type<TF>(), &subarray);
+    MPI_Type_commit(&subarray);
+
+    MPI_File fh;
+    if (MPI_File_open(md.commxy, filename, MPI_MODE_CREATE | MPI_MODE_WRONLY | MPI_MODE_EXCL, MPI_INFO_NULL, &fh))
+        return 1;
+
+    MPI_Offset fileoff = 0;
+    char name[] = "native";
+    if (MPI_File_set_view(fh, fileoff, mpi_fp_type<TF>(), subarray, name, MPI_INFO_NULL))
+        return 1;
+
+    if (MPI_File_write_all(fh, tmp1, count, mpi_fp_type<TF>(), MPI_STATUS_IGNORE))
+        return 1;
+
+    if (MPI_File_close(&fh))
+        return 1;
+
+    MPI_Type_free(&subarray);
+
+    const double elapsed = timer.elapsed();
+    const size_t bytes = static_cast<size_t>(gd.itot/ratio_x) * gd.jtot/ratio_y * gd.ktot * sizeof(TF);
     const double trp = (bytes / (1024. * 1024. * 1024.)) / elapsed;
     master.print_message("%s: %.2f GB/s\n", filename, trp);
 
@@ -544,7 +626,7 @@ int Field3d_io<TF>::save_xy_slice(
             tmp[ijkb] = data[ijk] + data0;
         }
     
-    Timer timer;
+    //Timer timer;
 
 #ifdef DISABLE_2D_MPIIO
 //
@@ -632,10 +714,10 @@ int Field3d_io<TF>::save_xy_slice(
     MPI_Barrier(md.commxy);
 #endif
 
-    const double elapsed = timer.elapsed();
-    const size_t bytes = gd.itot * gd.jtot * sizeof(TF);
-    const double tp = (bytes / (1024. * 1024. * 1024.)) / elapsed;
-    master.print_message("%s: %.2f GB/s\n", filename, tp);
+    //const double elapsed = timer.elapsed();
+    //const size_t bytes = gd.itot * gd.jtot * sizeof(TF);
+    //const double tp = (bytes / (1024. * 1024. * 1024.)) / elapsed;
+    //master.print_message("%s: %.2f GB/s\n", filename, tp);
 
     return 0;
 }

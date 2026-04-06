@@ -43,6 +43,8 @@ class Field3d_io
         int save_xy_slice(TF*, TF, TF*, const char*, int kslice=0);  // Saves a xy-slice from a 3d field.
         int load_xy_slice(TF*, TF*, const char*, int kslice=-1); // Loads a xy-slice.
 
+        int save_field3d_coarse(TF*, TF*, const char*, int, int, int, int); // Saves a coarse 3d field.
+
     private:
         Master& master;
         Grid<TF>& grid;

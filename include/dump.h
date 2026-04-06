@@ -51,10 +51,16 @@ class Dump
         Fields<TF>& fields;
         Field3d_io<TF> field3d_io;
 
-        std::vector<std::string> dumplist; // List with all dumps from the ini file.
-        bool swdump;                       // Statistics on/off switch
-        bool swdoubledump;                 // On/off switch for two consecutive dumps in time
-        double sampletime;
-        unsigned long isampletime;
+        std::vector<std::string> dumplist;    // Variables (full field) that are saved.
+        std::vector<std::string> dumplist_c;  // Variables (coarse grained) that are saved.
+
+        int ratio_x;                          // Coarse grain ratio x.
+        int ratio_y;                          // Coarse grain ratio y.
+
+        bool swdump;                          // Statistics on/off switch
+        bool swdoubledump;                    // On/off switch for two consecutive dumps in time
+
+        double sampletime;                    // Save time of dumps.
+        unsigned long isampletime;            // Save time as integer.
 };
 #endif

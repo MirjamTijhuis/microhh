@@ -20,9 +20,12 @@
  * along with MicroHH.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <algorithm>
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <stdexcept>
+
 #include "master.h"
 #include "grid.h"
 #include "fields.h"
@@ -45,6 +48,9 @@ Dump<TF>::Dump(Master& masterin, Grid<TF>& gridin, Fields<TF>& fieldsin, Input& 
 
         // Get list of dump variables.
         dumplist = inputin.get_list<std::string>("dump", "dumplist", "", std::vector<std::string>());
+
+        // Get list of coarse grained dump variables.
+        dumplist_c = inputin.get_list<std::string>("dump", "dumplist_coarse", "", std::vector<std::string>());
         
         // Whether to do two consecutive dumps in time
         swdoubledump = inputin.get_item<bool>("dump", "swdoubledump", "", false);
@@ -52,6 +58,12 @@ Dump<TF>::Dump(Master& masterin, Grid<TF>& gridin, Fields<TF>& fieldsin, Input& 
         {
             std::string msg = "Double dump only works if sampletime is equal to savetime";
             throw std::runtime_error(msg);
+        }
+
+        if (dumplist_c.size() > 0)
+        {
+            ratio_x = inputin.get_item<int>("dump", "ratio_x", "");
+            ratio_y = inputin.get_item<int>("dump", "ratio_y", "");
         }
 
         // Crash on empty list.
@@ -86,13 +98,19 @@ void Dump<TF>::init()
 template<typename TF>
 void Dump<TF>::create()
 {
-    /* All classes (fields, thermo) have removed their dump-variables from
-       dumplist by now. If it isn't empty, print warnings for invalid variables */
+    auto& gd = grid.get_grid_data();
+
+    // All classes (fields, thermo) have removed their dump-variables from
+    // dumplist by now. If it isn't empty, print warnings for invalid variables.
     if (!dumplist.empty())
     {
         for (auto& it : dumplist)
             master.print_warning("field %s in [dump][dumplist] is illegal\n", it.c_str());
     }
+
+    // Check if coarse graining blocks fit on single MPI task.
+    if (gd.imax % ratio_x != 0 || gd.jmax % ratio_y != 0)
+        throw std::runtime_error("imax%ratio_x != or jmax%ratio_y != 0.");
 }
 
 template<typename TF>
@@ -110,6 +128,7 @@ bool Dump<TF>::do_dump(unsigned long itime, unsigned long idt)
     // Check if dump is enabled.
     if (!swdump)
         return false;
+
     // Check if current time step is dump time.
     if (itime % isampletime != 0)
     {
@@ -133,6 +152,7 @@ template<typename TF>
 void Dump<TF>::save_dump(TF* data, const std::string& varname, int iotime)
 {
     auto& gd = grid.get_grid_data();
+
     const double no_offset = 0.;
     char filename[256];
 
@@ -145,18 +165,40 @@ void Dump<TF>::save_dump(TF* data, const std::string& varname, int iotime)
     }
     else
     {
-
         auto tmp1 = fields.get_tmp();
         auto tmp2 = fields.get_tmp();
 
         if (field3d_io.save_field3d(
                     data,
-                    tmp1->fld.data(), tmp2->fld.data(),
-                    filename, no_offset,
-                    gd.kstart, gd.kend))
+                    tmp1->fld.data(),
+                    tmp2->fld.data(),
+                    filename,
+                    no_offset,
+                    gd.kstart,
+                    gd.kend))
         {
             master.print_message("Saving \"%s\" ... FAILED\n", filename);
             throw std::runtime_error("Writing error in dump");
+        }
+
+        // Hack for now...
+        if (std::find(dumplist_c.begin(), dumplist_c.end(), varname) != dumplist_c.end())
+        {
+            char filename_c[256];
+            std::snprintf(filename_c, 256, "%s_c.%07d", varname.c_str(), iotime);
+
+            if (field3d_io.save_field3d_coarse(
+                        data,
+                        tmp1->fld.data(),
+                        filename_c,
+                        ratio_x,
+                        ratio_y,
+                        gd.kstart,
+                        gd.kend))
+            {
+                master.print_message("Saving \"%s\" ... FAILED\n", filename_c);
+                throw std::runtime_error("Writing error in coarse dump");
+            }
         }
 
         fields.release_tmp(tmp1);
