@@ -263,30 +263,6 @@ namespace Thermo_moist_functions
         return f;
     }
 
-
-    //    template<typename TF>
-//    CUDA_MACRO inline TF f_prime_pro(const TF p, const TF T, const TF qt)
-//    {
-//        const TF chi = (Rd<TF> + Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
-//        const TF gamma = (Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
-//        const TF epsilon = Rd<TF> / Rv<TF>;
-//        const TF exponent = std::exp(-((Lv<TF> * (qt - qsat_liq(p, T))) / (T * (cpv<TF> * qt + cp<TF>))));
-//        const TF term1 = 1 - (qt - qsat_liq(p, T)) / (epsilon + qt);
-//        const TF term2 = 1 - (qt - qsat_liq(p, T)) / qt;
-//        const TF pres = pow((p0<TF>/p), chi);
-//        const TF denom = pow(term2, gamma);
-//        const TF lv1 = (Lv<TF> * (qt - qsat_liq(p, T))) / (pow2(T) * (cpv<TF> * qt + cp<TF>));
-//        const TF lv2 = Lv<TF> * (dqsatdT_liq(p, T)) / (T * (cpv<TF> * qt + cp<TF>));
-//
-//        const TF dft = (exponent * T * (dqsatdT_liq(p, T) * pres * pow(term1, (chi - 1)) * chi)) / (denom * (epsilon + qt))
-//          - (exponent * T * dqsatdT_liq(p, T) * pres * pow(term2, (-gamma - 1)) * gamma * pow(term1, chi)) / qt
-//          + (exponent * pres * pow(term1, chi)) / denom
-//          + (exponent * T * pres * (lv1 + lv2 * pow(term1, chi)) / denom);
-//
-//        return dft;
-//    }
-
-
     template<typename TF>
     struct Struct_sat_adjust
     {
@@ -300,6 +276,11 @@ namespace Thermo_moist_functions
     inline Struct_sat_adjust<TF> sat_adjust(
             const TF thl, const TF qt, const TF p, const TF exn)
     {
+        // saturation adjustment for different formulations of thl following BF04 (Bryan, G. H., & Fritsch, J. M. (2004).
+        // A reevaluation of ice–liquid water potential temperature. Monthly weather review, 132(10), 2421-2431.)
+        // BF04 D is the formulation from Betts, A. K. (1973). Non‐precipitating cumulus convection and its parameterization.
+        // Quarterly Journal of the Royal Meteorological Society, 99(419), 178-196.
+
         int niter = 0;
         int nitermax = 10;
         TF tnr_old = TF(1.e9);

@@ -1001,10 +1001,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
     timer.start("exec_total");
 
-    // Get (saturation adjusted) ql (=qc), and absolute temperature.
-    bool cyclic = false;
-    bool is_stat = false;
-
     const std::vector<TF>& p = thermo.get_basestate_vector("p");
     const std::vector<TF>& exner = thermo.get_basestate_vector("exner");
 
@@ -1055,11 +1051,11 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
     }
 
-    // Store tendencies `qv` and `qc` (which are not prognostic variables),
+    // Store tendencies `qv`, `qc`, 'qr'
     // for calculating the `thl` and `qt` tendencies.
     auto qv_conversion_tend = fields.get_tmp_xy();
     auto qc_conversion_tend = fields.get_tmp_xy();
-    auto qi_conversion_tend = fields.get_tmp_xy();
+    // auto qi_conversion_tend = fields.get_tmp_xy();
     auto qr_conversion_tend = fields.get_tmp_xy();
     // auto nc_conversion_tend = fields.get_tmp_xy();
 
@@ -1104,18 +1100,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         // Check if sum of all qx is equal to the sum of all qx at the beginning of the microphysics i.e. if total q is conserved.
         // and check if all qx > 0 (ICON uses -1e-12)
 
-//        TF meps;
-//        #ifdef FLOAT_SINGLE
-//        meps = -1e-10;
-//        #else
-//        meps = -1e-12;
-//        #endif
-//
-//        // MT: note that this n check is rather loose for e.g. hail this would be a huge negative number concentration
-//        const TF n_eps = std::nextafter<TF>(Constants::ni_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_ref<TF>;
-//
         const TF meps = -1e-12;
-        const TF n_eps = 1e-12;
 
         int negatives_vapour = 0;
         int negatives_cloud = 0;
@@ -1150,19 +1135,9 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
                 for (auto& it : hydro_types)
                 {
-                    if (!it.second.is_mass)
+                    if (it.second.slice[ij] < meps)
                     {
-                        if (it.second.slice[ij] < -n_eps)
-                        {
-                            it.second.negatives += 1;
-                        }
-                    }
-                    else
-                    {
-                        if (it.second.slice[ij] < meps)
-                        {
-                            it.second.negatives += 1;
-                        }
+                        it.second.negatives += 1;
                     }
                 }
             }
@@ -1297,45 +1272,13 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
     for (auto& it : hydro_types)
         convert_units_short(fields.ap.at(it.first)->fld.data(), to_kgm3);
 
-//    // Set to default values where qnx=0 and qx0>0
-//    // MT: this basically acts also as a limiter as it also applies when qnx < 0
-//    // would be better after integration
-//    timer.start("set_default_n");
-//    Sb_cold::set_default_n_warm(
-//            fields.ap.at("qr")->fld.data(),
-//            fields.ap.at("nr")->fld.data(),
-//            gd.istart, gd.iend,
-//            gd.jstart, gd.jend,
-//            gd.kstart, gd.kend,
-//            gd.icells, gd.ijcells);
-//
-//    if (sw_ice)
-//        Sb_cold::set_default_n_cold(
-//                fields.ap.at("qi")->fld.data(),
-//                fields.ap.at("ni")->fld.data(),
-//                fields.ap.at("qs")->fld.data(),
-//                fields.ap.at("ns")->fld.data(),
-//                fields.ap.at("qg")->fld.data(),
-//                fields.ap.at("ng")->fld.data(),
-//                gd.istart, gd.iend,
-//                gd.jstart, gd.jend,
-//                gd.kstart, gd.kend,
-//                gd.icells, gd.ijcells);
-//    timer.stop("set_default_n");
-
-    // auto ql = fields.get_tmp();
-    // auto T = fields.get_tmp();
-
-    // thermo.get_thermo_field(*ql, "ql", cyclic, is_stat);
-    // thermo.get_thermo_field(*T, "T", cyclic, is_stat);
-
-    // qv is diagnosed as qv=qt-ql (prognostic ice), or qv=qt-ql-qi (satadjust ice).
+    // qv is diagnosed as qv=qt-ql (prognostic ice).
     auto qv_new = fields.get_tmp_xy();
     auto qv_old = fields.get_tmp_xy();
     // slices of ql to determine the tendency at the end
     auto ql_new = fields.get_tmp_xy();
     auto ql_old = fields.get_tmp_xy();
-    // slices to store integrated values of thl and qt and w
+    // slices to store integrated values of thl, qt, T, and w
     auto qt_slice = fields.get_tmp_xy();
     auto thl_slice = fields.get_tmp_xy();
     auto T_slice = fields.get_tmp_xy();
@@ -1345,7 +1288,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
     {
         const TF rdzdt = TF(0.5) * gd.dzi[k] * dt;
 
-        // copy 3D thl and qt to 2D slices and do partial integration of dynamic tendencies
+        // copy 3D thl, qt, and w to 2D slices and do partial integration of dynamic tendencies
         Sb_common::copy_slice_and_integrate(
                 (*qt_slice).data(),
                 fields.ap.at("qt")->fld.data(),
@@ -1422,7 +1365,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 k);
 
         check("start", (*qv_new).data(), (*ql_new).data(), TF(0), false);
-        // check_nx("pre-integration");
 
         for (auto& it : hydro_types)
         {
@@ -1443,28 +1385,21 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 it.second.conversion_tend[n] = TF(0);
         }
 
-        // fill slices of qv_old, ql_new and ql_old
+        // fill slice of qv_old
         for (int j = gd.jstart; j < gd.jend; j++)
         #pragma ivdep
                 for (int i = gd.istart; i < gd.iend; i++)
                 {
                     const int ij = i + j * gd.jstride;
                     (*qv_old).data()[ij] = (*qv_new).data()[ij];
-
-                    // (*ql_old).data()[ij] = ql->fld.data()[k*gd.ijcells + ij];
-                    // (*ql_new).data()[ij] = ql->fld.data()[k*gd.ijcells + ij];
                 }
 
         // Zero diagnostic qx tendencies.
         zero_tmp_xy(qv_conversion_tend);
         zero_tmp_xy(qc_conversion_tend);
-        zero_tmp_xy(qi_conversion_tend);
+        // zero_tmp_xy(qi_conversion_tend);
         zero_tmp_xy(qr_conversion_tend);
         //zero_tmp_xy(nc_conversion_tend);
-
-        // Reset conversion tendencies.
-        // if (sw_microbudget)
-        //    micro_budget.reset_tendencies(k);
 
         // Set initial humidities as prev_humidities
         if (sw_microbudget)
@@ -1522,8 +1457,8 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             }
         }
 
-        // limit here
-        // it seems the best way to guarantee positive values only at the start of the microphysical processes, without creating more than needed
+        // clip here
+        // MT: seems the best way to guarantee positive values only at the start of the microphysical processes, without creating more than needed
         if (sw_debug || sw_check)
         {
             for (auto& it : hydro_types)
@@ -1536,7 +1471,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
         }
 
         check("integration", (*qv_new).data(), (*ql_new).data(), TF(0), false);
-        // check_nx("post-integration");
 
         // Density correction fall speeds
         // In ICON, `rhocorr` is written into the cloud/rain/etc particle types as `rho_v`.
@@ -2518,21 +2452,21 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 k
         );
 
-        if (sw_ice)
-        {
-            Sb_common::diagnose_tendency_temp(
-                    (*qi_conversion_tend).data(),
-                    fields.st.at("qi")->fld.data(),
-                    fields.sp.at("qi")->fld.data(),
-                    hydro_types.at("qi").slice,
-                    rho.data(),
-                    dt,
-                    gd.istart, gd.iend,
-                    gd.jstart, gd.jend,
-                    gd.icells, gd.ijcells,
-                    k
-            );
-        }
+//        if (sw_ice)
+//        {
+//            Sb_common::diagnose_tendency_temp(
+//                    (*qi_conversion_tend).data(),
+//                    fields.st.at("qi")->fld.data(),
+//                    fields.sp.at("qi")->fld.data(),
+//                    hydro_types.at("qi").slice,
+//                    rho.data(),
+//                    dt,
+//                    gd.istart, gd.iend,
+//                    gd.jstart, gd.jend,
+//                    gd.icells, gd.ijcells,
+//                    k
+//            );
+//        }
 
         for (auto& it : hydro_types)
         {
@@ -2564,7 +2498,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
 
         // Calculate thermodynamic tendencies `thl` and `qt`,
-        // from microphysics tendencies excluding sedimentation.
+        // from microphysics tendencies excluding sedimentation as in ICON.
 
 //        Sb_common::calc_thermo_tendencies_cloud_ice<TF>(
 //                fields.st.at("thl")->fld.data(),
@@ -2646,7 +2580,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
     fields.release_tmp_xy(qv_conversion_tend);
     fields.release_tmp_xy(qc_conversion_tend);
-    fields.release_tmp_xy(qi_conversion_tend);
+    // fields.release_tmp_xy(qi_conversion_tend);
     fields.release_tmp_xy(qr_conversion_tend);
     //fields.release_tmp_xy(nc_conversion_tend);
     fields.release_tmp_xy(nc_fld);

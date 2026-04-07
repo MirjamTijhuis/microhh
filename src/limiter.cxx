@@ -22,7 +22,6 @@
 
 #include <algorithm>
 #include <iostream>
-#include <cmath>
 #include "master.h"
 #include "grid.h"
 #include "fields.h"
@@ -99,29 +98,10 @@ void Limiter<TF>::exec(double dt, Stats<TF>& stats)
     // Add epsilon, to make sure the final result ends just above zero.
     // NOTE: don't use `eps<TF>` here; `eps<float>` is too large
     //       as a lower limit for e.g. hydrometeors or chemical species.
+    constexpr TF min_value = std::numeric_limits<double>::epsilon();
 
     for (auto& name : limit_list)
     {
-        TF min_value;
-//        if (name == "nr")
-//            min_value = std::nextafter<TF>(Constants::nr_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nr_ref<TF>;
-//        else if (name == "ni")
-//            min_value = std::nextafter<TF>(Constants::ni_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_ref<TF>;
-//        else if (name == "ns")
-//            min_value = std::nextafter<TF>(Constants::ns_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ns_ref<TF>;
-//        else if (name == "nh")
-//            min_value = std::nextafter<TF>(Constants::nh_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nh_ref<TF>;
-//        else if (name == "ng")
-//            min_value = std::nextafter<TF>(Constants::ng_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ng_ref<TF>;
-//        else if (name == "qr" || name == "qi" || name == "qs" || name == "qh" || name == "qg")
-//        #ifdef FLOAT_SINGLE
-//            min_value = std::nextafter<TF>(Constants::q_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::q_ref<TF>;
-//        #else
-//            min_value = std::numeric_limits<double>::epsilon();
-//        #endif
-//        else
-        min_value = std::numeric_limits<double>::epsilon();
-
         tendency_limiter<TF>(
                 fields.at.at(name)->fld.data(),
                 fields.ap.at(name)->fld.data(),
@@ -130,6 +110,7 @@ void Limiter<TF>::exec(double dt, Stats<TF>& stats)
                 gd.jstart, gd.jend,
                 gd.kstart, gd.kend,
                 gd.icells, gd.ijcells);
+
         stats.calc_tend(*fields.at.at(name), tend_name);
     }
 

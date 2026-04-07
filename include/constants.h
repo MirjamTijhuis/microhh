@@ -43,7 +43,7 @@ namespace Constants
     template<typename TF> constexpr TF mu0_min = 1e-6;        // Minimum value used for cos(sza)
     template<typename TF> constexpr TF sigma_b = 5.67e-8;     // Boltzmann constant [W m-1 K-1]
     template<typename TF> constexpr TF xmair = 28.9647;       // Molar mass of dry air [kg kmol-1]
-    template<typename TF> constexpr TF xmh2o = 18.01528;      // Molar mass of h2o [kg kmol-1]    
+    template<typename TF> constexpr TF xmh2o = 18.01528;      // Molar mass of h2o [kg kmol-1]
     template<typename TF> constexpr TF pi = 3.14159265358979; // Pi
 
     // Soil / land-surface specific constants
@@ -100,15 +100,5 @@ namespace Constants
     const double        dbig   = 1.e9;
     const double        dhuge  = 1.e30;
     const unsigned long ulhuge = ~0UL; //== ULONG_MAX;
-
-    // MT: typical values for hydrometeors used to define limits in limiter and microphys_sb06
-    // These estimates originate from the maximum, local, instantaneous values in the weisman-klemp case.
-    // Rounded up to the nearest 10 power and multiplied by an additional factor 100 to be sure.
-    template<typename TF> constexpr TF nr_ref    = 1e9;
-    template<typename TF> constexpr TF ni_ref    = 1e12;
-    template<typename TF> constexpr TF ns_ref    = 1e10;
-    template<typename TF> constexpr TF nh_ref    = 1e7;
-    template<typename TF> constexpr TF ng_ref    = 1e8;
-    template<typename TF> constexpr TF q_ref     = 1e-2;
 }
 #endif

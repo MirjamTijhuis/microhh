@@ -298,8 +298,7 @@ namespace Sb_cold
             const int jstride, const int kstride)
     {
         // Set to a default number concentration in places with qnx = 0 and qx !=0
-
-        const TF eps = std::nextafter<TF>(Constants::nr_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nr_ref<TF>;
+        const TF eps = TF(1e-3);
 
         // TODO for prognostic qc/nc:
         //if (qc && nc)
@@ -335,7 +334,6 @@ namespace Sb_cold
     {
         // Set to a default number concentration in places with qnx = 0 and qx !=0
 
-        // const TF eps = std::nextafter<TF>(Constants::nr_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nr_ref<TF>;
         const TF eps = TF(1e-3);
 
         // TODO for prognostic qc/nc:
@@ -377,7 +375,7 @@ namespace Sb_cold
     {
         // Set to a default number concentration in places with qnx = 0 and qx !=0
 
-        TF eps;
+        const TF eps = TF(1e-3);
 
         for (int k=kstart; k<kend; ++k)
             for (int j=jstart; j<jend; ++j)
@@ -385,19 +383,15 @@ namespace Sb_cold
                 {
                     const int ijk = i + j*jstride + k*kstride;
 
-                    eps = std::nextafter<TF>(Constants::ni_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_ref<TF>;
                     if (qi[ijk] > TF(0) && ni[ijk] < eps)
                         ni[ijk] = set_qni(qi[ijk]);
 
-                    eps = std::nextafter<TF>(Constants::ns_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ns_ref<TF>;
                     if (qs[ijk] > TF(0) && ns[ijk] < eps)
                         ns[ijk] = set_qns(qs[ijk]);
 
-                    eps = std::nextafter<TF>(Constants::ng_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ng_ref<TF>;
                     if (qg[ijk] > TF(0) && ng[ijk] < eps)
                         ng[ijk] = set_qng(qg[ijk]);
 
-                    eps = std::nextafter<TF>(Constants::nh_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nh_ref<TF>;
                     if (qh[ijk] > TF(0) && nh[ijk] < eps)
                         nh[ijk] = set_qnh_expPSD_N0const(qh[ijk], TF(750), TF(1e6));
                 }
@@ -420,30 +414,24 @@ namespace Sb_cold
     {
         // Set to a default number concentration in places with qnx = 0 and qx !=0
 
-        // TF eps;
+        const TF eps = TF(1e-3);
 
         for (int j=jstart; j<jend; ++j)
             for (int i=istart; i<iend; ++i)
             {
                 const int ij = i + j*jstride;
 
-                const TF eps = TF(1e-3);
-
-                // eps = std::nextafter<TF>(Constants::ni_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_ref<TF>;
                 if (qi[ij] > TF(0) && ni[ij] < eps)
                     ni[ij] = set_qni(qi[ij]);
 
-                // eps = std::nextafter<TF>(Constants::ns_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ns_ref<TF>;
                 if (qs[ij] > TF(0) && ns[ij] < eps)
                     ns[ij] = set_qns(qs[ij]);
 
-                // eps = std::nextafter<TF>(Constants::ng_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ng_ref<TF>;
                 if (qg[ij] > TF(0) && ng[ij] < eps)
                 {
                     ng[ij] = set_qng(qg[ij]);
                 }
 
-                // eps = std::nextafter<TF>(Constants::nh_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::nh_ref<TF>;
                 if (qh[ij] > TF(0) && nh[ij] < eps)
                     nh[ij] = set_qnh_expPSD_N0const(qh[ij], TF(750), TF(1e6));
                 }
@@ -904,7 +892,7 @@ namespace Sb_cold
                     const TF v = particle_velocity(particle, x) * rho_v;
 
                     const TF f_v  = coeffs.a_f + coeffs.b_f * sqrt(v*D);
-                    TF eva_q = g_d * nx[ij] * coeffs.c_i * D * f_v * s_sw * dt; // * dt in ICON
+                    TF eva_q = g_d * nx[ij] * coeffs.c_i * D * f_v * s_sw * dt;
                     eva_q = std::max(-eva_q, TF(0));
 
                     //.. Complete evaporation of some of the melting frozen particles: parameterized in a way
@@ -962,6 +950,8 @@ namespace Sb_cold
                 if (qi[ij] > Sb_cold::q_crit<TF> && qp[ij] > Sb_cold::q_crit<TF>)
                 {
                     //.. Sticking efficiency of Lin (1983)
+                    // MT: note that this parameterization differs from the default in ICON (2024-01 open-source release)
+                    // MT: we opted for a simple parameterization here, which can be used in ICON by setting iparti_stick=1
                     const TF e_coll = std::min(std::exp(TF(0.09) * (Ta[ij] - Constants::T0<TF>)), TF(1));
 
                     const TF xp = particle_meanmass(ptype, qp[ij], np[ij]);
@@ -972,7 +962,6 @@ namespace Sb_cold
                     const TF di = particle_diameter(itype, xi);
                     const TF vi = particle_velocity(itype, xi) * rho_v;
 
-                    // Both these terms have a `* dt` in ICON; left out since we need the tendency.
                     TF coll_n = pi4<TF> * np[ij] * ni[ij] * e_coll * dt
                                       * (coeffs.delta_n_aa * fm::pow2(dp)
                                        + coeffs.delta_n_ab * dp * di
@@ -1305,10 +1294,10 @@ namespace Sb_cold
                     const TF v_i = ice.a_vel * pow(x_i, ice.b_vel) * rho_v;
 
                     TF self_n = pi4<TF> * e_coll * ice_coeffs.sc_delta_n * ni[ij] * ni[ij] * D_i * D_i *
-                         sqrt( ice_coeffs.sc_theta_n * v_i * v_i + TF(2) * pow(ice.s_vel, TF(2)) ) * dt; // * dt in ICON
+                         sqrt( ice_coeffs.sc_theta_n * v_i * v_i + TF(2) * pow(ice.s_vel, TF(2)) ) * dt;
 
                     TF self_q = pi4<TF> * e_coll * ice_coeffs.sc_delta_q * ni[ij] * qi[ij] * D_i * D_i *
-                         sqrt( ice_coeffs.sc_theta_q * v_i * v_i + TF(2) * pow(ice.s_vel, TF(2)) * dt); // * dt in ICON
+                         sqrt( ice_coeffs.sc_theta_q * v_i * v_i + TF(2) * pow(ice.s_vel, TF(2)) * dt);
 
                     self_q = std::min(self_q, qi[ij]);
                     self_n = std::min(std::min(self_n, self_q/x_conv_ii), ni[ij]);
@@ -1318,15 +1307,6 @@ namespace Sb_cold
 
                     ni[ij] -= self_n;
                     ns[ij] += self_n / TF(2);      // BvS; why /2?
-
-                    //self_q = MIN(self_q,q_i)
-                    //self_n = MIN(MIN(self_n,self_q/x_conv_ii),n_i)
-
-                    //ice%q(i,k)  = ice%q(i,k)  - self_q
-                    //snow%q(i,k) = snow%q(i,k) + self_q
-
-                    //ice%n(i,k)  = ice%n(i,k)  - self_n
-                    //snow%n(i,k) = snow%n(i,k) + self_n / 2.0
                 }
             }
 
@@ -1355,6 +1335,8 @@ namespace Sb_cold
                 if (qs[ij] > q_crit<TF>)
                 {
                     //.. Temperaturabhaengige sticking efficiency nach Lin (1983)
+                    // MT: note that this parameterization differs from the default in ICON (2024-01 open-source release)
+                    // MT: we opted for a simple parameterization here, which can be used in ICON by setting isnow_stick=1
                     const TF e_coll = std::min(std::exp(TF(0.09)*(T [ij]-Constants::T0<TF>)), TF(1.0));
 
                     const TF x_s = particle_meanmass(snow, qs[ij], ns[ij]);
@@ -1365,7 +1347,7 @@ namespace Sb_cold
                             pi8<TF> * e_coll * ns[ij] * ns[ij] *
                             snow_coeffs.sc_delta_n * D_s * D_s *
                             sqrt(snow_coeffs.sc_theta_n * v_s * v_s + TF(2) *
-                            fm::pow2(snow.s_vel) ) * dt; // * dt in ICON
+                            fm::pow2(snow.s_vel) ) * dt;
 
                     self_n = std::min(self_n, ns[ij]);
                     ns[ij] -= self_n;
@@ -1400,7 +1382,6 @@ namespace Sb_cold
                     const TF D_g = particle_diameter(graupel, x_g);
                     const TF v_g = particle_velocity(graupel, x_g) * rho_v;
 
-                    // Times dt in ICON
                     TF self_n = graupel_coeffs.sc_coll_n * fm::pow2(ng[ij]) * fm::pow2(D_g) * v_g * dt;
 
                     // Sticking efficiency does only distinguish dry and wet based on T_3;
@@ -1456,7 +1437,6 @@ namespace Sb_cold
                     const TF e_coll = std::min(
                             ptype.ecoll_c, std::max(const1*(D_c - D_crit_c<TF>), ecoll_min<TF>));
 
-                    // Both terms are time integrated (* dt) in ICON...
                     const TF rime_n = pi4<TF> * e_coll * np[ij] * nc[ij] * dt *
                                      ( coeffs.delta_n_aa * fm::pow2(D_p) +
                                        coeffs.delta_n_ab * D_p * D_c +
@@ -1521,7 +1501,6 @@ namespace Sb_cold
                     const TF v_r = particle_velocity(rain, x_r) * rho_v;
                     const TF v_a = particle_velocity(ptype, x_a) * rho_v;
 
-                    // All three terms are time integrated (* dt) in ICON...
                     const TF rime_n = pi4<TF> * na[ij] * nr[ij] * dt *
                                  (coeffs.delta_n_aa * D_a * D_a +
                                   coeffs.delta_n_ab * D_a * D_r +
@@ -2174,7 +2153,6 @@ namespace Sb_cold
                     const TF e_coll_n = std::min(ptype.ecoll_c, std::max(const1*(D_c - D_crit_c<TF>), ecoll_min<TF>));
                     const TF e_coll_q = e_coll_n;
 
-                    // Both terms are multiplied by dt in ICON
                     TF rime_n = pi4<TF> * e_coll_n * np[ij] * nc[ij] * dt
                         *     (coeffs.delta_n_aa * D_p*D_p + coeffs.delta_n_ab * D_p*D_c + coeffs.delta_n_bb * D_c*D_c)
                         * sqrt(coeffs.theta_n_aa * v_p*v_p - coeffs.theta_n_ab * v_p*v_c + coeffs.theta_n_bb * v_c*v_c);
@@ -2272,7 +2250,6 @@ namespace Sb_cold
                     const TF D_r = particle_diameter(rain, x_r);
                     const TF v_r = particle_velocity(rain, x_r) * rho_v;
 
-                    // Both terms are `* dt` in ICON.
                     TF rime_n = pi4<TF> * np[ij] * nr[ij] * dt
                              * (coeffs.delta_n_aa * fm::pow2(D_p)
                                 + coeffs.delta_n_ab * D_p*D_r + coeffs.delta_n_bb * fm::pow2(D_r))
@@ -2436,9 +2413,11 @@ namespace Sb_cold
         const TF b_HET = 2.0e+2;      //         Barklie and Gokhale (PK S.350)
 
         // const TF eps_q = 1e-15;         // for clipping
-        // Clipping of number concentrations with largest n_ref (better too much clipped than continuing with negative values)
-        const TF eps_q = std::nextafter<TF>(Constants::q_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::q_ref<TF>;
-        const TF eps_n = std::nextafter<TF>(Constants::ni_ref<TF>, std::numeric_limits<TF>::infinity()) - Constants::ni_ref<TF>;
+
+        // MT: clipping of ICON is not sufficient to keep number concentrations and float qx's above 0.
+        // Clipping of here with rather large q/n (better too much clipped than continuing with negative values)
+        const TF eps_q = 1e-9;
+        const TF eps_n = 1e6;
 
         const bool lclipping = true;
 
@@ -2919,7 +2898,6 @@ namespace Sb_cold
                     ns[ij] -= melt_n;
                     nr[ij] += melt_n;
 
-                    // Oiiiii
                     ns[ij] = std::max(ns[ij], qs[ij]/snow.x_max);
                 }
             } // i
@@ -3068,7 +3046,6 @@ namespace Sb_cold
             const int jstride)
     {
         const TF eps = TF(1.0e-20);     // DANGEROUS for SP.
-        // const TF zdt = TF(1) / dt;
 
         // (i,j) strides in lookup table.
         const int iis = afrac_stride;
@@ -3163,12 +3140,6 @@ namespace Sb_cold
                     TF nuc_q = std::min(nuc_n * ice.x_min, qv[ij]);
                     nuc_n = nuc_q / ice.x_min;
 
-                    // From absolute change -> tendency.
-                    // NOTE: there is no `*dt` in ICON, but `nuc_q` and `nuc_n` are assumed to
-                    // be total increments of `ni` and `qi`....?
-                    // nuc_q *= zdt;
-                    // nuc_n *= zdt;
-
                     // Store tendencies.
                     qi[ij] += nuc_q;
                     ni[ij] += nuc_n;
@@ -3228,8 +3199,6 @@ namespace Sb_cold
               and U. Lohmann 2006 (KHL06 hereafter)
             - Phillips et al. (2008) with extensions
         */
-
-        // const TF zdt = TF(1) / dt;
 
         // Switch for version of Phillips et al. scheme.
         // Only `2010` is supported (also in ICON)..
@@ -3440,16 +3409,8 @@ namespace Sb_cold
                             TF mi_hom  = (TF(4)/TF(3) * pi<TF> * Constants::rho_i<TF>) * ni_hom * fm::pow3(ri_hom);
                             mi_hom  = std::max(mi_hom, ice.x_min);
 
-                            // MT suggestion of alberto to reduce the nucleation if it is too much:
-                            // TF nuc_n = std::max(std::min(ni_hom-ni, ni_hom_max<TF>-ni), TF(0));
                             TF nuc_n = std::max(std::min(ni_hom, ni_hom_max<TF>), TF(0));
                             TF nuc_q = std::min(nuc_n * mi_hom, qv[ij]);
-
-                            // From absolute change -> tendency.
-                            // NOTE: there is no `*dt` in ICON, but `nuc_q` and `nuc_n` are assumed to
-                            // be total increments of `ni` and `qi`....?
-                            // nuc_n *= zdt;
-                            // nuc_q *= zdt;
 
                             qi[ij] += nuc_q;
                             ni[ij] += nuc_n;
