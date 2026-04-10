@@ -337,7 +337,7 @@ namespace Thermo_moist_functions
                 // const TF f = tnr - tl - Lv<TF>/cp<TF>*(qt - qs);
                 // const TF f_prime = TF(1.) + Lv<TF>/cp<TF>*dqsatdT_liq(p, tnr);
                 const TF f = f_D(p, tnr, qt, tl);
-                const TF f_prime = (f_D(p, tnr+epsilon, qt, tl) - f_D(p, tnr-epsilon, qt, tl))/(2*epsilon);
+                const TF f_prime = (f_D(p, tnr+epsilon, qt, tl) - f)/epsilon;
 
                 tnr -= f / f_prime;
             }
@@ -359,19 +359,19 @@ namespace Thermo_moist_functions
 
                 // BF04 E
                 // const TF f = f_E(p, tnr, qt, tl);
-                // const TF f_prime = (f_E(p, tnr + epsilon, qt, tl) - f_E(p, tnr - epsilon, qt, tl))/(2*epsilon);
+                // const TF f_prime = (f_E(p, tnr + epsilon, qt, tl) - f)/epsilon;
 
                 // BF04 F
                 // const TF f = f_F(p, tnr, qt, tl);
-                // const TF f_prime = (f_F(p, tnr + epsilon, qt, tl) - f_F(p, tnr - epsilon, qt, tl))/(2*epsilon);
+                // const TF f_prime = (f_F(p, tnr + epsilon, qt, tl) - f)/epsilon;
 
                 //BF04 G
                 // const TF f = f_G(p, tnr, qt, thl);
-                // const TF f_prime = (f_G(p, tnr+epsilon, qt, thl) - f_G(p, tnr-epsilon, qt, thl))/(2*epsilon);
+                // const TF f_prime = (f_G(p, tnr+epsilon, qt, thl) - f)/epsilon;
 
                 // BF04 H
                 const TF f = f_H(p, tnr, qt, thl);
-                const TF f_prime = (f_H(p, tnr+epsilon, qt, thl) - f_H(p, tnr-epsilon, qt, thl))/(2*epsilon);
+                const TF f_prime = (f_H(p, tnr+epsilon, qt, thl) - f)/epsilon;
 
                 tnr -= f / f_prime;
             }
