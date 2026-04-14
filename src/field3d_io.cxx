@@ -229,6 +229,7 @@ int Field3d_io<TF>::save_field3d_coarse(
     return 0;
 }
 
+
 template<typename TF>
 int Field3d_io<TF>::load_field3d(
         TF* const restrict data,
@@ -718,6 +719,95 @@ int Field3d_io<TF>::save_xy_slice(
     const size_t bytes = gd.itot * gd.jtot * sizeof(TF);
     const double tp = (bytes / (1000. * 1000. * 1000.)) / elapsed;
     master.print_message("%s: %.2f GB/s (%.2e s)\n", filename, tp, elapsed);
+
+    return 0;
+}
+
+template<typename TF>
+int Field3d_io<TF>::save_xy_slice_coarse(
+        TF* const restrict data,
+        TF* const restrict tmp,
+        const char* filename,
+        const int ratio_x,
+        const int ratio_y,
+        const int kslice)
+{
+    auto& gd = grid.get_grid_data();
+    auto& md = master.get_MPI_data();
+
+    const int jj = gd.icells;
+    const int kk = gd.icells * gd.jcells;
+
+    const int imax_c = gd.imax / ratio_x;
+    const int jmax_c = gd.jmax / ratio_y;
+    const int jjb = imax_c;
+
+    const TF norm = TF(1) / (ratio_x * ratio_y);
+
+    for (int j = 0; j < jmax_c; ++j)
+        for (int i = 0; i < imax_c; ++i)
+        {
+            TF sum = TF(0);
+            for (int jj_c = 0; jj_c < ratio_y; ++jj_c)
+                #pragma ivdep
+                for (int ii_c = 0; ii_c < ratio_x; ++ii_c)
+                {
+                    const int ijk = (i*ratio_x + ii_c + gd.igc)
+                                  + (j*ratio_y + jj_c + gd.jgc) * jj
+                                  + kslice * kk;
+                    sum += data[ijk];
+                }
+            tmp[i + j*jjb] = sum * norm;
+        }
+
+    Timer timer;
+
+    // Gather on rank 0 and write (no MPI-IO).
+    MPI_Datatype send_type;
+    MPI_Type_vector(jmax_c, imax_c, imax_c, mpi_fp_type<TF>(), &send_type);
+    MPI_Type_commit(&send_type);
+
+    const int itot_c = gd.itot / ratio_x;
+    const int jtot_c = gd.jtot / ratio_y;
+
+    MPI_Datatype recv_type;
+    int totsize [2] = {jtot_c, itot_c};
+    int subsize [2] = {jmax_c, imax_c};
+    int substart[2] = {md.mpicoordy*jmax_c, md.mpicoordx*imax_c};
+    MPI_Type_create_subarray(2, totsize, subsize, substart, MPI_ORDER_C, mpi_fp_type<TF>(), &recv_type);
+    MPI_Type_commit(&recv_type);
+
+    MPI_Datatype recv_type_r;
+    MPI_Type_create_resized(recv_type, 0, sizeof(TF), &recv_type_r);
+    MPI_Type_commit(&recv_type_r);
+
+    std::vector<int> counts(md.nprocs, 1);
+
+    std::vector<int> offset(md.nprocs);
+    for (int i = 0; i < md.npx; ++i)
+        for (int j = 0; j < md.npy; ++j)
+            offset[i + j*md.npx] = i*imax_c + j*jmax_c*itot_c;
+
+    std::vector<TF> recv(itot_c * jtot_c);
+    MPI_Gatherv(tmp, 1, send_type, recv.data(), counts.data(), offset.data(), recv_type_r, 0, md.commxy);
+
+    if (md.mpiid == 0)
+    {
+        FILE* pFile = fopen(filename, "wbx");
+        if (pFile == NULL)
+            return 1;
+        fwrite(recv.data(), sizeof(TF), itot_c * jtot_c, pFile);
+        fclose(pFile);
+    }
+
+    MPI_Type_free(&send_type);
+    MPI_Type_free(&recv_type);
+    MPI_Type_free(&recv_type_r);
+
+    const double elapsed = timer.elapsed();
+    const size_t bytes = static_cast<size_t>(gd.itot/ratio_x) * gd.jtot/ratio_y * sizeof(TF);
+    const double trp = (bytes / (1000. * 1000. * 1000.)) / elapsed;
+    master.print_message("%s: %.2f GB/s (%.2e s)\n", filename, trp, elapsed);
 
     return 0;
 }

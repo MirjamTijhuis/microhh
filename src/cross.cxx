@@ -350,6 +350,14 @@ Cross<TF>::Cross(
 
         // Get the list of vertical soil locations
         xy_soil = inputin.get_list<TF>("cross", "xy_soil", "", std::vector<TF>());
+
+        // Coarse-grained cross-sections.
+        crosslist_c = inputin.get_list<std::string>("cross", "crosslist_coarse", "", std::vector<std::string>());
+        if (crosslist_c.size() > 0)
+        {
+            factor_x = inputin.get_item<int>("cross", "factor_x", "");
+            factor_y = inputin.get_item<int>("cross", "factor_y", "");
+        }
     }
     else
     {
@@ -799,7 +807,27 @@ int Cross<TF>::cross_path(TF* restrict data, std::string name, int iotime)
             gd.kstart, gd.kend);
 
     nerror += cross_plane(&tmp[gd.kstart*gd.ijcells], no_offset, name, iotime);
+
+
+    // Hack hack hack for benchmarking throughput..
+    if (std::find(crosslist_c.begin(), crosslist_c.end(), name) != crosslist_c.end())
+    {
+        auto tmpfld2 = fields.get_tmp();
+
+        char filename[256];
+        std::snprintf(filename, 256, "%s.%s.%07d", name.c_str(), "xy_c.000", iotime);
+
+        nerror += check_save(
+                field3d_io.save_xy_slice_coarse(
+                        &tmp[gd.kstart*gd.ijcells], tmpfld2->fld.data(),
+                        filename, factor_x, factor_y, 0),
+                filename);
+
+        fields.release_tmp(tmpfld2);
+    }
+
     fields.release_tmp(tmpfld);
+
     return nerror;
 }
 
