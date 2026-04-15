@@ -247,8 +247,10 @@ namespace Thermo_moist_functions
         const TF chi = (Rd<TF> + Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
         const TF gamma = (Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
         const TF epsilon = Rd<TF>  / Rv<TF>;
-        const TF ql = std::max(qt - qsat_liq(p, T), TF(0));
-        const TF qv = std::min(qt, qsat_liq(p, T));
+        // const TF ql = std::max(qt - qsat_liq(p, T), TF(0));
+        // const TF qv = std::min(qt, qsat_liq(p, T));
+        const TF qv = qsat_liq(p, T);
+        const TF ql = qt - qv;
 
         const TF rh = qv / qsat_liq(p, T);
 
@@ -333,11 +335,11 @@ namespace Thermo_moist_functions
                 const TF epsilon = 0.01;
 
                 // BF04 D
-                // qs = qsat_liq(p, tnr);
-                // const TF f = tnr - tl - Lv<TF>/cp<TF>*(qt - qs);
-                // const TF f_prime = TF(1.) + Lv<TF>/cp<TF>*dqsatdT_liq(p, tnr);
-                const TF f = f_D(p, tnr, qt, tl);
-                const TF f_prime = (f_D(p, tnr+epsilon, qt, tl) - f)/epsilon;
+                qs = qsat_liq(p, tnr);
+                const TF f = tnr - tl - Lv<TF>/cp<TF>*(qt - qs);
+                const TF f_prime = TF(1.) + Lv<TF>/cp<TF>*dqsatdT_liq(p, tnr);
+                // const TF f = f_D(p, tnr, qt, tl);
+                // const TF f_prime = (f_D(p, tnr+epsilon, qt, tl) - f)/epsilon;
 
                 tnr -= f / f_prime;
             }
