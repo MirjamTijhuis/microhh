@@ -332,7 +332,7 @@ namespace Thermo_moist_functions
             {
                 ++niter;
                 tnr_old = tnr;
-                const TF epsilon = 0.01;
+                // const TF epsilon = 0.01;
 
                 // BF04 D
                 qs = qsat_liq(p, tnr);
@@ -357,7 +357,7 @@ namespace Thermo_moist_functions
             {
                 ++niter;
                 tnr_old = tnr;
-                const TF epsilon = 0.01;
+                const TF epsilon = 0.1;
 
                 // BF04 E
                 // const TF f = f_E(p, tnr, qt, tl);
