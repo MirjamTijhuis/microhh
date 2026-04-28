@@ -355,8 +355,8 @@ Cross<TF>::Cross(
         crosslist_c = inputin.get_list<std::string>("cross", "crosslist_coarse", "", std::vector<std::string>());
         if (crosslist_c.size() > 0)
         {
-            factor_x = inputin.get_item<int>("cross", "factor_x", "");
-            factor_y = inputin.get_item<int>("cross", "factor_y", "");
+            ratio_x = inputin.get_item<int>("cross", "ratio_x", "");
+            ratio_y = inputin.get_item<int>("cross", "ratio_y", "");
         }
     }
     else
@@ -820,7 +820,7 @@ int Cross<TF>::cross_path(TF* restrict data, std::string name, int iotime)
         nerror += check_save(
                 field3d_io.save_xy_slice_coarse(
                         &tmp[gd.kstart*gd.ijcells], tmpfld2->fld.data(),
-                        filename, factor_x, factor_y, 0),
+                        filename, ratio_x, ratio_y, 0),
                 filename);
 
         fields.release_tmp(tmpfld2);

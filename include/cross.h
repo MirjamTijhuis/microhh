@@ -88,8 +88,8 @@ class Cross
 
         // Coarse-grained cross-sections.
         std::vector<std::string> crosslist_c;
-        int factor_x;
-        int factor_y;
+        int ratio_x;
+        int ratio_y;
 
         //int check_list(std::vector<std::string> *, FieldMap *, std::string crossname);
         int check_save(int, char *);
