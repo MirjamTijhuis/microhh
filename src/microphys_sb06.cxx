@@ -2525,7 +2525,6 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 (*qv_conversion_tend).data(),
                 (*qc_conversion_tend).data(),
                 (*T_slice).data(),
-                (*qt_slice).data(),
                 (*ql_new).data(),
                 (*qv_new).data(),
                 (*thl_slice).data(),

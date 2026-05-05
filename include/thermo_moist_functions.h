@@ -459,6 +459,55 @@ namespace Thermo_moist_functions
         return ans;
     }
 
+
+    template<typename TF>
+    inline Struct_sat_adjust<TF> sat_adjust_absolute_T(
+            const TF T_end, const TF qt_end, const TF p, const TF qc_end, const TF qv_end, const TF Lv)
+
+            {
+        int niter = 0;
+        int nitermax = 10;
+        const TF zqwmin = 1e-20;
+        const TF Ttest = T_end - (Lv / cp<TF>) * qc_end;
+        const TF qtest = qsat_liq(p, Ttest);
+
+        Struct_sat_adjust<TF> ans =
+        {
+                TF(0.), // ql
+                TF(0.), // qi
+                Ttest,     // t
+                qt_end,     // qs
+        };
+
+        if (qt_end <= qtest)
+        {
+            return ans;
+        }
+        else
+        {
+            TF twork = T_end;
+            TF twork_old = twork + TF(10);
+
+            while (std::fabs(twork - twork_old) / twork_old > TF(1.e-5) && niter < nitermax) {
+                ++niter;
+                twork_old = twork;
+
+                const TF qwd = qsat_liq(p, twork);
+                const TF f = twork - T_end + Lv / cp<TF> * (qwd - qv_end);
+                const TF f_prime = TF(1.) + Lv / cp<TF> * dqsatdT_liq(p, twork);
+                twork -= f / f_prime;
+            }
+
+            const TF qwa = qsat_liq(p, T_end);
+            ans.ql = std::max(qt_end - qwa, zqwmin);
+            ans.qi = TF(0);
+            ans.t  = twork;
+            ans.qs = qwa;
+
+            return ans;
+        }
+    }
+
     template<typename TF, Satadjust_type sw_satadjust>
     void calc_base_state(
             TF* restrict pref,
