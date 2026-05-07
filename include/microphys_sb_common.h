@@ -407,7 +407,7 @@ namespace Sb_common
                 {
                     // absolute temperature change as in ICON using constant Lv and Lf
                     // const TF dT = -(Ls<TF>/cp<TF>) * qvt[ij] - (Lf<TF>/cp<TF>) * (qrt[ij] + qct[ij]);
-                    // const TF T_end = T_start[ij] + dT;
+                    // TF T_end = T_start[ij] + dT;
                     // tmf::Struct_sat_adjust<TF> ssa = tmf::sat_adjust_absolute_T<TF>(T_end, qt_end, p[k], qc_end[ij], qv_end[ij], Lv<TF>);
                     // T_end = ssa.t;
                     // qc_end[ij] = ssa.ql;
