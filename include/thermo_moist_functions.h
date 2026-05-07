@@ -368,12 +368,12 @@ namespace Thermo_moist_functions
                 // const TF f_prime = (f_F(p, tnr + epsilon, qt, tl) - f)/epsilon;
 
                 //BF04 G
-                // const TF f = f_G(p, tnr, qt, thl);
-                // const TF f_prime = (f_G(p, tnr+epsilon, qt, thl) - f)/epsilon;
+                const TF f = f_G(p, tnr, qt, thl);
+                const TF f_prime = (f_G(p, tnr+epsilon, qt, thl) - f)/epsilon;
 
                 // BF04 H
-                const TF f = f_H(p, tnr, qt, thl);
-                const TF f_prime = (f_H(p, tnr+epsilon, qt, thl) - f)/epsilon;
+                // const TF f = f_H(p, tnr, qt, thl);
+                // const TF f_prime = (f_H(p, tnr+epsilon, qt, thl) - f)/epsilon;
 
                 tnr -= f / f_prime;
             }
