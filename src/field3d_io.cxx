@@ -918,6 +918,62 @@ int Field3d_io<TF>::save_field3d(
 }
 
 template<typename TF>
+int Field3d_io<TF>::save_field3d_coarse(
+        TF* const restrict data,
+        TF* const restrict tmp1,
+        const char* filename,
+        const int ratio_x,
+        const int ratio_y,
+        const int kstart,
+        const int kend)
+{
+    auto& gd = grid.get_grid_data();
+
+    const int jj = gd.icells;
+    const int kk = gd.icells*gd.jcells;
+
+    const int imax_c = gd.imax / ratio_x;
+    const int jmax_c = gd.jmax / ratio_y;
+    const int kmax   = kend - kstart;
+
+    const int jjb = imax_c;
+    const int kkb = imax_c * jmax_c;
+
+    const TF norm = TF(1) / (ratio_x * ratio_y);
+
+    for (int k = 0; k < kmax; ++k)
+        for (int j = 0; j < jmax_c; ++j)
+            for (int i = 0; i < imax_c; ++i)
+            {
+                TF sum = TF(0);
+                for (int jj_c = 0; jj_c < ratio_y; ++jj_c)
+                    #pragma ivdep
+                    for (int ii_c = 0; ii_c < ratio_x; ++ii_c)
+                    {
+                        const int ijk = (i*ratio_x + ii_c + gd.igc)
+                                      + (j*ratio_y + jj_c + gd.jgc) * jj
+                                      + (k + kstart) * kk;
+                        sum += data[ijk];
+                    }
+                tmp1[i + j*jjb + k*kkb] = sum * norm;
+            }
+
+    const int count = imax_c * jmax_c * kmax;
+
+    FILE *pFile;
+    pFile = fopen(filename, "wbx");
+    if (pFile == NULL)
+        return 1;
+
+    if (fwrite(tmp1, sizeof(TF), count, pFile) != (unsigned)count)
+        return 1;
+
+    fclose(pFile);
+
+    return 0;
+}
+
+template<typename TF>
 int Field3d_io<TF>::load_field3d(
         TF* const restrict data,
         TF* const restrict tmp1, TF* const restrict tmp2,
@@ -1056,6 +1112,55 @@ int Field3d_io<TF>::save_xy_slice(
             const int ijkb = i + j*jjb;
             tmp[ijkb] = data[ijk] + data0;
         }
+
+    FILE *pFile;
+    pFile = fopen(filename, "wbx");
+    if (pFile == NULL)
+        return 1;
+
+    fwrite(tmp, sizeof(TF), count, pFile);
+    fclose(pFile);
+
+    return 0;
+}
+
+template<typename TF>
+int Field3d_io<TF>::save_xy_slice_coarse(
+        TF* const restrict data,
+        TF* const restrict tmp,
+        const char* filename,
+        const int ratio_x,
+        const int ratio_y,
+        const int kslice)
+{
+    auto& gd = grid.get_grid_data();
+
+    const int jj = gd.icells;
+    const int kk = gd.icells * gd.jcells;
+
+    const int imax_c = gd.imax / ratio_x;
+    const int jmax_c = gd.jmax / ratio_y;
+    const int jjb = imax_c;
+
+    const TF norm = TF(1) / (ratio_x * ratio_y);
+
+    for (int j = 0; j < jmax_c; ++j)
+        for (int i = 0; i < imax_c; ++i)
+        {
+            TF sum = TF(0);
+            for (int jj_c = 0; jj_c < ratio_y; ++jj_c)
+                #pragma ivdep
+                for (int ii_c = 0; ii_c < ratio_x; ++ii_c)
+                {
+                    const int ijk = (i*ratio_x + ii_c + gd.igc)
+                                  + (j*ratio_y + jj_c + gd.jgc) * jj
+                                  + kslice * kk;
+                    sum += data[ijk];
+                }
+            tmp[i + j*jjb] = sum * norm;
+        }
+
+    const int count = imax_c * jmax_c;
 
     FILE *pFile;
     pFile = fopen(filename, "wbx");
