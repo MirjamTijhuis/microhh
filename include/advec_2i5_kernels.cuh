@@ -444,30 +444,87 @@ namespace Advec_2i5_kernels
     };
 
 
+//    // Implementation flux limiter according to Koren, 1993.
+//    template<typename TF> __device__
+//    inline TF flux_lim_g(const TF u, TF sm2, TF sm1, TF sp1, TF sp2)
+//    {
+//        const TF eps = TF(1.e-12);
+//
+//        if (u < TF(0.))
+//        {
+//            // swap
+//            TF tmp1 = sm1;
+//            sm1 = sp1;
+//            sp1 = tmp1;
+//
+//            // swap
+//            TF tmp = sm2;
+//            sm2 = sp2;
+//            sp2 = tmp;
+//        }
+//
+//        const TF two_r = TF(2.) * (sp1-sm1+eps) / (sm1-sm2+eps);
+//        const TF phi = max(
+//                TF(0.),
+//                min( two_r, min( TF(1./3.)*(TF(1.)+two_r), TF(2.)) ) );
+//        return u*(sm1 + TF(0.5)*phi*(sm1 - sm2));
+//    }
+//
+//    template<typename TF> __device__
+//    inline TF flux_lim_bot_g(const TF u, const TF sm2, const TF sm1, const TF sp1, const TF sp2)
+//    {
+//        const TF eps = TF(1.e-12);
+//
+//        if (u >= TF(0.))
+//        {
+//            return u*sm1;
+//        }
+//        else
+//        {
+//            const TF two_r = TF(2.) * (sm1-sp1+eps) / (sp1-sp2+eps);
+//            const TF phi = max(
+//                    TF(0.),
+//                    min( two_r, min( TF(1./3.)*(TF(1.)+two_r), TF(2.)) ) );
+//            return u*(sp1 + TF(0.5)*phi*(sp1 - sp2));
+//        }
+//    }
+//
+//    template<typename TF> __device__
+//    inline TF flux_lim_top_g(const TF u, const TF sm2, const TF sm1, const TF sp1, const TF sp2)
+//    {
+//        const TF eps = TF(1.e-12);
+//
+//        if (u >= TF(0.))
+//        {
+//            const TF two_r = TF(2.) * (sp1-sm1+eps) / (sm1-sm2+eps);
+//            const TF phi = max(
+//                    TF(0.),
+//                    min( two_r, min( TF(1./3.)*(TF(1.)+two_r), TF(2.)) ) );
+//            return u*(sm1 + TF(0.5)*phi*(sm1 - sm2));
+//        }
+//        else
+//        {
+//            return u*sp1;
+//        }
+//    }
+
+
     // Implementation flux limiter according to Koren, 1993.
     template<typename TF> __device__
-    inline TF flux_lim_g(const TF u, TF sm2, TF sm1, TF sp1, TF sp2)
+    inline TF flux_lim_g(const TF u, const TF sm2, const TF sm1, const TF sp1, const TF sp2)
     {
         const TF eps = TF(1.e-12);
 
-        if (u < TF(0.))
-        {
-            // swap
-            TF tmp1 = sm1;
-            sm1 = sp1;
-            sp1 = tmp1;
+        const bool pos = (u >= TF(0.));
+        const TF a = pos ? sm1 : sp1;
+        const TF b = pos ? sm2 : sp2;
+        const TF c = pos ? sp1 : sm1;
 
-            // swap
-            TF tmp = sm2;
-            sm2 = sp2;
-            sp2 = tmp;
-        }
-
-        const TF two_r = TF(2.) * (sp1-sm1+eps) / (sm1-sm2+eps);
-        const TF phi = max(
+        const TF two_r = TF(2.) * (c - a + eps) / (a - b + eps);
+        const TF phi   = max(
                 TF(0.),
-                min( two_r, min( TF(1./3.)*(TF(1.)+two_r), TF(2.)) ) );
-        return u*(sm1 + TF(0.5)*phi*(sm1 - sm2));
+                min(two_r, min(TF(1./3.)*(TF(1.) + two_r), TF(2.))));
+        return u * (a + TF(0.5) * phi * (a - b));
     }
 
     template<typename TF> __device__
@@ -475,18 +532,14 @@ namespace Advec_2i5_kernels
     {
         const TF eps = TF(1.e-12);
 
-        if (u >= TF(0.))
-        {
-            return u*sm1;
-        }
-        else
-        {
-            const TF two_r = TF(2.) * (sm1-sp1+eps) / (sp1-sp2+eps);
-            const TF phi = max(
-                    TF(0.),
-                    min( two_r, min( TF(1./3.)*(TF(1.)+two_r), TF(2.)) ) );
-            return u*(sp1 + TF(0.5)*phi*(sp1 - sp2));
-        }
+        const TF two_r = TF(2.) * (sm1 - sp1 + eps) / (sp1 - sp2 + eps);
+        const TF phi   = max(
+                TF(0.),
+                min(two_r, min(TF(1./3.)*(TF(1.) + two_r), TF(2.))));
+        const TF flux_neg = u * (sp1 + TF(0.5) * phi * (sp1 - sp2));
+        const TF flux_pos = u * sm1;
+
+        return (u >= TF(0.)) ? flux_pos : flux_neg;
     }
 
     template<typename TF> __device__
@@ -494,18 +547,14 @@ namespace Advec_2i5_kernels
     {
         const TF eps = TF(1.e-12);
 
-        if (u >= TF(0.))
-        {
-            const TF two_r = TF(2.) * (sp1-sm1+eps) / (sm1-sm2+eps);
-            const TF phi = max(
-                    TF(0.),
-                    min( two_r, min( TF(1./3.)*(TF(1.)+two_r), TF(2.)) ) );
-            return u*(sm1 + TF(0.5)*phi*(sm1 - sm2));
-        }
-        else
-        {
-            return u*sp1;
-        }
+        const TF two_r = TF(2.) * (sp1 - sm1 + eps) / (sm1 - sm2 + eps);
+        const TF phi   = max(
+                TF(0.),
+                min(two_r, min(TF(1./3.)*(TF(1.) + two_r), TF(2.))));
+        const TF flux_pos = u * (sm1 + TF(0.5) * phi * (sm1 - sm2));
+        const TF flux_neg = u * sp1;
+
+        return (u >= TF(0.)) ? flux_pos : flux_neg;
     }
 
     template<typename TF>
