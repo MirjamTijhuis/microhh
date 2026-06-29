@@ -521,7 +521,7 @@ namespace Advec_2i5_kernels
                     - ( flux_lim_g(v[ijk+jj1], s[ijk-jj1], s[ijk    ], s[ijk+jj1], s[ijk+jj2])
                         - flux_lim_g(v[ijk    ], s[ijk-jj2], s[ijk-jj1], s[ijk    ], s[ijk+jj1]) ) * dyi;
 
-            if (level.distance_to_start() >= 2 && level.distance_to_start() >= 2)
+            if (level.distance_to_start() >= 2 && level.distance_to_end() >= 2)
             {
                 st[ijk] +=
                         - ( rhorefh[k+1] * flux_lim_g(w[ijk+kk], s[ijk-kk1], s[ijk    ], s[ijk+kk1], s[ijk+kk2])
