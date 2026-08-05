@@ -1268,7 +1268,7 @@ void Fields<TF>::save(int n)
         }
         else
         {
-            //master.print_message("OK\n");
+            master.print_message("OK\n");
         }
     }
 

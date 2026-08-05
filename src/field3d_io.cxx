@@ -145,7 +145,7 @@ int Field3d_io<TF>::save_field3d(
     const double elapsed = timer.elapsed();
     const size_t bytes = static_cast<size_t>(gd.itot) * gd.jtot * gd.ktot * sizeof(TF);
     const double trp = (bytes / (1000. * 1000. * 1000.)) / elapsed;
-    master.print_message("%s: %.2f GB/s (%.2e s)\n", filename, trp, elapsed);
+    //master.print_message("%s: %.2f GB/s (%.2e s)\n", filename, trp, elapsed);
 
     return 0;
 }
@@ -224,7 +224,7 @@ int Field3d_io<TF>::save_field3d_coarse(
     const double elapsed = timer.elapsed();
     const size_t bytes = static_cast<size_t>(gd.itot/ratio_x) * gd.jtot/ratio_y * gd.ktot * sizeof(TF);
     const double trp = (bytes / (1000. * 1000. * 1000.)) / elapsed;
-    master.print_message("%s: %.2f GB/s (%.2e s)\n", filename, trp, elapsed);
+    //master.print_message("%s: %.2f GB/s (%.2e s)\n", filename, trp, elapsed);
 
     return 0;
 }
@@ -323,7 +323,7 @@ int Field3d_io<TF>::load_field3d(
     const double elapsed = timer.elapsed();
     const size_t bytes = static_cast<size_t>(gd.itot) * gd.jtot * gd.ktot * sizeof(TF);
     const double trp = (bytes / (1000. * 1000. * 1000.)) / elapsed;
-    master.print_message("%s: %.2f GB/s (%.2e s)\n", filename, trp, elapsed);
+    //master.print_message("%s: %.2f GB/s (%.2e s)\n", filename, trp, elapsed);
 
     return 0;
 }
@@ -455,7 +455,7 @@ int Field3d_io<TF>::save_xz_slice(
         const double elapsed = timer.elapsed();
         const size_t bytes = gd.itot * gd.jtot * sizeof(TF);
         const double tp = (bytes / (1000. * 1000. * 1000.)) / elapsed;
-        master.print_message("%s: %.2f GB/s (%.2e s)\n", filename, tp, elapsed);
+        //master.print_message("%s: %.2f GB/s (%.2e s)\n", filename, tp, elapsed);
     }
 
     // Gather errors from other processes
@@ -592,7 +592,7 @@ int Field3d_io<TF>::save_yz_slice(
         const double elapsed = timer.elapsed();
         const size_t bytes = gd.itot * gd.jtot * sizeof(TF);
         const double tp = (bytes / (1000. * 1000. * 1000.)) / elapsed;
-        master.print_message("%s: %.2f GB/s\n", filename, tp);
+        //master.print_message("%s: %.2f GB/s\n", filename, tp);
     }
 
     // Gather errors from other processes
@@ -718,7 +718,7 @@ int Field3d_io<TF>::save_xy_slice(
     const double elapsed = timer.elapsed();
     const size_t bytes = gd.itot * gd.jtot * sizeof(TF);
     const double tp = (bytes / (1000. * 1000. * 1000.)) / elapsed;
-    master.print_message("%s: %.2f GB/s (%.2e s)\n", filename, tp, elapsed);
+    //master.print_message("%s: %.2f GB/s (%.2e s)\n", filename, tp, elapsed);
 
     return 0;
 }
@@ -807,7 +807,7 @@ int Field3d_io<TF>::save_xy_slice_coarse(
     const double elapsed = timer.elapsed();
     const size_t bytes = static_cast<size_t>(gd.itot/ratio_x) * gd.jtot/ratio_y * sizeof(TF);
     const double trp = (bytes / (1000. * 1000. * 1000.)) / elapsed;
-    master.print_message("%s: %.2f GB/s (%.2e s)\n", filename, trp, elapsed);
+    //master.print_message("%s: %.2f GB/s (%.2e s)\n", filename, trp, elapsed);
 
     return 0;
 }
