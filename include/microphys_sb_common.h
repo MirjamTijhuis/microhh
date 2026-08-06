@@ -398,7 +398,6 @@ namespace Sb_common
                     tmf::Struct_sat_adjust<TF> ssa = tmf::sat_adjust_absolute_T<TF>(T_end, qt_end, p[k], qc_end[ij], qv_end[ij], Lv<TF>);
                     T_end = ssa.t;
                     qc_end[ij] = ssa.ql;
-                    qv_end[ij] = ssa.qs;
 
                     // thl1/D from BF04
                     thl_end = T_end/exner[k] - Lv<TF>*qc_end[ij]/(cp<TF> * exner[k]);
@@ -406,47 +405,40 @@ namespace Sb_common
                 else
                 {
                     // absolute temperature change as in ICON using constant Lv and Lf
-                    // const TF dT = -(Ls<TF>/cp<TF>) * qvt[ij] - (Lf<TF>/cp<TF>) * (qrt[ij] + qct[ij]);
-                    // TF T_end = T_start[ij] + dT;
-                    // tmf::Struct_sat_adjust<TF> ssa = tmf::sat_adjust_absolute_T<TF>(T_end, qt_end, p[k], qc_end[ij], qv_end[ij], Lv<TF>);
-                    // T_end = ssa.t;
-                    // qc_end[ij] = ssa.ql;
-                    // qv_end[ij] = ssa.qs;
+                     const TF dT = -(Ls<TF>/cp<TF>) * qvt[ij] - (Lf<TF>/cp<TF>) * (qrt[ij] + qct[ij]);
+                     TF T_end = T_start[ij] + dT;
+                     tmf::Struct_sat_adjust<TF> ssa = tmf::sat_adjust_absolute_T<TF>(T_end, qt_end, p[k], qc_end[ij], qv_end[ij], Lv<TF>);
+                     T_end = ssa.t;
+                     qc_end[ij] = ssa.ql;
 
                     // thl2/E from BF04
-                    // thl_end = T_end/exner[k] / (1+ Lv<TF>*qc_end[ij]/(cp<TF> * T_end));
+                    thl_end = T_end/exner[k] / (1+ Lv<TF>*qc_end[ij]/(cp<TF> * T_end));
 
-                    // thl3/F from BF04
+                    // // thl3/F from BF04
                     // thl_end = T_end/exner[k] / (1+ Lv<TF>*qc_end[ij]/(cp<TF> * std::max(T_end, TF(253))));
 
-                    // absolute temperature change as in ICON using T-dependent Lv and Lf
-                    const TF Lv_T_start = lv1 - lv2 * T_start[ij];
-                    const TF Ls_T_start = ls1 - ls2 * T_start[ij];
-                    const TF Lf_T_start = Ls_T_start - Lv_T_start;
+                    // // absolute temperature change as in ICON using T-dependent Lv and Lf
+                    // const TF Lv_T_start = lv1 - lv2 * T_start[ij];
+                    // const TF Ls_T_start = ls1 - ls2 * T_start[ij];
+                    // const TF Lf_T_start = Ls_T_start - Lv_T_start;
 
-                    const TF dT = -(Ls_T_start/cp<TF>) * qvt[ij] - (Lf_T_start/cp<TF>) * (qrt[ij] + qct[ij]);
-                    TF T_end = T_start[ij] + dT;
+                    // const TF dT = -(Ls_T_start/cp<TF>) * qvt[ij] - (Lf_T_start/cp<TF>) * (qrt[ij] + qct[ij]);
+                    // TF T_end = T_start[ij] + dT;
 
-                    const TF Lv_T = lv1 - lv2 * T_end;
-                    tmf::Struct_sat_adjust<TF> ssa = tmf::sat_adjust_absolute_T<TF>(T_end, qt_end, p[k], qc_end[ij], qv_end[ij], Lv_T);
-                    T_end = ssa.t;
-                    qc_end[ij] = ssa.ql;
-                    qv_end[ij] = ssa.qs;
+                    // const TF Lv_T = lv1 - lv2 * T_end;
+                    // tmf::Struct_sat_adjust<TF> ssa = tmf::sat_adjust_absolute_T<TF>(T_end, qt_end, p[k], qc_end[ij], qv_end[ij], Lv_T);
+                    // T_end = ssa.t;
+                    // qc_end[ij] = ssa.ql;
 
-                    const TF Lv_T_end = lv1 - lv2 * T_end;
-                    const TF chi = (Rd<TF> + Rv<TF> * qt_end) / (cp<TF> + cpv<TF> * qt_end);
-                    const TF gamma = (Rv<TF> * qt_end) / (cp<TF> + cpv<TF> * qt_end);
-                    const TF epsilon = Rd<TF> / Rv<TF>;
+                    // const TF Lv_T_end = lv1 - lv2 * T_end;
+                    // const TF chi = (Rd<TF> + Rv<TF> * qt_end) / (cp<TF> + cpv<TF> * qt_end);
+                    // const TF gamma = (Rv<TF> * qt_end) / (cp<TF> + cpv<TF> * qt_end);
+                    // const TF epsilon = Rd<TF> / Rv<TF>;
 
-                    // thl4/G from BF04 incl. temperature dependent latent heat
-                    thl_end = T_end * pow((p0<TF>/p[k]), chi) * pow((1 - qc_end[ij] / (epsilon + qt_end)), chi)
-                    * pow((1 - qc_end[ij] / qt_end), -gamma) * std::exp((-Lv_T_end * qc_end[ij]) / ((cp<TF> + cpv<TF> * qt_end) * T_end));
-
-                    // thl5/H from BF04 incl. temperature dependent latent heat
-                    // const TF rh = qv_end[ij] / tmf::qsat_liq(p[k], T_end);
+                    // // thl4/G from BF04 incl. temperature dependent latent heat
                     // thl_end = T_end * pow((p0<TF>/p[k]), chi) * pow((1 - qc_end[ij] / (epsilon + qt_end)), chi)
-                    //                   * pow((1 - qc_end[ij] / qt_end), -gamma)
-                    //                   * std::exp(((-Lv_T_end * qc_end[ij]) / ((cp<TF> + cpv<TF> * qt_end) * T_end)) + ((Rv<TF> * qc_end[ij] * std::log(rh))/(cp<TF> + cpv<TF> * qt_end)));
+                    // * pow((1 - qc_end[ij] / qt_end), -gamma) * std::exp((-Lv_T_end * qc_end[ij]) / ((cp<TF> + cpv<TF> * qt_end) * T_end));
+
                 }
 
                 // tendencies

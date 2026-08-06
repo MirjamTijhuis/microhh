@@ -1316,13 +1316,12 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 gd.jstart, gd.jend,
                 gd.icells, gd.ijcells, k);
 
-        if (sw_debug || sw_check)
-        {
-            Sb_common::limit_slice((*qt_slice).data(),
-                                   gd.istart, gd.iend,
-                                   gd.jstart, gd.jend,
-                                   gd.icells);
-        }
+        // MT: microphysics calculated before limiter, hence limiting needed here.
+        // No water is permanently lost since these are temporary slices
+        Sb_common::limit_slice((*qt_slice).data(),
+                               gd.istart, gd.iend,
+                               gd.jstart, gd.jend,
+                               gd.icells);
 
         auto calc_sat_adjust_wrapper = [&]<Satadjust_type sw_satadjust>()
         {
@@ -1379,6 +1378,11 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     gd.istart, gd.iend,
                     gd.jstart, gd.jend,
                     gd.icells, gd.ijcells, k);
+
+            Sb_common::limit_slice(it.second.slice,
+                                   gd.istart, gd.iend,
+                                   gd.jstart, gd.jend,
+                                   gd.icells);
 
             // Zero slice which gathers the conversion tendencies.
             for (int n=0; n<gd.ijcells; ++n)

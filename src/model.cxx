@@ -433,11 +433,14 @@ void Model<TF>::exec()
                 pres->exec(timeloop->get_sub_time_step(), *stats);
                 boundary->set_ghost_cells_w(Boundary_w_type::Normal_type);
 
+                // Calculate the microphysics.
+                microphys->exec(*thermo, *timeloop, *stats);
+
                 // Apply the limiter as the last tendency.
                 limiter->exec(timeloop->get_sub_time_step(), *stats);
 
                 // Calculate the microphysics.
-                microphys->exec(*thermo, *timeloop, *stats);
+                //  microphys->exec(*thermo, *timeloop, *stats);
 
                 // Calculate the total tendency statistics, if necessary
                 for (auto& it: fields->at)
