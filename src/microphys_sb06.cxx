@@ -164,7 +164,7 @@ Microphys_sb06<TF>::Microphys_sb06(
     // Option to disable saturation adjustment ql and qi (new).
     if (sw_satadjust_ql && sw_satadjust_qi)
         if (sw_thl_deep)
-            throw std::runtime_error("thl for deep convection not implemented for ice from saturation adjustment");
+            sw_satadjust = Satadjust_type::Liquid_ice_deep;
         else
             sw_satadjust = Satadjust_type::Liquid_ice;
     else if (sw_satadjust_ql)
@@ -1345,6 +1345,8 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             calc_sat_adjust_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
         else if (sw_satadjust == Satadjust_type::Liquid_deep)
             calc_sat_adjust_wrapper.template operator()<Satadjust_type::Liquid_deep>();
+        else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+            calc_sat_adjust_wrapper.template operator()<Satadjust_type::Liquid_ice_deep>();
         else
             calc_sat_adjust_wrapper.template operator()<Satadjust_type::Disabled>();
 

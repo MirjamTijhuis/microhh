@@ -57,9 +57,9 @@ namespace Thermo_moist_functions
             const TF th = T / exn;
             return th * (TF(1.) - (TF(1.) - Rv<TF>/Rd<TF>)*qt - Rv<TF>/Rd<TF>*(ql));
         }
-        else if (sw_satadjust == Satadjust_type::Liquid_ice)
+        else if (sw_satadjust == Satadjust_type::Liquid_ice || sw_satadjust == Satadjust_type::Liquid_ice_deep)
         {
-            const TF th = thl + Lv<TF>*ql/(cp<TF>*exn) + Ls<TF>*qi/(cp<TF>*exn);
+            const TF th = T / exn;
             return th * (TF(1.) - (TF(1.) - Rv<TF>/Rd<TF>)*qt - Rv<TF>/Rd<TF>*(ql+qi));
         }
     }
@@ -204,6 +204,18 @@ namespace Thermo_moist_functions
     }
 
     template<typename TF>
+    CUDA_MACRO inline TF f_D_deep(const TF p, const TF T, const TF qt, const TF tl)
+    {
+        const TF alpha_w = water_fraction(T);
+        const TF alpha_i = TF(1.) - alpha_w;
+        const TF qs = qsat(p, T);
+        const TF f = T - tl - alpha_w*Lv<TF>/cp<TF>*qt - alpha_i*Ls<TF>/cp<TF>*qt
+                + alpha_w*Lv<TF>/cp<TF>*qs + alpha_i*Ls<TF>/cp<TF>*qs;
+
+        return f;
+    }
+
+    template<typename TF>
     CUDA_MACRO inline TF f_E(const TF p, const TF T, const TF qt, const TF tl)
     {
 
@@ -265,7 +277,7 @@ namespace Thermo_moist_functions
 
         TF tl;
 
-        if (sw_satadjust == Satadjust_type::Liquid_deep)
+        if (sw_satadjust == Satadjust_type::Liquid_deep || sw_satadjust == Satadjust_type::Liquid_ice_deep)
         {
             // BF04 E, F
             tl = thl * exn;
@@ -356,7 +368,7 @@ namespace Thermo_moist_functions
             ans.qs = qs;
         }
 
-        else // sw_satadjust == Satadjust_type::Liquid_ice
+        else if (sw_satadjust == Satadjust_type::Liquid_ice)
         {
             if (tl >= T0<TF>)
             {
@@ -396,6 +408,50 @@ namespace Thermo_moist_functions
                                        + dalphadT*Lv<TF>/cp<TF>*qs - dalphadT*Ls<TF>/cp<TF>*qs
                                        + alpha_w*Lv<TF>/cp<TF>*dqsatdT_w
                                        + alpha_i*Ls<TF>/cp<TF>*dqsatdT_i;
+
+                    tnr -= f / f_prime;
+                }
+            }
+
+            const TF alpha_w = water_fraction(tnr);
+            const TF alpha_i = TF(1.) - alpha_w;
+
+            qs = qsat(p, tnr);
+            const TF qlqi = std::max(TF(0.), qt - qs);
+
+            ans.ql = alpha_w*qlqi;
+            ans.qi = alpha_i*qlqi;
+            ans.t  = tnr;
+            ans.qs = qs;
+        }
+        else    // sw_satadjust == Satadjust_type::Liquid_ice_deep
+        {
+            if (tl >= T0<TF>)
+            {
+                // Warm adjustment.
+                while (std::fabs(tnr-tnr_old)/tnr_old > TF(1.e-5) && niter < nitermax)
+                {
+                    ++niter;
+                    tnr_old = tnr;
+
+                    const TF epsilon = 0.1;
+                    const TF f = f_D(p, tnr, qt, tl);
+                    const TF f_prime = (f_D(p, tnr+epsilon, qt, tl) - f)/epsilon;
+
+                    tnr -= f / f_prime;
+                }
+            }
+            else
+            {
+                // Cold adjustment.
+                while (std::fabs(tnr-tnr_old)/tnr_old > TF(1.e-5) && niter < nitermax)
+                {
+                    ++niter;
+                    tnr_old = tnr;
+
+                    const TF epsilon = 0.1;
+                    const TF f = f_D_deep(p, tnr, qt, tl);
+                    const TF f_prime = (f_D_deep(p, tnr + epsilon, qt, tl) - f)/epsilon;
 
                     tnr -= f / f_prime;
                 }

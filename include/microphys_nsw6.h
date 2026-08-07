@@ -34,6 +34,7 @@
 
 #include "microphys.h"
 #include "field3d_operators.h"
+#include "thermo_moist.h"
 
 class Master;
 class Input;
@@ -91,6 +92,8 @@ class Microphys_nsw6 : public Microphys<TF>
         using Microphys<TF>::field3d_operators;
 
         bool swmicrobudget;     // Output full microphysics budget terms
+        bool sw_thl_deep;
+        Satadjust_type sw_satadjust;      // satadjust liquid, ice or both
         double cflmax;          // Max CFL number in microphysics sedimentation
 
         std::vector<std::string> crosslist; // Cross-sections handled by this class

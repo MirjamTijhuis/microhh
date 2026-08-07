@@ -134,7 +134,7 @@ namespace
             const TF Nc0, const TF dt,
             const int istart, const int jstart, const int kstart,
             const int iend, const int jend, const int kend,
-            const int jj, const int kk)
+            const int jj, const int kk, const Satadjust_type sw_satadjust)
     {
         // Tomita Eq. 51. Nc0 is converted from SI units (m-3 instead of cm-3).
         const TF D_d = TF(0.146) - TF(5.964e-2)*std::log((Nc0*TF(1.e-6)) / TF(2.e3));
@@ -191,9 +191,33 @@ namespace
                 {
                     const int ijk = i + j*jj + k*kk;
 
-                    // Compute the T out of the known values of ql and qi, this saves memory and sat_adjust.
-                    const TF T = exner[k]*thl[ijk] + Lv<TF>/cp<TF>*ql[ijk] + Ls<TF>/cp<TF>*qi[ijk];
-                    const TF qv = qt[ijk] - ql[ijk] - qi[ijk];
+                    TF T;
+                    TF qv;
+                    if (sw_satadjust == Satadjust_type::Liquid_ice)
+                    {
+                        // Compute the T out of the known values of ql and qi, this saves memory and sat_adjust.
+                        T = exner[k]*thl[ijk] + Lv<TF>/cp<TF>*ql[ijk] + Ls<TF>/cp<TF>*qi[ijk];
+                        qv = qt[ijk] - ql[ijk] - qi[ijk];
+                    }
+                    else
+                    {
+                        // Compute T and qv from satadjust.
+                        // MT: with the satad instead of a hardcoded T formula here it is easier to switch between thl definitions manually
+
+                        auto calc_sat_adjust_wrapper = [&]<Satadjust_type sw_satadjust>()
+                        {
+                            Thermo_moist_functions::Struct_sat_adjust<TF> ssa = Thermo_moist_functions::sat_adjust<TF, sw_satadjust>(
+                                    thl[ijk],
+                                    qt[ijk], p[k],
+                                    exner[k]);
+
+                            qv = std::min(ssa.qs, qt[ijk]);
+                            T = ssa.t;
+                        };
+
+                        calc_sat_adjust_wrapper.template operator()<Satadjust_type::Liquid_ice_deep>();
+
+                    }
 
                     // Flag the sign of the absolute temperature.
                     const TF T_pos = TF(T >= T0<TF>);
@@ -667,14 +691,27 @@ namespace
                     TF qv_end = qv + dqv * dt;
                     TF qt_end = qc_end + qi_end + qv_end;
 
-                    //MT: is this satad needed?
-                    Struct_sat_adjust<TF> ssa = sat_adjust_absolute_T_ice<TF>(T_end, qt_end, p[k], qc_end, qv_end, qi_end, Lv<TF>, Ls<TF>);
-                    T_end = ssa.t;
-                    qc_end = ssa.ql;
-                    qi_end = ssa.qi;
+                    TF thl_end;
+                    if (sw_satadjust == Satadjust_type::Liquid_ice)
+                    {
+                        //MT: is this satad needed?
+                        Struct_sat_adjust<TF> ssa = sat_adjust_absolute_T_ice<TF>(T_end, qt_end, p[k], qc_end, qv_end, qi_end, Lv<TF>, Ls<TF>);
+                        T_end = ssa.t;
+                        qc_end = ssa.ql;
+                        qi_end = ssa.qi;
 
-                    // thl definition now only comes in here:
-                    TF thl_end = T_end/exner[k] - Lv<TF>*qc_end/(cp<TF> * exner[k]) - Ls<TF>*qi_end/(cp<TF> * exner[k]);
+                        thl_end = T_end/exner[k] - Lv<TF>*qc_end/(cp<TF> * exner[k]) - Ls<TF>*qi_end/(cp<TF> * exner[k]);
+                    }
+                    else    // Satadjust_type::Liquid_ice_deep, with other options you should not reach this point
+                    {
+                        //MT: is this satad needed?
+                        Struct_sat_adjust<TF> ssa = sat_adjust_absolute_T_ice<TF>(T_end, qt_end, p[k], qc_end, qv_end, qi_end, Lv<TF>, Ls<TF>);
+                        T_end = ssa.t;
+                        qc_end = ssa.ql;
+                        qi_end = ssa.qi;
+
+                        thl_end = T_end/exner[k] - Lv<TF>*qc_end/(cp<TF> * exner[k]) - Ls<TF>*qi_end/(cp<TF> * exner[k]);
+                    }
 
                     TF dthl_from_dT = (thl_end - thl[ijk])/dt;
                     qtt[ijk] += dqc + dqi + dqv;
@@ -948,6 +985,31 @@ Microphys_nsw6<TF>::Microphys_nsw6(Master& masterin, Grid<TF>& gridin, Fields<TF
     cflmax = inputin.get_item<TF>("micro", "cflmax", "", 1.2);
     Nc0 = inputin.get_item<TF>("micro", "Nc0", "");
 
+    // Option to disable saturation adjustment ql and qi
+    bool sw_satadjust_ql = inputin.get_item<bool>("thermo", "swsatadjust_ql", "", true);
+    bool sw_satadjust_qi = inputin.get_item<bool>("thermo", "swsatadjust_qi", "", true);
+    sw_thl_deep = inputin.get_item<bool>("thermo", "swthldeep", "", false);
+
+    // Option to disable saturation adjustment ql and qi (new).
+    if (sw_satadjust_ql && sw_satadjust_qi)
+        if (sw_thl_deep)
+            sw_satadjust = Satadjust_type::Liquid_ice_deep;
+        else
+            sw_satadjust = Satadjust_type::Liquid_ice;
+    else if (sw_satadjust_ql)
+        if (!sw_thl_deep)
+            sw_satadjust = Satadjust_type::Liquid_shallow;
+        else
+            sw_satadjust = Satadjust_type::Liquid_deep;
+    else
+        sw_satadjust = Satadjust_type::Disabled;
+
+    // Checks.
+    if (!sw_satadjust_qi)
+        throw std::runtime_error("NSW6 microphysics riquires ice from saturation adjustment, so swsatadjust_qi=false is not allowed");
+    if (!sw_satadjust_ql)
+        throw std::runtime_error("NSW6 microphysics requires liquid water from saturation adjustment, so swsatadjust_ql=false is not allowed");
+
     // Initialize the qr (rain water specific humidity) and nr (droplot number concentration) fields
     const std::string group_name = "thermo";
 
@@ -1041,7 +1103,7 @@ void Microphys_nsw6<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
             this->Nc0, TF(dt),
             gd.istart, gd.jstart, gd.kstart,
             gd.iend, gd.jend, gd.kend,
-            gd.icells, gd.ijcells);
+            gd.icells, gd.ijcells, sw_satadjust);
 
     fields.release_tmp(ql);
     fields.release_tmp(qi);
