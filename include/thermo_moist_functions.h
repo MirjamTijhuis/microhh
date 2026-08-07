@@ -226,11 +226,41 @@ namespace Thermo_moist_functions
     }
 
     template<typename TF>
+    CUDA_MACRO inline TF f_E_deep(const TF p, const TF T, const TF qt, const TF tl)
+    {
+
+        const TF alpha_w = water_fraction(T);
+        const TF alpha_i = TF(1.) - alpha_w;
+        const TF qs = qsat(p, T);
+        const TF ql = alpha_w * (qt - qs);
+        const TF qi = alpha_i * (qt - qs);
+
+        const TF f = - tl + T * pow(1 + (Lv<TF> * ql) / (cp<TF> * T) + (Ls<TF> * qi)/(cp<TF> * T), -1) ;
+
+        return f;
+    }
+
+    template<typename TF>
     CUDA_MACRO inline TF f_F(const TF p, const TF T, const TF qt, const TF tl)
     {
 
         const TF ql = qt - qsat_liq(p, T);
         const TF f = - tl + T * pow(1 + (Lv<TF> * ql) / (cp<TF> * std::max(T, TF(253))), -1) ;
+
+        return f;
+    }
+
+    template<typename TF>
+    CUDA_MACRO inline TF f_F_deep(const TF p, const TF T, const TF qt, const TF tl)
+    {
+
+        const TF alpha_w = water_fraction(T);
+        const TF alpha_i = TF(1.) - alpha_w;
+        const TF qs = qsat(p, T);
+        const TF ql = alpha_w * (qt - qs);
+        const TF qi = alpha_i * (qt - qs);
+
+        const TF f = - tl + T * pow(1 + (Lv<TF> * ql) / (cp<TF> * std::max(T, TF(253))) + (Ls<TF> * qi)/(cp<TF> * std::max(T, TF(253))), -1) ;
 
         return f;
     }
@@ -250,6 +280,36 @@ namespace Thermo_moist_functions
 
         const TF f = -thl + T * pow((p0<TF>/p), chi) * pow((1 - ql / (epsilon + qt)), chi) * pow((1 - ql / qt), -gamma)
                             * std::exp(((-Lv_T * ql) / ((cp<TF> + cpv<TF> * qt) * T)));
+        return f;
+    }
+
+    template<typename TF>
+    CUDA_MACRO inline TF f_G_deep(const TF p, const TF T, const TF qt, const TF thl)
+    {
+        const TF alpha_w = water_fraction(T);
+        const TF alpha_i = TF(1.) - alpha_w;
+        const TF qs = qsat(p, T);
+        const TF ql = alpha_w * (qt - qs);
+        const TF qi = alpha_i * (qt - qs);
+
+        const TF chi = (Rd<TF> + Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
+        const TF gamma = (Rv<TF> * qt) / (cp<TF> + cpv<TF> * qt);
+        const TF epsilon = Rd<TF>  / Rv<TF>;
+
+        const TF cl = TF(4186);
+        const TF lv1 = Lv<TF> + (cl - cpv<TF>) * T0<TF>;
+        const TF lv2 = cl - cpv<TF>;
+        const TF Lv_T = lv1 - lv2 * T;
+
+        const TF ci = TF(2106);
+        const TF ls1 = Ls<TF> + (ci - cpv<TF>) * T0<TF>;
+        const TF ls2 = ci - cpv<TF>;
+        const TF Ls_T = ls1 - ls2 * T;
+
+        const TF f = -thl + T * pow((p0<TF>/p), chi)
+                    * pow((1 - (ql + qi) / (epsilon + qt)), chi)
+                    * pow((1 - (ql + qi) / qt), -gamma)
+                    * std::exp(((-Lv_T * ql - Ls_T * qi) / ((cp<TF> + cpv<TF> * qt) * T)));
         return f;
     }
 
@@ -435,8 +495,22 @@ namespace Thermo_moist_functions
                     tnr_old = tnr;
 
                     const TF epsilon = 0.1;
-                    const TF f = f_D(p, tnr, qt, tl);
-                    const TF f_prime = (f_D(p, tnr+epsilon, qt, tl) - f)/epsilon;
+
+                    // BF04 D
+                    // const TF f = f_D(p, tnr, qt, tl);
+                    // const TF f_prime = (f_D(p, tnr+epsilon, qt, tl) - f)/epsilon;
+
+                    // BF04 E
+                    const TF f = f_E(p, tnr, qt, tl);
+                    const TF f_prime = (f_E(p, tnr + epsilon, qt, tl) - f)/epsilon;
+
+                    // BF04 F
+                    // const TF f = f_F(p, tnr, qt, tl);
+                    // const TF f_prime = (f_F(p, tnr + epsilon, qt, tl) - f)/epsilon;
+
+                    //BF04 G
+                    // const TF f = f_G(p, tnr, qt, thl);
+                    // const TF f_prime = (f_G(p, tnr+epsilon, qt, thl) - f)/epsilon;
 
                     tnr -= f / f_prime;
                 }
@@ -450,8 +524,21 @@ namespace Thermo_moist_functions
                     tnr_old = tnr;
 
                     const TF epsilon = 0.1;
-                    const TF f = f_D_deep(p, tnr, qt, tl);
-                    const TF f_prime = (f_D_deep(p, tnr + epsilon, qt, tl) - f)/epsilon;
+
+                    // const TF f = f_D_deep(p, tnr, qt, tl);
+                    // const TF f_prime = (f_D_deep(p, tnr + epsilon, qt, tl) - f)/epsilon;
+
+                    // BF04 E
+                    const TF f = f_E_deep(p, tnr, qt, tl);
+                    const TF f_prime = (f_E_deep(p, tnr + epsilon, qt, tl) - f)/epsilon;
+
+                    // BF04 F
+                    // const TF f = f_F_deep(p, tnr, qt, tl);
+                    // const TF f_prime = (f_F_deep(p, tnr + epsilon, qt, tl) - f)/epsilon;
+
+                    //BF04 G
+                    // const TF f = f_G_deep(p, tnr, qt, thl);
+                    // const TF f_prime = (f_G_deep(p, tnr+epsilon, qt, thl) - f)/epsilon;
 
                     tnr -= f / f_prime;
                 }
