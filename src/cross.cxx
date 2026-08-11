@@ -344,9 +344,15 @@ Cross<TF>::Cross(
             ratio_y = inputin.get_item<int>("cross", "ratio_y", "");
         }
 
-        // Union of both, used to match against fields provided by other classes.
+        // Y-mean cross-sections.
+        crosslist_ymean = inputin.get_list<std::string>("cross", "crosslist_ymean", "", std::vector<std::string>());
+
+        // Union of all three, used to match against fields provided by other classes.
         crosslist = crosslist_f;
         for (auto& it : crosslist_c)
+            if (std::find(crosslist.begin(), crosslist.end(), it) == crosslist.end())
+                crosslist.push_back(it);
+        for (auto& it : crosslist_ymean)
             if (std::find(crosslist.begin(), crosslist.end(), it) == crosslist.end())
                 crosslist.push_back(it);
 
@@ -669,6 +675,7 @@ int Cross<TF>::cross_simple(
 
     const bool save_full = std::find(crosslist_f.begin(), crosslist_f.end(), name) != crosslist_f.end();
     const bool save_coarse = std::find(crosslist_c.begin(), crosslist_c.end(), name) != crosslist_c.end();
+    const bool save_ymean = std::find(crosslist_ymean.begin(), crosslist_ymean.end(), name) != crosslist_ymean.end();
 
     if (save_full)
     {
@@ -753,6 +760,9 @@ int Cross<TF>::cross_simple(
             }
         }
     }
+
+    if (save_ymean)
+        nerror += cross_ymean(data, name+"_ymean", iotime, loc);
 
     fields.release_tmp(tmpfld);
 

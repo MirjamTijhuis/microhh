@@ -92,6 +92,9 @@ class Cross
         int ratio_x;
         int ratio_y;
 
+        // Y-mean cross-sections.
+        std::vector<std::string> crosslist_ymean;
+
         //int check_list(std::vector<std::string> *, FieldMap *, std::string crossname);
         int check_save(int, char *);
 };
