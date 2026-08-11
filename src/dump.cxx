@@ -47,11 +47,17 @@ Dump<TF>::Dump(Master& masterin, Grid<TF>& gridin, Fields<TF>& fieldsin, Input& 
         sampletime = inputin.get_item<double>("dump", "sampletime", "");
 
         // Get list of dump variables.
-        dumplist = inputin.get_list<std::string>("dump", "dumplist", "", std::vector<std::string>());
+        dumplist_f = inputin.get_list<std::string>("dump", "dumplist", "", std::vector<std::string>());
 
-        // Get list of coarse grained dump variables.
+        // Get list of coarse grained dump variables
         dumplist_c = inputin.get_list<std::string>("dump", "dumplist_coarse", "", std::vector<std::string>());
-        
+
+        // Union of both, used to match against fields provided by other classes.
+        dumplist = dumplist_f;
+        for (auto& it : dumplist_c)
+            if (std::find(dumplist.begin(), dumplist.end(), it) == dumplist.end())
+                dumplist.push_back(it);
+
         // Whether to do two consecutive dumps in time
         swdoubledump = inputin.get_item<bool>("dump", "swdoubledump", "", false);
         if (swdoubledump && sampletime != inputin.get_item<double>("time", "savetime", ""))
@@ -155,21 +161,22 @@ void Dump<TF>::save_dump(TF* data, const std::string& varname, int iotime)
     auto& gd = grid.get_grid_data();
 
     const double no_offset = 0.;
-    char filename[256];
 
-    std::snprintf(filename, 256, "%s.%07d", varname.c_str(), iotime);
-    std::ifstream infile(filename);
+    const bool save_full = std::find(dumplist_f.begin(), dumplist_f.end(), varname) != dumplist_f.end();
+    const bool save_coarse = std::find(dumplist_c.begin(), dumplist_c.end(), varname) != dumplist_c.end();
 
-    if (infile.good())
+    auto tmp1 = fields.get_tmp();
+    auto tmp2 = fields.get_tmp();
+
+    if (save_full)
     {
-        master.print_message("%s already exists\n", filename);
-    }
-    else
-    {
-        auto tmp1 = fields.get_tmp();
-        auto tmp2 = fields.get_tmp();
+        char filename[256];
+        std::snprintf(filename, 256, "%s.%07d", varname.c_str(), iotime);
+        std::ifstream infile(filename);
 
-        if (field3d_io.save_field3d(
+        if (infile.good())
+            master.print_message("%s already exists\n", filename);
+        else if (field3d_io.save_field3d(
                     data,
                     tmp1->fld.data(),
                     tmp2->fld.data(),
@@ -181,30 +188,32 @@ void Dump<TF>::save_dump(TF* data, const std::string& varname, int iotime)
             master.print_message("Saving \"%s\" ... FAILED\n", filename);
             throw std::runtime_error("Writing error in dump");
         }
-
-        // Hack for now...
-        if (std::find(dumplist_c.begin(), dumplist_c.end(), varname) != dumplist_c.end())
-        {
-            char filename_c[256];
-            std::snprintf(filename_c, 256, "%s_c.%07d", varname.c_str(), iotime);
-
-            if (field3d_io.save_field3d_coarse(
-                        data,
-                        tmp1->fld.data(),
-                        filename_c,
-                        ratio_x,
-                        ratio_y,
-                        gd.kstart,
-                        gd.kend))
-            {
-                master.print_message("Saving \"%s\" ... FAILED\n", filename_c);
-                throw std::runtime_error("Writing error in coarse dump");
-            }
-        }
-
-        fields.release_tmp(tmp1);
-        fields.release_tmp(tmp2);
     }
+
+    if (save_coarse)
+    {
+        char filename_c[256];
+        std::snprintf(filename_c, 256, "%s_c.%07d", varname.c_str(), iotime);
+        std::ifstream infile_c(filename_c);
+
+        if (infile_c.good())
+            master.print_message("%s already exists\n", filename_c);
+        else if (field3d_io.save_field3d_coarse(
+                    data,
+                    tmp1->fld.data(),
+                    filename_c,
+                    ratio_x,
+                    ratio_y,
+                    gd.kstart,
+                    gd.kend))
+        {
+            master.print_message("Saving \"%s\" ... FAILED\n", filename_c);
+            throw std::runtime_error("Writing error in coarse dump");
+        }
+    }
+
+    fields.release_tmp(tmp1);
+    fields.release_tmp(tmp2);
 }
 
 

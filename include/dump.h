@@ -51,8 +51,9 @@ class Dump
         Fields<TF>& fields;
         Field3d_io<TF> field3d_io;
 
-        std::vector<std::string> dumplist;    // Variables (full field) that are saved.
-        std::vector<std::string> dumplist_c;  // Variables (coarse grained) that are saved.
+        std::vector<std::string> dumplist_f;  // Full field variables.
+        std::vector<std::string> dumplist_c;  // Coarse grained variables.
+        std::vector<std::string> dumplist;    // Union of dumplist_f and dumplist_c.
 
         int ratio_x;                          // Coarse grain ratio x.
         int ratio_y;                          // Coarse grain ratio y.
