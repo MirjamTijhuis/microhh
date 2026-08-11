@@ -1555,7 +1555,7 @@ void Boundary_surface_lsm<TF>::save(const int iotime, Thermo<TF>& thermo)
 }
 
 template<typename TF>
-void Boundary_surface_lsm<TF>::exec_cross(Cross<TF>& cross, unsigned long iotime)
+void Boundary_surface_lsm<TF>::exec_cross(Cross<TF>& cross, Thermo<TF>&, unsigned long iotime)
 {
     auto& gd = grid.get_grid_data();
 

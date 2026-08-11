@@ -100,7 +100,7 @@ class Boundary_surface_lsm : public Boundary<TF>
         void exec(Thermo<TF>&, Radiation<TF>&, Microphys<TF>&, Timeloop<TF>&);
         void exec_stats(Stats<TF>&);
         void exec_column(Column<TF>&);
-        void exec_cross(Cross<TF>&, unsigned long);
+        void exec_cross(Cross<TF>&, Thermo<TF>&, unsigned long);
 
         void load(const int, Thermo<TF>&);
         void save(const int, Thermo<TF>&);

@@ -489,5 +489,44 @@ namespace Boundary_surface_kernels
                 ra[ij]  = TF(1) / (ustar[ij] * most::fh(zsl, z0h[ij], obuk[ij]));
             }
     }
+
+    template<typename TF>
+    void calc_diagnostic_mo(
+            TF* const restrict t2m,
+            TF* const restrict q2m,
+            TF* const restrict u10m,
+            TF* const restrict v10m,
+            const TF* const restrict thl_bot,
+            const TF* const restrict qt_bot,
+            const TF* const restrict thl_fluxbot,
+            const TF* const restrict qt_fluxbot,
+            const TF* const restrict u_fluxbot,
+            const TF* const restrict v_fluxbot,
+            const TF* const restrict ustar,
+            const TF* const restrict obuk,
+            const TF* const restrict z0m,
+            const TF* const restrict z0h,
+            const TF exnerh,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int icells)
+    {
+        const TF z2 = TF(2);
+        const TF z10 = TF(10);
+
+        for (int j=jstart; j<jend; ++j)
+            #pragma ivdep
+            for (int i=istart; i<iend; ++i)
+            {
+                const int ij = i + j*icells;
+
+                const TF Ts = thl_bot[ij] * exnerh;
+
+                t2m[ij] = Ts - thl_fluxbot[ij] / (ustar[ij] * most::fh(z2, z0h[ij], obuk[ij]));
+                q2m[ij] = qt_bot[ij] - qt_fluxbot[ij] / (ustar[ij] * most::fh(z2, z0h[ij], obuk[ij]));
+                u10m[ij] = -u_fluxbot[ij] / (ustar[ij] * most::fm(z10, z0m[ij], obuk[ij]));
+                v10m[ij] = -v_fluxbot[ij] / (ustar[ij] * most::fm(z10, z0m[ij], obuk[ij]));
+            }
+    }
 }
 #endif

@@ -657,7 +657,7 @@ void Model<TF>::calculate_statistics(int iteration, double time, unsigned long i
         thermo   ->exec_cross(*cross, iotime);
         microphys->exec_cross(*cross, iotime);
         ib       ->exec_cross(*cross, iotime);
-        boundary ->exec_cross(*cross, iotime);
+        boundary ->exec_cross(*cross, *thermo, iotime);
     }
 
     // Save the 3d dumps to disk.

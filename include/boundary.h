@@ -101,7 +101,7 @@ class Boundary
         virtual void exec(Thermo<TF>&, Radiation<TF>&, Microphys<TF>&, Timeloop<TF>&);
         virtual void exec_stats(Stats<TF>&); ///< Execute statistics of surface
         virtual void exec_column(Column<TF>&); ///< Execute column statistics of surface
-        virtual void exec_cross(Cross<TF>&, unsigned long) {}; ///< Execute cross statistics of surface
+        virtual void exec_cross(Cross<TF>&, Thermo<TF>&, unsigned long) {}; ///< Execute cross statistics of surface
 
         virtual void load(const int, Thermo<TF>&) {};
         virtual void save(const int, Thermo<TF>&) {};

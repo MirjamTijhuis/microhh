@@ -427,7 +427,7 @@ void Boundary_surface<TF>::create(
 
     if (cross.get_switch())
     {
-        std::vector<std::string> allowed_crossvars = {"ustar", "obuk", "ra"};
+        std::vector<std::string> allowed_crossvars = {"ustar", "obuk", "ra", "t2m", "q2m", "u10m", "v10m"};
 
         if (sw_charnock)
         {
@@ -692,7 +692,7 @@ void Boundary_surface<TF>::save(const int iotime, Thermo<TF>& thermo)
 }
 
 template<typename TF>
-void Boundary_surface<TF>::exec_cross(Cross<TF>& cross, unsigned long iotime)
+void Boundary_surface<TF>::exec_cross(Cross<TF>& cross, Thermo<TF>& thermo, unsigned long iotime)
 {
     auto& gd = grid.get_grid_data();
     auto tmp1 = fields.get_tmp();
@@ -715,6 +715,42 @@ void Boundary_surface<TF>::exec_cross(Cross<TF>& cross, unsigned long iotime)
                     z0h.data(), gd.z[gd.kstart], gd.istart,
                     gd.iend, gd.jstart, gd.jend, gd.icells);
             cross.cross_plane(tmp1->flux_bot.data(), no_offset, "ra", iotime);
+        }
+        else if (it == "t2m" || it == "q2m" || it == "u10m" || it == "v10m")
+        {
+            auto t2m  = fields.get_tmp_xy();
+            auto q2m  = fields.get_tmp_xy();
+            auto u10m = fields.get_tmp_xy();
+            auto v10m = fields.get_tmp_xy();
+
+            const std::vector<TF>& exnrefh = thermo.get_basestate_vector("exnerh");
+
+            bsk::calc_diagnostic_mo(
+                    t2m->data(), q2m->data(), u10m->data(), v10m->data(),
+                    fields.sp.at("thl")->fld_bot.data(),
+                    fields.sp.at("qt")->fld_bot.data(),
+                    fields.sp.at("thl")->flux_bot.data(),
+                    fields.sp.at("qt")->flux_bot.data(),
+                    fields.mp.at("u")->flux_bot.data(),
+                    fields.mp.at("v")->flux_bot.data(),
+                    ustar.data(), obuk.data(),
+                    z0m.data(), z0h.data(),
+                    exnrefh[gd.kstart],
+                    gd.istart, gd.iend, gd.jstart, gd.jend, gd.icells);
+
+            if (it == "t2m")
+                cross.cross_plane(t2m->data(), no_offset, "t2m", iotime);
+            else if (it == "q2m")
+                cross.cross_plane(q2m->data(), no_offset, "q2m", iotime);
+            else if (it == "u10m")
+                cross.cross_plane(u10m->data(), no_offset, "u10m", iotime);
+            else if (it == "v10m")
+                cross.cross_plane(v10m->data(), no_offset, "v10m", iotime);
+
+            fields.release_tmp_xy(t2m);
+            fields.release_tmp_xy(q2m);
+            fields.release_tmp_xy(u10m);
+            fields.release_tmp_xy(v10m);
         }
     }
 
