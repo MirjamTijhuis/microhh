@@ -899,6 +899,19 @@ namespace
 
         return cfl_max;
     }
+
+    // Sum the individual surface precipitation rates into one combined rate.
+    template<typename TF>
+    void calc_rrsg_bot(
+            TF* const restrict rrsg_bot,
+            const TF* const restrict rr_bot,
+            const TF* const restrict rs_bot,
+            const TF* const restrict rg_bot,
+            const int ncells)
+    {
+        for (int n=0; n<ncells; ++n)
+            rrsg_bot[n] = rr_bot[n] + rs_bot[n] + rg_bot[n];
+    }
 }
 
 template<typename TF>
@@ -972,7 +985,7 @@ void Microphys_nsw6<TF>::create(
 
     // Create cross sections
     // 1. Variables that this class can calculate/provide:
-    const std::vector<std::string> allowed_crossvars = {"rr_bot", "rs_bot", "rg_bot"};
+    const std::vector<std::string> allowed_crossvars = {"rr_bot", "rs_bot", "rg_bot", "rrsg_bot"};
 
     // 2. Cross-reference with the variables requested in the .ini file:
     crosslist = cross.get_enabled_variables(allowed_crossvars);
@@ -1109,6 +1122,14 @@ void Microphys_nsw6<TF>::exec_cross(Cross<TF>& cross, unsigned long iotime)
 
             if (it == "rg_bot")
                 cross.cross_plane(rg_bot.data(), no_offset, "rg_bot", iotime);
+
+            if (it == "rrsg_bot")
+            {
+                auto rrsg_bot = fields.get_tmp_xy();
+                calc_rrsg_bot(rrsg_bot->data(), rr_bot.data(), rs_bot.data(), rg_bot.data(), rr_bot.size());
+                cross.cross_plane(rrsg_bot->data(), no_offset, "rrsg_bot", iotime);
+                fields.release_tmp_xy(rrsg_bot);
+            }
         }
     }
 }
