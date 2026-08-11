@@ -334,7 +334,21 @@ Cross<TF>::Cross(
         sampletime = inputin.get_item<double>("cross", "sampletime", "");
 
         // Get list of cross variables.
-        crosslist = inputin.get_list<std::string>("cross", "crosslist", "", std::vector<std::string>());
+        crosslist_f = inputin.get_list<std::string>("cross", "crosslist", "", std::vector<std::string>());
+
+        // Coarse-grained cross-sections.
+        crosslist_c = inputin.get_list<std::string>("cross", "crosslist_coarse", "", std::vector<std::string>());
+        if (crosslist_c.size() > 0)
+        {
+            ratio_x = inputin.get_item<int>("cross", "ratio_x", "");
+            ratio_y = inputin.get_item<int>("cross", "ratio_y", "");
+        }
+
+        // Union of both, used to match against fields provided by other classes.
+        crosslist = crosslist_f;
+        for (auto& it : crosslist_c)
+            if (std::find(crosslist.begin(), crosslist.end(), it) == crosslist.end())
+                crosslist.push_back(it);
 
         // Crash on empty list.
         if (crosslist.empty())
@@ -350,14 +364,6 @@ Cross<TF>::Cross(
 
         // Get the list of vertical soil locations
         xy_soil = inputin.get_list<TF>("cross", "xy_soil", "", std::vector<TF>());
-
-        // Coarse-grained cross-sections.
-        crosslist_c = inputin.get_list<std::string>("cross", "crosslist_coarse", "", std::vector<std::string>());
-        if (crosslist_c.size() > 0)
-        {
-            ratio_x = inputin.get_item<int>("cross", "ratio_x", "");
-            ratio_y = inputin.get_item<int>("cross", "ratio_y", "");
-        }
     }
     else
     {
@@ -806,11 +812,13 @@ int Cross<TF>::cross_path(TF* restrict data, std::string name, int iotime)
             gd.jstart, gd.jend,
             gd.kstart, gd.kend);
 
-    nerror += cross_plane(&tmp[gd.kstart*gd.ijcells], no_offset, name, iotime);
+    const bool save_full = std::find(crosslist_f.begin(), crosslist_f.end(), name) != crosslist_f.end();
+    const bool save_coarse = std::find(crosslist_c.begin(), crosslist_c.end(), name) != crosslist_c.end();
 
+    if (save_full)
+        nerror += cross_plane(&tmp[gd.kstart*gd.ijcells], no_offset, name, iotime);
 
-    // Hack hack hack for benchmarking throughput..
-    if (std::find(crosslist_c.begin(), crosslist_c.end(), name) != crosslist_c.end())
+    if (save_coarse)
     {
         auto tmpfld2 = fields.get_tmp();
 

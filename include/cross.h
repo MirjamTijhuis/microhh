@@ -69,7 +69,8 @@ class Cross
         TF sampletime;
         unsigned long isampletime;
 
-        std::vector<std::string> crosslist; ///< List with all crosses from the ini file.
+        std::vector<std::string> crosslist_f; ///< Full field crosses from the ini file.
+        std::vector<std::string> crosslist;   ///< Union of crosslist_f and crosslist_c.
 
         std::vector<int> jxz;   ///< Index of nearest full y position of xz input
         std::vector<int> ixz;   ///< Index of nearest full x position of yz input
