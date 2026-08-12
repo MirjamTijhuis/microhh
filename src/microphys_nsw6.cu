@@ -755,7 +755,7 @@ void Microphys_nsw6<TF>::exec(Thermo<TF>& thermo, const double dt, Stats<TF>& st
 
     auto temp_g = fields.get_tmp_g();
 
-    const auto net_frz_it = fields.sd.find("qr_frz");
+    const auto net_frz_it = fields.sd.find("qtr_tend_frz");
     TF* const net_frz = (net_frz_it != fields.sd.end()) ? static_cast<TF*>(net_frz_it->second->fld_g) : nullptr;
 
     if (net_frz != nullptr)

@@ -1000,7 +1000,7 @@ void Microphys_nsw6<TF>::create(
 
     // Create dumps
     // 1. Variables that this class can calculate/provide:
-    const std::vector<std::string> allowed_dumpvars = {"qr_sed", "qr_frz"};
+    const std::vector<std::string> allowed_dumpvars = {"qrsg_tend_sed", "qtr_tend_frz"};
 
     // 2. Cross-reference with the variables requested in the .ini file:
     std::vector<std::string>& dumplist_global = dump.get_dumplist();
@@ -1016,12 +1016,12 @@ void Microphys_nsw6<TF>::create(
             ++it;
     }
 
-    if (std::count(dumplist.begin(), dumplist.end(), "qr_frz"))
+    if (std::count(dumplist.begin(), dumplist.end(), "qtr_tend_frz"))
     {
         auto& gd = grid.get_grid_data();
         fields.init_diagnostic_field(
-                "qr_frz", "Net freezing rate of qr into qs/qg", "kg kg-1 s-1", group_name, gd.sloc);
-        fields.sd.at("qr_frz")->init();
+                "qtr_tend_frz", "Net freezing rate of qt and qr into qs/qg", "kg kg-1 s-1", group_name, gd.sloc);
+        fields.sd.at("qtr_tend_frz")->init();
     }
 }
 
@@ -1040,7 +1040,7 @@ void Microphys_nsw6<TF>::exec(Thermo<TF>& thermo, const double dt, Stats<TF>& st
     const std::vector<TF>& p = thermo.get_basestate_vector("p");
     const std::vector<TF>& exner = thermo.get_basestate_vector("exner");
 
-    const auto net_frz_it = fields.sd.find("qr_frz");
+    const auto net_frz_it = fields.sd.find("qtr_tend_frz");
     TF* const net_frz = (net_frz_it != fields.sd.end()) ? net_frz_it->second->fld.data() : nullptr;
 
     if (net_frz != nullptr)
@@ -1182,41 +1182,52 @@ void Microphys_nsw6<TF>::exec_dump(Dump<TF>& dump, unsigned long iotime, const d
 
     for (auto& it : dumplist)
     {
-        if (it == "qr_sed")
+        if (it == "qrsg_tend_sed")
         {
-            auto qrt = fields.get_tmp();
-            auto rr_bot_tmp = fields.get_tmp_xy();
-            auto w_qr = fields.get_tmp();
-            auto c_qr = fields.get_tmp();
-            auto slope_qr = fields.get_tmp();
-            auto flux_qr = fields.get_tmp();
+            auto qpt = fields.get_tmp();
+            auto rc_bot_tmp = fields.get_tmp_xy();
+            auto w_qc = fields.get_tmp();
+            auto c_qc = fields.get_tmp();
+            auto slope_qc = fields.get_tmp();
+            auto flux_qc = fields.get_tmp();
 
-            sedimentation_ss08(
-                    qrt->fld.data(), rr_bot_tmp->data(),
-                    w_qr->fld.data(), c_qr->fld.data(),
-                    slope_qr->fld.data(), flux_qr->fld.data(),
-                    fields.sp.at("qr")->fld.data(),
-                    fields.rhoref.data(),
-                    gd.dzi.data(), gd.dz.data(),
-                    dt,
-                    a_r<TF>, b_r<TF>, c_r<TF>, d_r<TF>, N_0r<TF>,
-                    qr_min<TF>,
-                    gd.istart, gd.jstart, gd.kstart,
-                    gd.iend, gd.jend, gd.kend,
-                    gd.icells, gd.ijcells);
+            std::fill(qpt->fld.begin(), qpt->fld.end(), TF(0.));
 
-            dump.save_dump(flux_qr->fld.data(), "qr_sed", iotime);
+            auto add_sedimentation_tendency = [&](
+                    const std::string& varname,
+                    const TF a, const TF b, const TF c, const TF d, const TF N_0, const TF q_min)
+            {
+                sedimentation_ss08(
+                        qpt->fld.data(), rc_bot_tmp->data(),
+                        w_qc->fld.data(), c_qc->fld.data(),
+                        slope_qc->fld.data(), flux_qc->fld.data(),
+                        fields.sp.at(varname)->fld.data(),
+                        fields.rhoref.data(),
+                        gd.dzi.data(), gd.dz.data(),
+                        dt,
+                        a, b, c, d, N_0,
+                        q_min,
+                        gd.istart, gd.jstart, gd.kstart,
+                        gd.iend, gd.jend, gd.kend,
+                        gd.icells, gd.ijcells);
+            };
 
-            fields.release_tmp(qrt);
-            fields.release_tmp_xy(rr_bot_tmp);
-            fields.release_tmp(w_qr);
-            fields.release_tmp(c_qr);
-            fields.release_tmp(slope_qr);
-            fields.release_tmp(flux_qr);
+            add_sedimentation_tendency("qr", a_r<TF>, b_r<TF>, c_r<TF>, d_r<TF>, N_0r<TF>, qr_min<TF>);
+            add_sedimentation_tendency("qs", a_s<TF>, b_s<TF>, c_s<TF>, d_s<TF>, N_0s<TF>, qs_min<TF>);
+            add_sedimentation_tendency("qg", a_g<TF>, b_g<TF>, c_g<TF>, d_g<TF>, N_0g<TF>, qg_min<TF>);
+
+            dump.save_dump(qpt->fld.data(), "qrsg_tend_sed", iotime);
+
+            fields.release_tmp(qpt);
+            fields.release_tmp_xy(rc_bot_tmp);
+            fields.release_tmp(w_qc);
+            fields.release_tmp(c_qc);
+            fields.release_tmp(slope_qc);
+            fields.release_tmp(flux_qc);
         }
 
-        if (it == "qr_frz")
-            dump.save_dump(fields.sd.at("qr_frz")->fld.data(), "qr_frz", iotime);
+        if (it == "qtr_tend_frz")
+            dump.save_dump(fields.sd.at("qtr_tend_frz")->fld.data(), "qtr_tend_frz", iotime);
     }
 }
 
