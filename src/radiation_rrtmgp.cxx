@@ -39,6 +39,7 @@
 #include "stats.h"
 #include "cross.h"
 #include "column.h"
+#include "dump.h"
 #include "constants.h"
 #include "timeloop.h"
 #include "fast_math.h"
@@ -518,6 +519,31 @@ namespace
     }
 
 
+    void calc_heating_rate(
+            Float* restrict heating_rate,
+            const Float* restrict flux_up, const Float* restrict flux_dn,
+            const Float* restrict rho, const Float* restrict exner, const Float* restrict dz,
+            const int istart, const int iend, const int jstart, const int jend, const int kstart, const int kend,
+            const int icells, const int ijcells)
+    {
+        for (int k=kstart; k<kend; ++k)
+        {
+            const Float fac = Float(1.) / (rho[k]*Constants::cp<Float>*exner[k]*dz[k]);
+
+            for (int j=jstart; j<jend; ++j)
+                #pragma ivdep
+                for (int i=istart; i<iend; ++i)
+                {
+                    const int ijk = i + j*icells + k*ijcells;
+
+                    heating_rate[ijk] = -fac *
+                        ( flux_up[ijk+ijcells] - flux_up[ijk]
+                        - flux_dn[ijk+ijcells] + flux_dn[ijk] );
+                }
+        }
+    }
+
+
     void store_surface_fluxes(
             Float* restrict flux_up_sfc, Float* restrict flux_dn_sfc,
             const Float* restrict flux_up, const Float* restrict flux_dn,
@@ -922,6 +948,27 @@ void Radiation_rrtmgp<TF>::create(
     }
 
     crosslist = cross.get_enabled_variables(allowed_crossvars_radiation);
+
+    // Get the allowed dump variables from the dump list.
+    std::vector<std::string> allowed_dumpvars_radiation;
+
+    if (sw_longwave)
+        allowed_dumpvars_radiation.push_back("thl_tend_lw");
+    if (sw_shortwave)
+        allowed_dumpvars_radiation.push_back("thl_tend_sw");
+
+    std::vector<std::string>& dumplist_global = dump.get_dumplist();
+    auto it = dumplist_global.begin();
+    while (it != dumplist_global.end())
+    {
+        if (std::count(allowed_dumpvars_radiation.begin(), allowed_dumpvars_radiation.end(), *it))
+        {
+            dumplist.push_back(*it);
+            it = dumplist_global.erase(it);
+        }
+        else
+            ++it;
+    }
 
     // Init toolboxes
     boundary_cyclic.init();
@@ -1967,9 +2014,10 @@ void Radiation_rrtmgp<TF>::exec_all_stats(
     const bool do_stats  = stats.do_statistics(itime);
     const bool do_cross  = cross.do_cross(itime) && crosslist.size() > 0;
     const bool do_column = column.do_column(itime);
+    const bool do_dump   = dump.do_dump(itime, timeloop.get_idt()) && dumplist.size() > 0;
 
     // Return in case of no stats or cross section.
-    if ( !(do_stats || do_cross || do_column) )
+    if ( !(do_stats || do_cross || do_column || do_dump) )
         return;
 
     const Float no_offset = 0.;
@@ -2019,6 +2067,22 @@ void Radiation_rrtmgp<TF>::exec_all_stats(
                 stats.set_prof_background("lw_flux_up_ref", lw_flux_up_col.v());
                 stats.set_prof_background("lw_flux_dn_ref", lw_flux_dn_col.v());
             }
+
+            if (do_dump && std::count(dumplist.begin(), dumplist.end(), "thl_tend_lw"))
+            {
+                auto tmp = fields.get_tmp();
+
+                calc_heating_rate(
+                        tmp->fld.data(),
+                        fields.sd.at("lw_flux_up")->fld.data(), fields.sd.at("lw_flux_dn")->fld.data(),
+                        fields.rhoref.data(), thermo.get_basestate_vector("exner").data(), gd.dz.data(),
+                        gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend,
+                        gd.icells, gd.ijcells);
+
+                dump.save_dump(tmp->fld.data(), "thl_tend_lw", iotime);
+
+                fields.release_tmp(tmp);
+            }
         }
 
         if (sw_shortwave)
@@ -2065,6 +2129,22 @@ void Radiation_rrtmgp<TF>::exec_all_stats(
             {
                 stats.set_time_series("sza", std::acos(mu0));
                 stats.set_time_series("sw_flux_dn_toa", sw_flux_dn_col({1,n_lev_col}));
+            }
+
+            if (do_dump && std::count(dumplist.begin(), dumplist.end(), "thl_tend_sw"))
+            {
+                auto tmp = fields.get_tmp();
+
+                calc_heating_rate(
+                        tmp->fld.data(),
+                        fields.sd.at("sw_flux_up")->fld.data(), fields.sd.at("sw_flux_dn")->fld.data(),
+                        fields.rhoref.data(), thermo.get_basestate_vector("exner").data(), gd.dz.data(),
+                        gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend,
+                        gd.icells, gd.ijcells);
+
+                dump.save_dump(tmp->fld.data(), "thl_tend_sw", iotime);
+
+                fields.release_tmp(tmp);
             }
         }
     }

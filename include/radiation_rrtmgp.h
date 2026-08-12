@@ -229,6 +229,7 @@ class Radiation_rrtmgp : public Radiation<TF>
         unsigned long idt_rad;
 
         std::vector<std::string> crosslist;
+        std::vector<std::string> dumplist;
 
         // RRTMGP related variables.
         Float tsi_scaling; // Total solar irradiance scaling factor.
