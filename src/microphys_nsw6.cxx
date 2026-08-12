@@ -20,6 +20,7 @@
  * along with MicroHH.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <algorithm>
 #include <iostream>
 #include <cmath>
 #include <vector>
@@ -126,6 +127,7 @@ namespace
     void conversion(
             TF* const restrict qrt, TF* const restrict qst, TF* const restrict qgt,
             TF* const restrict qtt, TF* const restrict thlt,
+            TF* const restrict net_frz,
             const TF* const restrict qr, const TF* const restrict qs, const TF* const restrict qg,
             const TF* const restrict qt, const TF* const restrict thl,
             const TF* const restrict ql, const TF* const restrict qi,
@@ -591,6 +593,11 @@ namespace
                     graupel_to_rain  *= dqg_dt_fac * dqr_dt_fac;
                     graupel_to_vapor *= dqg_dt_fac * dqv_dt_fac;
 
+                    if (net_frz != nullptr)
+                        net_frz[ijk] =
+                              cloud_to_graupel + cloud_to_snow + rain_to_graupel + rain_to_snow
+                            - snow_to_rain - graupel_to_rain - snow_to_vapor - graupel_to_vapor;
+
                     // Loss from cloud.
                     qtt[ijk] -= cloud_to_rain;
                     qrt[ijk] += cloud_to_rain;
@@ -1008,6 +1015,14 @@ void Microphys_nsw6<TF>::create(
         else
             ++it;
     }
+
+    if (std::count(dumplist.begin(), dumplist.end(), "qr_frz"))
+    {
+        auto& gd = grid.get_grid_data();
+        fields.init_diagnostic_field(
+                "qr_frz", "Net freezing rate of qr into qs/qg", "kg kg-1 s-1", group_name, gd.sloc);
+        fields.sd.at("qr_frz")->init();
+    }
 }
 
 #ifndef USECUDA
@@ -1025,9 +1040,16 @@ void Microphys_nsw6<TF>::exec(Thermo<TF>& thermo, const double dt, Stats<TF>& st
     const std::vector<TF>& p = thermo.get_basestate_vector("p");
     const std::vector<TF>& exner = thermo.get_basestate_vector("exner");
 
+    const auto net_frz_it = fields.sd.find("qr_frz");
+    TF* const net_frz = (net_frz_it != fields.sd.end()) ? net_frz_it->second->fld.data() : nullptr;
+
+    if (net_frz != nullptr)
+        std::fill(net_frz_it->second->fld.begin(), net_frz_it->second->fld.end(), TF(0.));
+
     conversion(
             fields.st.at("qr")->fld.data(), fields.st.at("qs")->fld.data(), fields.st.at("qg")->fld.data(),
             fields.st.at("qt")->fld.data(), fields.st.at("thl")->fld.data(),
+            net_frz,
             fields.sp.at("qr")->fld.data(), fields.sp.at("qs")->fld.data(), fields.sp.at("qg")->fld.data(),
             fields.sp.at("qt")->fld.data(), fields.sp.at("thl")->fld.data(),
             ql->fld.data(), qi->fld.data(),
@@ -1194,8 +1216,7 @@ void Microphys_nsw6<TF>::exec_dump(Dump<TF>& dump, unsigned long iotime, const d
         }
 
         if (it == "qr_frz")
-        {
-        }
+            dump.save_dump(fields.sd.at("qr_frz")->fld.data(), "qr_frz", iotime);
     }
 }
 

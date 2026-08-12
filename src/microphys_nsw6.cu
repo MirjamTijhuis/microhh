@@ -147,6 +147,7 @@ namespace
     void conversion_g(
             TF* const __restrict__ qrt, TF* const __restrict__ qst, TF* const __restrict__ qgt,
             TF* const __restrict__ qtt, TF* const __restrict__ thlt,
+            TF* const __restrict__ net_frz,
             const TF* const __restrict__ qr, const TF* const __restrict__ qs, const TF* const __restrict__ qg,
             const TF* const __restrict__ qt, const TF* const __restrict__ thl,
             const TF* const __restrict__ ql, const TF* const __restrict__ qi,
@@ -595,6 +596,11 @@ namespace
                 graupel_to_rain  *= dqg_dt_fac * dqr_dt_fac;
                 graupel_to_vapor *= dqg_dt_fac * dqv_dt_fac;
 
+                if (net_frz != nullptr)
+                    net_frz[ijk] =
+                          cloud_to_graupel + cloud_to_snow + rain_to_graupel + rain_to_snow
+                        - snow_to_rain - graupel_to_rain - snow_to_vapor - graupel_to_vapor;
+
                 // Loss from cloud.
                 qtt[ijk] -= cloud_to_rain;
                 qrt[ijk] += cloud_to_rain;
@@ -749,9 +755,16 @@ void Microphys_nsw6<TF>::exec(Thermo<TF>& thermo, const double dt, Stats<TF>& st
 
     auto temp_g = fields.get_tmp_g();
 
+    const auto net_frz_it = fields.sd.find("qr_frz");
+    TF* const net_frz = (net_frz_it != fields.sd.end()) ? static_cast<TF*>(net_frz_it->second->fld_g) : nullptr;
+
+    if (net_frz != nullptr)
+        cudaMemset(net_frz, 0, gd.ncells*sizeof(TF));
+
     conversion_g<TF><<<grid2dGPU, block2dGPU>>>(
            fields.st.at("qr")->fld_g, fields.st.at("qs")->fld_g, fields.st.at("qg")->fld_g,
            fields.st.at("qt")->fld_g, fields.st.at("thl")->fld_g,
+           net_frz,
            fields.sp.at("qr")->fld_g, fields.sp.at("qs")->fld_g, fields.sp.at("qg")->fld_g,
            fields.sp.at("qt")->fld_g, fields.sp.at("thl")->fld_g,
            ql->fld_g, qi->fld_g,
