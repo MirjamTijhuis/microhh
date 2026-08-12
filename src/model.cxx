@@ -50,6 +50,7 @@
 #include "limiter.h"
 #include "stats.h"
 #include "budget.h"
+#include "budget3d.h"
 #include "column.h"
 #include "cross.h"
 #include "dump.h"
@@ -153,6 +154,7 @@ Model<TF>::Model(Master& masterin, int argc, char *argv[]) :
         cross     = std::make_shared<Cross <TF>>(master, *grid, *soil_grid, *fields, *input);
 
         budget    = Budget<TF>::factory(master, *grid, *fields, *thermo, *diff, *advec, *force, *stats, *input);
+        budget3d  = std::make_shared<Budget3d<TF>>(master, *grid, *fields, *input);
 
         // Parse the statistics masks
         add_statistics_masks();
@@ -440,6 +442,9 @@ void Model<TF>::exec()
                 for (auto& it: fields->at)
                     stats->calc_tend(*it.second, "total");
 
+                // Accumulate the RK-weighted total tendency for the 3D budget, if necessary
+                budget3d->exec(timeloop->get_sub_time_step());
+
                 // Allow only for statistics when not in substep and not directly after restart.
                 if (timeloop->is_stats_step())
                 {
@@ -665,9 +670,13 @@ void Model<TF>::calculate_statistics(int iteration, double time, unsigned long i
     {
         master.print_message("Saving field dumps for time %f\n", time);
 
+        budget3d->prepare_dump();
+
         fields   ->exec_dump(*dump, iotime);
         thermo   ->exec_dump(*dump, iotime);
         microphys->exec_dump(*dump, iotime);
+
+        budget3d->reset();
     }
 
     if (stats->do_statistics(itime))

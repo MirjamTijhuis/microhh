@@ -58,6 +58,7 @@ template<typename> class Source;
 
 template<typename> class Stats;
 template<typename> class Budget;
+template<typename> class Budget3d;
 template<typename> class Column;
 template<typename> class Cross;
 template<typename> class Dump;
@@ -110,6 +111,7 @@ class Model
 
         std::shared_ptr<Stats<TF>> stats;
         std::shared_ptr<Budget<TF>> budget;
+        std::shared_ptr<Budget3d<TF>> budget3d;
         std::shared_ptr<Column<TF>> column;
         std::shared_ptr<Cross<TF>> cross;
         std::shared_ptr<Dump<TF>> dump;
