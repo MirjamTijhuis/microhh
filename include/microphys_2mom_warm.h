@@ -159,7 +159,7 @@ class Microphys_2mom_warm : public Microphys<TF>
 
         void exec_stats(Stats<TF>&, Thermo<TF>&, const double);
         void exec_column(Column<TF>&);
-        void exec_dump(Dump<TF>&, unsigned long) {};
+        void exec_dump(Dump<TF>&, unsigned long, const double) {};
         void exec_cross(Cross<TF>&, unsigned long);
 
         void get_mask(Stats<TF>&, std::string);

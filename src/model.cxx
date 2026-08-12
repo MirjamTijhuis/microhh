@@ -674,7 +674,7 @@ void Model<TF>::calculate_statistics(int iteration, double time, unsigned long i
 
         fields   ->exec_dump(*dump, iotime);
         thermo   ->exec_dump(*dump, iotime);
-        microphys->exec_dump(*dump, iotime);
+        microphys->exec_dump(*dump, iotime, dt);
 
         budget3d->reset();
     }

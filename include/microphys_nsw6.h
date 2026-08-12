@@ -61,7 +61,7 @@ class Microphys_nsw6 : public Microphys<TF>
 
         void exec_stats(Stats<TF>&, Thermo<TF>&, const double);
         void exec_column(Column<TF>&);
-        void exec_dump(Dump<TF>&, unsigned long) {};
+        void exec_dump(Dump<TF>&, unsigned long, const double);
         void exec_cross(Cross<TF>&, unsigned long);
 
         void get_mask(Stats<TF>&, std::string);
@@ -92,6 +92,7 @@ class Microphys_nsw6 : public Microphys<TF>
         double cflmax;          // Max CFL number in microphysics sedimentation
 
         std::vector<std::string> crosslist; // Cross-sections handled by this class
+        std::vector<std::string> dumplist;  // Dumps handled by this class
 
         const std::string tend_name = "micro";
         const std::string tend_longname = "Microphysics";

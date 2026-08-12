@@ -31,6 +31,7 @@
 #include "stats.h"
 #include "cross.h"
 #include "column.h"
+#include "dump.h"
 #include "thermo.h"
 #include "thermo_moist_functions.h"
 
@@ -989,6 +990,24 @@ void Microphys_nsw6<TF>::create(
 
     // 2. Cross-reference with the variables requested in the .ini file:
     crosslist = cross.get_enabled_variables(allowed_crossvars);
+
+    // Create dumps
+    // 1. Variables that this class can calculate/provide:
+    const std::vector<std::string> allowed_dumpvars = {"qr_sed", "qr_frz"};
+
+    // 2. Cross-reference with the variables requested in the .ini file:
+    std::vector<std::string>& dumplist_global = dump.get_dumplist();
+    auto it = dumplist_global.begin();
+    while (it != dumplist_global.end())
+    {
+        if (std::count(allowed_dumpvars.begin(), allowed_dumpvars.end(), *it))
+        {
+            dumplist.push_back(*it);
+            it = dumplist_global.erase(it);
+        }
+        else
+            ++it;
+    }
 }
 
 #ifndef USECUDA
@@ -1130,6 +1149,52 @@ void Microphys_nsw6<TF>::exec_cross(Cross<TF>& cross, unsigned long iotime)
                 cross.cross_plane(rrsg_bot->data(), no_offset, "rrsg_bot", iotime);
                 fields.release_tmp_xy(rrsg_bot);
             }
+        }
+    }
+}
+
+template<typename TF>
+void Microphys_nsw6<TF>::exec_dump(Dump<TF>& dump, unsigned long iotime, const double dt)
+{
+    auto& gd = grid.get_grid_data();
+
+    for (auto& it : dumplist)
+    {
+        if (it == "qr_sed")
+        {
+            auto qrt = fields.get_tmp();
+            auto rr_bot_tmp = fields.get_tmp_xy();
+            auto w_qr = fields.get_tmp();
+            auto c_qr = fields.get_tmp();
+            auto slope_qr = fields.get_tmp();
+            auto flux_qr = fields.get_tmp();
+
+            sedimentation_ss08(
+                    qrt->fld.data(), rr_bot_tmp->data(),
+                    w_qr->fld.data(), c_qr->fld.data(),
+                    slope_qr->fld.data(), flux_qr->fld.data(),
+                    fields.sp.at("qr")->fld.data(),
+                    fields.rhoref.data(),
+                    gd.dzi.data(), gd.dz.data(),
+                    dt,
+                    a_r<TF>, b_r<TF>, c_r<TF>, d_r<TF>, N_0r<TF>,
+                    qr_min<TF>,
+                    gd.istart, gd.jstart, gd.kstart,
+                    gd.iend, gd.jend, gd.kend,
+                    gd.icells, gd.ijcells);
+
+            dump.save_dump(flux_qr->fld.data(), "qr_sed", iotime);
+
+            fields.release_tmp(qrt);
+            fields.release_tmp_xy(rr_bot_tmp);
+            fields.release_tmp(w_qr);
+            fields.release_tmp(c_qr);
+            fields.release_tmp(slope_qr);
+            fields.release_tmp(flux_qr);
+        }
+
+        if (it == "qr_frz")
+        {
         }
     }
 }

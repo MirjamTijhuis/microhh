@@ -61,7 +61,7 @@ class Microphys
         virtual void exec_stats(Stats<TF>&, Thermo<TF>&, const double) = 0; ///< Calculate the statistics
         virtual void exec_column(Column<TF>&) = 0;
 
-        virtual void exec_dump(Dump<TF>&, unsigned long) = 0;
+        virtual void exec_dump(Dump<TF>&, unsigned long, const double) = 0;
         virtual void exec_cross(Cross<TF>&, unsigned long) = 0;
 
         virtual void get_mask(Stats<TF>&, std::string) = 0;
