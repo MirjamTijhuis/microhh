@@ -30,26 +30,18 @@ class Master;
 class Input;
 template<typename> class Grid;
 template<typename> class Fields;
+template<typename> class Dump;
 
-/**
- * Accumulates the total tendency of a set of prognostic variables into
- * dedicated 3D diagnostic fields ("<var>_tend"), time-weighted over the
- * RK substeps so the result is the true mean tendency over the interval
- * between two dumps. The accumulated fields are ordinary diagnostic
- * fields, so they are written out through the existing [dump] mechanism
- * (dumplist / dumplist_coarse) with no additional plumbing.
- */
 template<typename TF>
 class Budget3d
 {
     public:
-        Budget3d(Master&, Grid<TF>&, Fields<TF>&, Input&);
+        Budget3d(Master&, Grid<TF>&, Fields<TF>&, Dump<TF>&, Input&);
         ~Budget3d();
-
-        bool get_switch() const { return swbudget3d; }
 
         void exec(const double sub_dt);   ///< Accumulate one RK substep's tendency.
         void prepare_dump();              ///< Normalize accumulators into a mean tendency before writing.
+        void exec_dump(Dump<TF>&, unsigned long);
         void reset();                     ///< Zero the accumulators after writing.
 
     private:
@@ -60,5 +52,9 @@ class Budget3d
         bool swbudget3d;
         std::vector<std::string> tendencylist;
         double elapsed_time;
+
+        std::vector<std::string> fluxlist;
+        std::string evisc_name;
+        TF evisc_fac;
 };
 #endif

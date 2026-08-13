@@ -27,6 +27,8 @@
 #include "grid.h"
 #include "fields.h"
 #include "input.h"
+#include "dump.h"
+#include "finite_difference.h"
 #include "budget3d.h"
 
 namespace
@@ -59,33 +61,157 @@ namespace
         for (int n=0; n<ncells; ++n)
             fld[n] *= fac;
     }
+
+
+    template<typename TF>
+    void calc_flux_u(
+            TF* const restrict flux,
+            const TF* const restrict u,
+            const TF* const restrict s,
+            const TF* const restrict evisc,
+            const TF evisc_fac,
+            const TF dxi,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int icells, const int ijcells)
+    {
+        using namespace Finite_difference::O2;
+
+        const int ii = 1;
+        const int jj = icells;
+        const int kk = ijcells;
+
+        for (int k=kstart; k<kend; ++k)
+            for (int j=jstart; j<jend; ++j)
+                #pragma ivdep
+                for (int i=istart; i<iend; ++i)
+                {
+                    const int ijk = i + j*jj + k*kk;
+                    flux[ijk] = u[ijk]*interp2(s[ijk-ii], s[ijk])
+                              - evisc_fac*interp2(evisc[ijk-ii], evisc[ijk])*(s[ijk]-s[ijk-ii])*dxi;
+                }
+    }
+
+
+    template<typename TF>
+    void calc_flux_v(
+            TF* const restrict flux,
+            const TF* const restrict v,
+            const TF* const restrict s,
+            const TF* const restrict evisc,
+            const TF evisc_fac,
+            const TF dyi,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int icells, const int ijcells)
+    {
+        using namespace Finite_difference::O2;
+
+        const int jj = icells;
+        const int kk = ijcells;
+
+        for (int k=kstart; k<kend; ++k)
+            for (int j=jstart; j<jend; ++j)
+                #pragma ivdep
+                for (int i=istart; i<iend; ++i)
+                {
+                    const int ijk = i + j*jj + k*kk;
+                    flux[ijk] = v[ijk]*interp2(s[ijk-jj], s[ijk])
+                              - evisc_fac*interp2(evisc[ijk-jj], evisc[ijk])*(s[ijk]-s[ijk-jj])*dyi;
+                }
+    }
+
+
+    template<typename TF>
+    void calc_flux_w(
+            TF* const restrict flux,
+            const TF* const restrict w,
+            const TF* const restrict s,
+            const TF* const restrict evisc,
+            const TF evisc_fac,
+            const TF* const restrict dzhi,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int icells, const int ijcells)
+    {
+        using namespace Finite_difference::O2;
+
+        const int jj = icells;
+        const int kk = ijcells;
+
+        for (int k=kstart+1; k<kend; ++k)
+            for (int j=jstart; j<jend; ++j)
+                #pragma ivdep
+                for (int i=istart; i<iend; ++i)
+                {
+                    const int ijk = i + j*jj + k*kk;
+                    flux[ijk] = w[ijk]*interp2(s[ijk-kk], s[ijk])
+                              - evisc_fac*interp2(evisc[ijk-kk], evisc[ijk])*(s[ijk]-s[ijk-kk])*dzhi[k];
+                }
+
+        for (int j=jstart; j<jend; ++j)
+            #pragma ivdep
+            for (int i=istart; i<iend; ++i)
+            {
+                flux[i + j*jj + kstart*kk] = TF(0.);
+                flux[i + j*jj + kend  *kk] = TF(0.);
+            }
+    }
 }
 
 template<typename TF>
-Budget3d<TF>::Budget3d(Master& masterin, Grid<TF>& gridin, Fields<TF>& fieldsin, Input& inputin) :
+Budget3d<TF>::Budget3d(Master& masterin, Grid<TF>& gridin, Fields<TF>& fieldsin, Dump<TF>& dump, Input& inputin) :
     master(masterin), grid(gridin), fields(fieldsin),
     elapsed_time(0.)
 {
-    swbudget3d = inputin.get_item<bool>("budget3d", "swbudget3d", "", false);
-
-    if (swbudget3d)
+    if (fields.sd.find("eviscs") != fields.sd.end())
     {
-        tendencylist = inputin.get_list<std::string>("budget3d", "tendencylist", "", std::vector<std::string>());
-
-        if (tendencylist.empty())
-            throw std::runtime_error("[budget3d] tendencylist is empty");
-
-        for (auto& varname : tendencylist)
-        {
-            if (fields.at.find(varname) == fields.at.end())
-                throw std::runtime_error("budget3d variable \"" + varname + "\" in tendencylist is not a prognostic variable");
-
-            auto& tend = *fields.at.at(varname);
-            fields.init_diagnostic_field(
-                    varname + "_tend", "Accumulated mean tendency of " + varname,
-                    tend.unit, "budget3d", tend.loc);
-        }
+        evisc_name = "eviscs";
+        evisc_fac = TF(1.);
     }
+    else if (fields.sd.find("evisc") != fields.sd.end())
+    {
+        evisc_name = "evisc";
+        const TF tPr = inputin.get_item<TF>("diff", "tPr", "", TF(1./3.));
+        evisc_fac = TF(1.)/tPr;
+    }
+
+    std::vector<std::string>& dumplist = dump.get_dumplist();
+
+    for (auto it = dumplist.begin(); it != dumplist.end(); )
+    {
+        const std::string name = *it;
+
+        if (name.size() > 5 && name.compare(name.size()-5, 5, "_tend") == 0
+                && fields.at.find(name.substr(0, name.size()-5)) != fields.at.end())
+        {
+            const std::string varname = name.substr(0, name.size()-5);
+            auto& tend = *fields.at.at(varname);
+
+            fields.init_diagnostic_field(
+                    name, "Accumulated mean tendency of " + varname,
+                    tend.unit, "budget3d", tend.loc);
+
+            tendencylist.push_back(varname);
+            it = dumplist.erase(it);
+        }
+        else if (name.size() > 1 && (name.front() == 'u' || name.front() == 'v' || name.front() == 'w')
+                && fields.sp.find(name.substr(1)) != fields.sp.end())
+        {
+            if (evisc_name.empty())
+                throw std::runtime_error("[budget3d] dumping \"" + name + "\" requires an eddy viscosity field (\"evisc\" or \"eviscs\")");
+
+            fluxlist.push_back(name);
+            it = dumplist.erase(it);
+        }
+        else
+            ++it;
+    }
+
+    swbudget3d = !tendencylist.empty() || !fluxlist.empty();
 }
 
 template<typename TF>
@@ -138,6 +264,45 @@ void Budget3d<TF>::prepare_dump()
         auto& acc = *fields.sd.at(varname + "_tend");
         scale_field(acc.fld.data(), dti, gd.ncells);
     }
+}
+
+template<typename TF>
+void Budget3d<TF>::exec_dump(Dump<TF>& dump, unsigned long iotime)
+{
+    if (!swbudget3d || fluxlist.empty())
+        return;
+
+    auto& gd = grid.get_grid_data();
+
+    auto& u = *fields.mp.at("u");
+    auto& v = *fields.mp.at("v");
+    auto& w = *fields.mp.at("w");
+    auto& evisc = *fields.sd.at(evisc_name);
+
+    auto flux = fields.get_tmp();
+
+    for (auto& name : fluxlist)
+    {
+        const char dir = name[0];
+        auto& s = *fields.sp.at(name.substr(1));
+
+        if (dir == 'u')
+            calc_flux_u(
+                    flux->fld.data(), u.fld.data(), s.fld.data(), evisc.fld.data(), evisc_fac,
+                    gd.dxi, gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
+        else if (dir == 'v')
+            calc_flux_v(
+                    flux->fld.data(), v.fld.data(), s.fld.data(), evisc.fld.data(), evisc_fac,
+                    gd.dyi, gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
+        else
+            calc_flux_w(
+                    flux->fld.data(), w.fld.data(), s.fld.data(), evisc.fld.data(), evisc_fac,
+                    gd.dzhi.data(), gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
+
+        dump.save_dump(flux->fld.data(), name, iotime);
+    }
+
+    fields.release_tmp(flux);
 }
 
 template<typename TF>
