@@ -359,7 +359,16 @@ void Budget3d<TF>::prepare_dump()
 template<typename TF>
 void Budget3d<TF>::exec_dump(Dump<TF>& dump, unsigned long iotime)
 {
-    if (!swbudget3d || fluxlist.empty())
+    if (!swbudget3d)
+        return;
+
+    for (auto& varname : tendencylist)
+    {
+        auto& acc = *fields.sd.at(varname + "_tend");
+        dump.save_dump(acc.fld.data(), varname + "_tend", iotime);
+    }
+
+    if (fluxlist.empty())
         return;
 
     auto& gd = grid.get_grid_data();
