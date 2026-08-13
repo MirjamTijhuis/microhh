@@ -161,6 +161,87 @@ namespace
                 flux[i + j*jj + kend  *kk] = TF(0.);
             }
     }
+
+
+    template<typename TF>
+    void calc_flux_uw(
+            TF* const restrict flux,
+            const TF* const restrict u,
+            const TF* const restrict w,
+            const TF* const restrict evisc,
+            const TF dxi,
+            const TF* const restrict dzhi,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int icells, const int ijcells)
+    {
+        using namespace Finite_difference::O2;
+
+        const int ii = 1;
+        const int jj = icells;
+        const int kk = ijcells;
+
+        for (int k=kstart+1; k<kend; ++k)
+            for (int j=jstart; j<jend; ++j)
+                #pragma ivdep
+                for (int i=istart; i<iend; ++i)
+                {
+                    const int ijk = i + j*jj + k*kk;
+                    const TF evisc_uw = TF(0.25)*(evisc[ijk-ii-kk] + evisc[ijk-ii] + evisc[ijk-kk] + evisc[ijk]);
+
+                    flux[ijk] = interp2(u[ijk-kk], u[ijk])*interp2(w[ijk-ii], w[ijk])
+                              - evisc_uw*( (w[ijk]-w[ijk-ii])*dxi + (u[ijk]-u[ijk-kk])*dzhi[k] );
+                }
+
+        for (int j=jstart; j<jend; ++j)
+            #pragma ivdep
+            for (int i=istart; i<iend; ++i)
+            {
+                flux[i + j*jj + kstart*kk] = TF(0.);
+                flux[i + j*jj + kend  *kk] = TF(0.);
+            }
+    }
+
+
+    template<typename TF>
+    void calc_flux_vw(
+            TF* const restrict flux,
+            const TF* const restrict v,
+            const TF* const restrict w,
+            const TF* const restrict evisc,
+            const TF dyi,
+            const TF* const restrict dzhi,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int icells, const int ijcells)
+    {
+        using namespace Finite_difference::O2;
+
+        const int jj = icells;
+        const int kk = ijcells;
+
+        for (int k=kstart+1; k<kend; ++k)
+            for (int j=jstart; j<jend; ++j)
+                #pragma ivdep
+                for (int i=istart; i<iend; ++i)
+                {
+                    const int ijk = i + j*jj + k*kk;
+                    const TF evisc_vw = TF(0.25)*(evisc[ijk-jj-kk] + evisc[ijk-jj] + evisc[ijk-kk] + evisc[ijk]);
+
+                    flux[ijk] = interp2(v[ijk-kk], v[ijk])*interp2(w[ijk-jj], w[ijk])
+                              - evisc_vw*( (w[ijk]-w[ijk-jj])*dyi + (v[ijk]-v[ijk-kk])*dzhi[k] );
+                }
+
+        for (int j=jstart; j<jend; ++j)
+            #pragma ivdep
+            for (int i=istart; i<iend; ++i)
+            {
+                flux[i + j*jj + kstart*kk] = TF(0.);
+                flux[i + j*jj + kend  *kk] = TF(0.);
+            }
+    }
 }
 
 template<typename TF>
@@ -197,6 +278,14 @@ Budget3d<TF>::Budget3d(Master& masterin, Grid<TF>& gridin, Fields<TF>& fieldsin,
                     tend.unit, "budget3d", tend.loc);
 
             tendencylist.push_back(varname);
+            it = dumplist.erase(it);
+        }
+        else if (name == "uw" || name == "vw")
+        {
+            if (fields.sd.find("evisc") == fields.sd.end())
+                throw std::runtime_error("[budget3d] dumping \"" + name + "\" requires an eddy viscosity field (\"evisc\")");
+
+            fluxlist.push_back(name);
             it = dumplist.erase(it);
         }
         else if (name.size() > 1 && (name.front() == 'u' || name.front() == 'v' || name.front() == 'w')
@@ -285,30 +374,41 @@ void Budget3d<TF>::exec_dump(Dump<TF>& dump, unsigned long iotime)
 
     for (auto& name : fluxlist)
     {
-        const char dir = name[0];
-        const std::string varname = name.substr(1);
-
-        TF* s;
-        if (fields.sp.find(varname) != fields.sp.end())
-            s = fields.sp.at(varname)->fld.data();
+        if (name == "uw")
+            calc_flux_uw(
+                    flux->fld.data(), u.fld.data(), w.fld.data(), fields.sd.at("evisc")->fld.data(),
+                    gd.dxi, gd.dzhi.data(), gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
+        else if (name == "vw")
+            calc_flux_vw(
+                    flux->fld.data(), v.fld.data(), w.fld.data(), fields.sd.at("evisc")->fld.data(),
+                    gd.dyi, gd.dzhi.data(), gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
         else
         {
-            thermo.get_thermo_field(*s_tmp, varname, true, true);
-            s = s_tmp->fld.data();
-        }
+            const char dir = name[0];
+            const std::string varname = name.substr(1);
 
-        if (dir == 'u')
-            calc_flux_u(
-                    flux->fld.data(), u.fld.data(), s, evisc.fld.data(), evisc_fac,
-                    gd.dxi, gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
-        else if (dir == 'v')
-            calc_flux_v(
-                    flux->fld.data(), v.fld.data(), s, evisc.fld.data(), evisc_fac,
-                    gd.dyi, gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
-        else
-            calc_flux_w(
-                    flux->fld.data(), w.fld.data(), s, evisc.fld.data(), evisc_fac,
-                    gd.dzhi.data(), gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
+            TF* s;
+            if (fields.sp.find(varname) != fields.sp.end())
+                s = fields.sp.at(varname)->fld.data();
+            else
+            {
+                thermo.get_thermo_field(*s_tmp, varname, true, true);
+                s = s_tmp->fld.data();
+            }
+
+            if (dir == 'u')
+                calc_flux_u(
+                        flux->fld.data(), u.fld.data(), s, evisc.fld.data(), evisc_fac,
+                        gd.dxi, gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
+            else if (dir == 'v')
+                calc_flux_v(
+                        flux->fld.data(), v.fld.data(), s, evisc.fld.data(), evisc_fac,
+                        gd.dyi, gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
+            else
+                calc_flux_w(
+                        flux->fld.data(), w.fld.data(), s, evisc.fld.data(), evisc_fac,
+                        gd.dzhi.data(), gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
+        }
 
         dump.save_dump(flux->fld.data(), name, iotime);
     }
