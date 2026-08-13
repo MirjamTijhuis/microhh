@@ -154,7 +154,7 @@ Model<TF>::Model(Master& masterin, int argc, char *argv[]) :
         cross     = std::make_shared<Cross <TF>>(master, *grid, *soil_grid, *fields, *input);
 
         budget    = Budget<TF>::factory(master, *grid, *fields, *thermo, *diff, *advec, *force, *stats, *input);
-        budget3d  = std::make_shared<Budget3d<TF>>(master, *grid, *fields, *dump, *input);
+        budget3d  = std::make_shared<Budget3d<TF>>(master, *grid, *fields, *thermo, *dump, *input);
 
         // Parse the statistics masks
         add_statistics_masks();

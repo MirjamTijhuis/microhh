@@ -26,6 +26,7 @@
 #include "master.h"
 #include "grid.h"
 #include "fields.h"
+#include "thermo.h"
 #include "input.h"
 #include "dump.h"
 #include "finite_difference.h"
@@ -163,8 +164,8 @@ namespace
 }
 
 template<typename TF>
-Budget3d<TF>::Budget3d(Master& masterin, Grid<TF>& gridin, Fields<TF>& fieldsin, Dump<TF>& dump, Input& inputin) :
-    master(masterin), grid(gridin), fields(fieldsin),
+Budget3d<TF>::Budget3d(Master& masterin, Grid<TF>& gridin, Fields<TF>& fieldsin, Thermo<TF>& thermoin, Dump<TF>& dump, Input& inputin) :
+    master(masterin), grid(gridin), fields(fieldsin), thermo(thermoin),
     elapsed_time(0.)
 {
     if (fields.sd.find("eviscs") != fields.sd.end())
@@ -199,7 +200,7 @@ Budget3d<TF>::Budget3d(Master& masterin, Grid<TF>& gridin, Fields<TF>& fieldsin,
             it = dumplist.erase(it);
         }
         else if (name.size() > 1 && (name.front() == 'u' || name.front() == 'v' || name.front() == 'w')
-                && fields.sp.find(name.substr(1)) != fields.sp.end())
+                && (fields.sp.find(name.substr(1)) != fields.sp.end() || thermo.check_field_exists(name.substr(1))))
         {
             if (evisc_name.empty())
                 throw std::runtime_error("[budget3d] dumping \"" + name + "\" requires an eddy viscosity field (\"evisc\" or \"eviscs\")");
@@ -280,29 +281,40 @@ void Budget3d<TF>::exec_dump(Dump<TF>& dump, unsigned long iotime)
     auto& evisc = *fields.sd.at(evisc_name);
 
     auto flux = fields.get_tmp();
+    auto s_tmp = fields.get_tmp();
 
     for (auto& name : fluxlist)
     {
         const char dir = name[0];
-        auto& s = *fields.sp.at(name.substr(1));
+        const std::string varname = name.substr(1);
+
+        TF* s;
+        if (fields.sp.find(varname) != fields.sp.end())
+            s = fields.sp.at(varname)->fld.data();
+        else
+        {
+            thermo.get_thermo_field(*s_tmp, varname, true, true);
+            s = s_tmp->fld.data();
+        }
 
         if (dir == 'u')
             calc_flux_u(
-                    flux->fld.data(), u.fld.data(), s.fld.data(), evisc.fld.data(), evisc_fac,
+                    flux->fld.data(), u.fld.data(), s, evisc.fld.data(), evisc_fac,
                     gd.dxi, gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
         else if (dir == 'v')
             calc_flux_v(
-                    flux->fld.data(), v.fld.data(), s.fld.data(), evisc.fld.data(), evisc_fac,
+                    flux->fld.data(), v.fld.data(), s, evisc.fld.data(), evisc_fac,
                     gd.dyi, gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
         else
             calc_flux_w(
-                    flux->fld.data(), w.fld.data(), s.fld.data(), evisc.fld.data(), evisc_fac,
+                    flux->fld.data(), w.fld.data(), s, evisc.fld.data(), evisc_fac,
                     gd.dzhi.data(), gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
 
         dump.save_dump(flux->fld.data(), name, iotime);
     }
 
     fields.release_tmp(flux);
+    fields.release_tmp(s_tmp);
 }
 
 template<typename TF>

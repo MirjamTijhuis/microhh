@@ -30,13 +30,14 @@ class Master;
 class Input;
 template<typename> class Grid;
 template<typename> class Fields;
+template<typename> class Thermo;
 template<typename> class Dump;
 
 template<typename TF>
 class Budget3d
 {
     public:
-        Budget3d(Master&, Grid<TF>&, Fields<TF>&, Dump<TF>&, Input&);
+        Budget3d(Master&, Grid<TF>&, Fields<TF>&, Thermo<TF>&, Dump<TF>&, Input&);
         ~Budget3d();
 
         void exec(const double sub_dt);   ///< Accumulate one RK substep's tendency.
@@ -48,6 +49,7 @@ class Budget3d
         Master& master;
         Grid<TF>& grid;
         Fields<TF>& fields;
+        Thermo<TF>& thermo;
 
         bool swbudget3d;
         std::vector<std::string> tendencylist;
