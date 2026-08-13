@@ -198,17 +198,25 @@ void Dump<TF>::save_dump(TF* data, const std::string& varname, int iotime)
 
         if (infile_c.good())
             master.print_message("%s already exists\n", filename_c);
-        else if (field3d_io.save_field3d_coarse(
-                    data,
-                    tmp1->fld.data(),
-                    filename_c,
-                    ratio_x,
-                    ratio_y,
-                    gd.kstart,
-                    gd.kend))
+        else
         {
-            master.print_message("Saving \"%s\" ... FAILED\n", filename_c);
-            throw std::runtime_error("Writing error in coarse dump");
+            int error;
+
+            if (varname.size() > 1 && varname.front() == 'u')
+                error = field3d_io.save_field3d_coarse_edge_x(
+                        data, tmp1->fld.data(), filename_c, ratio_x, ratio_y, gd.kstart, gd.kend);
+            else if (varname.size() > 1 && varname.front() == 'v')
+                error = field3d_io.save_field3d_coarse_edge_y(
+                        data, tmp1->fld.data(), filename_c, ratio_x, ratio_y, gd.kstart, gd.kend);
+            else
+                error = field3d_io.save_field3d_coarse(
+                        data, tmp1->fld.data(), filename_c, ratio_x, ratio_y, gd.kstart, gd.kend);
+
+            if (error)
+            {
+                master.print_message("Saving \"%s\" ... FAILED\n", filename_c);
+                throw std::runtime_error("Writing error in coarse dump");
+            }
         }
     }
 

@@ -44,6 +44,8 @@ class Field3d_io
         int load_xy_slice(TF*, TF*, const char*, int kslice=-1); // Loads a xy-slice.
 
         int save_field3d_coarse(TF*, TF*, const char*, int, int, int, int); // Saves a coarse 3d field.
+        int save_field3d_coarse_edge_x(TF*, TF*, const char*, int, int, int, int); // Saves a coarse 3d field, averaged along y only.
+        int save_field3d_coarse_edge_y(TF*, TF*, const char*, int, int, int, int); // Saves a coarse 3d field, averaged along x only.
         int save_xy_slice_coarse(TF*, TF*, const char*, int, int, int kslice=0); // Saves a coarse xy-slice.
 
     private:
