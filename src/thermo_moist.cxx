@@ -483,6 +483,30 @@ namespace
     }
 
     template<typename TF>
+    void calc_condensate_mask(
+            TF* restrict mask, TF* restrict thl, TF* restrict qt, TF* restrict p,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int jj, const int kk)
+    {
+        // Calculate the 0/1 mask of grid points with condensate (ql+qi > 0).
+        #pragma omp parallel for
+        for (int k=kstart; k<kend; k++)
+        {
+            const TF ex = exner(p[k]);
+            for (int j=jstart; j<jend; j++)
+                #pragma ivdep
+                for (int i=istart; i<iend; i++)
+                {
+                    const int ijk = i + j*jj + k*kk;
+                    const TF qc = std::max(qt[ijk] - sat_adjust(thl[ijk], qt[ijk], p[k], ex).qs, TF(0.));
+                    mask[ijk] = (qc > TF(0.)) ? TF(1.) : TF(0.);
+                }
+        }
+    }
+
+    template<typename TF>
     void calc_N2(TF* restrict N2, const TF* const restrict thl, const TF* const restrict dzi, TF* restrict thvref,
                  const int istart, const int iend,
                  const int jstart, const int jend,
@@ -1566,7 +1590,7 @@ bool Thermo_moist<TF>::has_mask(std::string mask_name)
 template<typename TF>
 bool Thermo_moist<TF>::check_field_exists(const std::string name)
 {
-    if (name == "b" || name == "ql" || name == "T" || name == "qi" || name == "qlqi")
+    if (name == "b" || name == "ql" || name == "T" || name == "qi" || name == "qlqi" || name == "qlqi_mask")
         return true;
     else
         return false;
@@ -1641,6 +1665,11 @@ void Thermo_moist<TF>::get_thermo_field(
     else if (name == "qlqi")
     {
         calc_condensate(fld.fld.data(), fields.sp.at("thl")->fld.data(), fields.sp.at("qt")->fld.data(), base.pref.data(),
+                        gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
+    }
+    else if (name == "qlqi_mask")
+    {
+        calc_condensate_mask(fld.fld.data(), fields.sp.at("thl")->fld.data(), fields.sp.at("qt")->fld.data(), base.pref.data(),
                         gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
     }
     else if (name == "qsat")
