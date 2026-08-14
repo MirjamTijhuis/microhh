@@ -953,7 +953,7 @@ int Cross<TF>::cross_ymean(TF* restrict data, std::string name, int iotime, cons
     flip_and_norm_xz<TF>(
             tmp1->fld.data(),
             tmp2->fld.data(),
-            gd.istart, gd.kend,
+            gd.istart, gd.iend,
             gd.kstart, gd.kend,
             gd.jstride, gd.kstride,
             gd.jtot);
