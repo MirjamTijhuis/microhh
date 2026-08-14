@@ -801,7 +801,7 @@ int Cross<TF>::cross_simple(
 }
 
 template<typename TF>
-int Cross<TF>::cross_plane(TF* restrict data, TF restrict offset, std::string name, int iotime)
+int Cross<TF>::cross_plane(TF* restrict data, TF restrict offset, std::string name, int iotime, std::string loc)
 {
     int nerror = 0;
     char filename[256];
@@ -814,13 +814,13 @@ int Cross<TF>::cross_plane(TF* restrict data, TF restrict offset, std::string na
 
     if (save_full)
     {
-        std::snprintf(filename, 256, "%s.%s.%07d", name.c_str(), "xy.000", iotime);
+        std::snprintf(filename, 256, "%s.xy.%s.%07d", name.c_str(), loc.c_str(), iotime);
         nerror += check_save(field3d_io.save_xy_slice(data, offset, tmp, filename), filename);
     }
 
     if (save_coarse)
     {
-        std::snprintf(filename, 256, "%s.%s.%07d", name.c_str(), "xy_c.000", iotime);
+        std::snprintf(filename, 256, "%s.xy_c.%s.%07d", name.c_str(), loc.c_str(), iotime);
         nerror += check_save(field3d_io.save_xy_slice_coarse(data, tmp, filename, ratio_x, ratio_y), filename);
     }
 

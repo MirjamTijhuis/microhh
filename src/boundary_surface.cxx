@@ -743,9 +743,9 @@ void Boundary_surface<TF>::exec_cross(Cross<TF>& cross, Thermo<TF>& thermo, unsi
             else if (it == "q2m")
                 cross.cross_plane(q2m->data(), no_offset, "q2m", iotime);
             else if (it == "u10m")
-                cross.cross_plane(u10m->data(), no_offset, "u10m", iotime);
+                cross.cross_plane(u10m->data(), no_offset, "u10m", iotime, "100");
             else if (it == "v10m")
-                cross.cross_plane(v10m->data(), no_offset, "v10m", iotime);
+                cross.cross_plane(v10m->data(), no_offset, "v10m", iotime, "010");
 
             fields.release_tmp_xy(t2m);
             fields.release_tmp_xy(q2m);

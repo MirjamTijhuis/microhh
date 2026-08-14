@@ -52,7 +52,7 @@ class Cross
 
         int cross_simple(TF*, const TF, const std::string&, const int, const std::array<int,3>&);
         int cross_lngrad(TF*, std::string, int);
-        int cross_plane (TF*, const TF, std::string, int);
+        int cross_plane (TF*, const TF, std::string, int, std::string loc="000");
         int cross_path  (TF*, std::string, int);
         int cross_mask  (TF*, TF, std::string, int);
         int cross_ymean (TF*, std::string, int, const std::array<int,3>&);
