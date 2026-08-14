@@ -2063,7 +2063,7 @@ void Thermo_moist<TF>::create_cross(Cross<TF>& cross)
         const std::vector<std::string> allowed_crossvars_b = {"b", "b_bot", "b_fluxbot"};
         const std::vector<std::string> allowed_crossvars_ql = {"ql", "ql_path", "ql_base", "ql_top", "ql_ymean"};
         const std::vector<std::string> allowed_crossvars_qi = {"qi", "qi_path", "qi_ymean"};
-        const std::vector<std::string> allowed_crossvars_qlqi = {"qlqi", "qlqi_path", "qlqi_base", "qlqi_top", "qlqi_ymean"};
+        const std::vector<std::string> allowed_crossvars_qlqi = {"qlqi", "qlqi_path", "qlqi_base", "qlqi_top", "qlqi_ymean", "qlqi_mask"};
         const std::vector<std::string> allowed_crossvars_qsat = {"qsat_path"};
         const std::vector<std::string> allowed_crossvars_misc = {"w500hpa"};
         const std::vector<std::string> allowed_crossvars_qlqithv = {"qlqicore_max_thv_prime"};
@@ -2380,6 +2380,8 @@ void Thermo_moist<TF>::exec_cross(Cross<TF>& cross, unsigned long iotime)
             cross.cross_height_threshold(output->fld.data(), 0., Cross_direction::Top_to_bottom, "qlqi_top", iotime);
         if (it == "qlqi_ymean")
             cross.cross_ymean(output->fld.data(), "qlqi_ymean", iotime, gd.sloc);
+        if (it == "qlqi_mask")
+            cross.cross_mask(output->fld.data(), 0., "qlqi_mask", iotime);
     }
 
     if (swcross_qsat)

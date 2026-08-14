@@ -197,6 +197,37 @@ namespace
     }
 
     template<typename TF>
+    void calc_cross_mask(
+            const TF* const restrict data, TF* const restrict mask,
+            const TF threshold,
+            int jj, int kk,
+            int istart, int iend,
+            int jstart, int jend,
+            int kstart, int kend)
+    {
+        // Set mask to zero, and flag columns which contain data > threshold anywhere in the vertical.
+        for (int j=jstart; j<jend; j++)
+            #pragma ivdep
+            for (int i=istart; i<iend; i++)
+            {
+                const int ij = i + j*jj;
+                mask[ij] = 0.;
+            }
+
+        for (int k=kstart; k<kend; k++)
+            for (int j=jstart; j<jend; j++)
+                #pragma ivdep
+                for (int i=istart; i<iend; i++)
+                {
+                    const int ij  = i + j*jj;
+                    const int ijk = i + j*jj + k*kk;
+
+                    if (data[ijk] > threshold)
+                        mask[ij] = 1.;
+                }
+    }
+
+    template<typename TF>
     void calc_cross_height_threshold(
             const TF* const restrict data, TF* const restrict height,
             const TF* const restrict z, TF threshold, bool upward, TF fillvalue,
@@ -860,6 +891,29 @@ int Cross<TF>::cross_path(TF* restrict data, std::string name, int iotime)
 
     calc_cross_path<TF>(
             data, tmp, fields.rhoref.data(), gd.dz.data(),
+            gd.icells, gd.ijcells,
+            gd.istart, gd.iend,
+            gd.jstart, gd.jend,
+            gd.kstart, gd.kend);
+
+    nerror += cross_plane(&tmp[gd.kstart*gd.ijcells], no_offset, name, iotime);
+
+    fields.release_tmp(tmpfld);
+
+    return nerror;
+}
+
+template<typename TF>
+int Cross<TF>::cross_mask(TF* restrict data, TF threshold, std::string name, int iotime)
+{
+    int nerror = 0;
+    TF no_offset = 0.;
+    auto tmpfld = fields.get_tmp();
+    auto tmp = tmpfld->fld.data();
+    auto& gd = grid.get_grid_data();
+
+    calc_cross_mask<TF>(
+            data, tmp, threshold,
             gd.icells, gd.ijcells,
             gd.istart, gd.iend,
             gd.jstart, gd.jend,
