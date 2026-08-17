@@ -133,6 +133,7 @@ namespace
             const TF* const restrict evisc,
             const TF evisc_fac,
             const TF* const restrict dzhi,
+            const TF* const restrict flux_bot,
             const int istart, const int iend,
             const int jstart, const int jend,
             const int kstart, const int kend,
@@ -157,7 +158,7 @@ namespace
             #pragma ivdep
             for (int i=istart; i<iend; ++i)
             {
-                flux[i + j*jj + kstart*kk] = TF(0.);
+                flux[i + j*jj + kstart*kk] = flux_bot[i + j*jj];
                 flux[i + j*jj + kend  *kk] = TF(0.);
             }
     }
@@ -397,12 +398,19 @@ void Budget3d<TF>::exec_dump(Dump<TF>& dump, unsigned long iotime)
             const std::string varname = name.substr(1);
 
             TF* s;
+            const TF* flux_bot;
             if (fields.sp.find(varname) != fields.sp.end())
-                s = fields.sp.at(varname)->fld.data();
+            {
+                auto& sp = *fields.sp.at(varname);
+                s = sp.fld.data();
+                flux_bot = sp.flux_bot.data();
+            }
             else
             {
                 thermo.get_thermo_field(*s_tmp, varname, true, true);
                 s = s_tmp->fld.data();
+                std::fill(s_tmp->flux_bot.begin(), s_tmp->flux_bot.end(), TF(0.));
+                flux_bot = s_tmp->flux_bot.data();
             }
 
             if (dir == 'u')
@@ -416,7 +424,8 @@ void Budget3d<TF>::exec_dump(Dump<TF>& dump, unsigned long iotime)
             else
                 calc_flux_w(
                         flux->fld.data(), w.fld.data(), s, evisc.fld.data(), evisc_fac,
-                        gd.dzhi.data(), gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
+                        gd.dzhi.data(), flux_bot,
+                        gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend, gd.icells, gd.ijcells);
         }
 
         dump.save_dump(flux->fld.data(), name, iotime);
