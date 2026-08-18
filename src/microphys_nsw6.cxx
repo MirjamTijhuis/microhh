@@ -1010,7 +1010,8 @@ template<typename TF>
 void Microphys_nsw6<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<TF>& stats)
 {
     auto& gd = grid.get_grid_data();
-    const double dt = timeloop.get_sub_time_step();
+    // const double dt = timeloop.get_sub_time_step();
+    const double dt = timeloop.get_dt();
 
     // Get liquid water, ice and pressure variables before starting.
     auto ql = fields.get_tmp();
