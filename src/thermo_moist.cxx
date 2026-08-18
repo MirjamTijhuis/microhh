@@ -801,7 +801,8 @@ namespace
                 }
         }
 
-        for (int k=kstart; k<kend+1; ++k)
+        // Exclude surface, is calculated below without saturation adjustment.
+        for (int k=kstart+1; k<kend+1; ++k)
         {
             const TF exnh = exner(ph[k]);
             for (int j=jstart; j<jend; ++j)
@@ -833,8 +834,10 @@ namespace
             {
                 const int ij = i + j*jj;
                 const int ij_nogc = (i-igc) + (j-jgc)*jj_nogc;
+                const int ijk_nogc = (i-igc) + (j-jgc)*jj_nogc + (kstart-kgc)*kk_nogc;
 
                 T_sfc[ij_nogc] = thl_bot[ij] * exn_bot;
+                T_h[ijk_nogc] = T_sfc[ij_nogc];
             }
     }
 
@@ -891,7 +894,7 @@ namespace
             }
         }
 
-        for (int k=kstart; k<kend+1; ++k)
+        for (int k=kstart+1; k<kend+1; ++k)
         {
             const TF exnh = exner(ph[k]);
 
@@ -922,8 +925,10 @@ namespace
 
             const int ij = i + j*icells;
             const int ij_out = n;
+            const int ijk_out = n + (kstart-kgc)*n_cols;
 
             T_sfc[ij_out] = thl_bot[ij] * exn_bot;
+            T_h[ijk_out] = T_sfc[ij_out];
         }
     }
 
