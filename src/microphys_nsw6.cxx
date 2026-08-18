@@ -191,9 +191,32 @@ namespace
                 {
                     const int ijk = i + j*jj + k*kk;
 
-                    // Compute the T out of the known values of ql and qi, this saves memory and sat_adjust.
-                    const TF T = exner[k]*thl[ijk] + Lv<TF>/cp<TF>*ql[ijk] + Ls<TF>/cp<TF>*qi[ijk];
-                    const TF qv = qt[ijk] - ql[ijk] - qi[ijk];
+                    TF T;
+                    TF qv;
+                    if (sw_satadjust == Satadjust_type::Liquid_ice)
+                    {
+                        // Compute the T out of the known values of ql and qi, this saves memory and sat_adjust.
+                        T = exner[k]*thl[ijk] + Lv<TF>/cp<TF>*ql[ijk] + Ls<TF>/cp<TF>*qi[ijk];
+                        qv = qt[ijk] - ql[ijk] - qi[ijk];
+                    }
+                    else
+                    {
+                        // Compute T and qv from satadjust.
+                        // MT: with the satad instead of a hardcoded T formula here it is easier to switch between thl definitions manually
+
+                        auto calc_sat_adjust_wrapper = [&]<Satadjust_type sw_satadjust>()
+                        {
+                            Thermo_moist_functions::Struct_sat_adjust<TF> ssa = Thermo_moist_functions::sat_adjust<TF, sw_satadjust>(
+                                    thl[ijk],
+                                    qt[ijk], p[k],
+                                    exner[k]);
+
+                            qv = std::min(ssa.qs, qt[ijk]);
+                            T = ssa.t;
+                        };
+
+                        calc_sat_adjust_wrapper.template operator()<Satadjust_type::Liquid_ice_deep>();
+                    }
 
                     // Flag the sign of the absolute temperature.
                     const TF T_pos = TF(T >= T0<TF>);
@@ -591,61 +614,170 @@ namespace
                     graupel_to_rain  *= dqg_dt_fac * dqr_dt_fac;
                     graupel_to_vapor *= dqg_dt_fac * dqv_dt_fac;
 
+                    TF dqc = 0;
+                    TF dqi = 0;
+                    TF dqv = 0;
+
                     // Loss from cloud.
-                    qtt[ijk] -= cloud_to_rain;
+                    dqc -= cloud_to_rain;
                     qrt[ijk] += cloud_to_rain;
-                    thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * cloud_to_rain;
+                    // thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * cloud_to_rain;
 
-                    qtt[ijk] -= cloud_to_graupel;
+                    dqc -= cloud_to_graupel;
                     qgt[ijk] += cloud_to_graupel;
-                    thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * cloud_to_graupel;
+                    // thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * cloud_to_graupel;
 
-                    qtt[ijk] -= cloud_to_snow;
+                    dqc -= cloud_to_snow;
                     qst[ijk] += cloud_to_snow;
-                    thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * cloud_to_snow;
+                    // thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * cloud_to_snow;
 
                     // Loss from rain.
                     qrt[ijk] -= rain_to_vapor;
-                    qtt[ijk] += rain_to_vapor;
-                    thlt[ijk] -= Lv<TF> / (cp<TF> * exner[k]) * rain_to_vapor;
+                    dqv += rain_to_vapor;
+                    // thlt[ijk] -= Lv<TF> / (cp<TF> * exner[k]) * rain_to_vapor;
 
                     qrt[ijk] -= rain_to_graupel;
                     qgt[ijk] += rain_to_graupel;
-                    thlt[ijk] += Lf<TF> / (cp<TF> * exner[k]) * rain_to_graupel;
+                    // thlt[ijk] += Lf<TF> / (cp<TF> * exner[k]) * rain_to_graupel;
 
                     qrt[ijk] -= rain_to_snow;
                     qst[ijk] += rain_to_snow;
-                    thlt[ijk] += Lf<TF> / (cp<TF> * exner[k]) * rain_to_snow;
+                    // thlt[ijk] += Lf<TF> / (cp<TF> * exner[k]) * rain_to_snow;
 
                     // Loss from ice.
-                    qtt[ijk] -= ice_to_snow;
+                    dqi -= ice_to_snow;
                     qst[ijk] += ice_to_snow;
-                    thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * ice_to_snow;
+                    // thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * ice_to_snow;
 
-                    qtt[ijk] -= ice_to_graupel;
+                    dqi -= ice_to_graupel;
                     qgt[ijk] += ice_to_graupel;
-                    thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * ice_to_graupel;
+                    // thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * ice_to_graupel;
 
                     // Loss from snow.
                     qst[ijk] -= snow_to_graupel;
                     qgt[ijk] += snow_to_graupel;
 
                     qst[ijk] -= snow_to_vapor;
-                    qtt[ijk] += snow_to_vapor;
-                    thlt[ijk] -= Ls<TF> / (cp<TF> * exner[k]) * snow_to_vapor;
+                    dqv += snow_to_vapor;
+                    // thlt[ijk] -= Ls<TF> / (cp<TF> * exner[k]) * snow_to_vapor;
 
                     qst[ijk] -= snow_to_rain;
                     qrt[ijk] += snow_to_rain;
-                    thlt[ijk] -= Lf<TF> / (cp<TF> * exner[k]) * snow_to_rain;
+                    // thlt[ijk] -= Lf<TF> / (cp<TF> * exner[k]) * snow_to_rain;
 
                     // Loss from graupel.
                     qgt[ijk] -= graupel_to_rain;
                     qrt[ijk] += graupel_to_rain;
-                    thlt[ijk] -= Lf<TF> / (cp<TF> * exner[k]) * graupel_to_rain;
+                    // thlt[ijk] -= Lf<TF> / (cp<TF> * exner[k]) * graupel_to_rain;
 
                     qgt[ijk] -= graupel_to_vapor;
-                    qtt[ijk] += graupel_to_vapor;
-                    thlt[ijk] -= Ls<TF> / (cp<TF> * exner[k]) * graupel_to_vapor;
+                    dqv += graupel_to_vapor;
+                    // thlt[ijk] -= Ls<TF> / (cp<TF> * exner[k]) * graupel_to_vapor;
+
+                    TF qc_end = ql[ijk] + dqc * dt;
+                    TF qi_end = qi[ijk] + dqi * dt;
+                    TF qv_end = qv + dqv * dt;
+                    TF qt_end = qc_end + qi_end + qv_end;
+
+                    TF thl_end;
+                    if (sw_satadjust == Satadjust_type::Liquid_ice)
+                    {
+                        const TF dT =   - Lv<TF> / cp<TF> * rain_to_vapor
+                                        - Ls<TF> / cp<TF> * snow_to_vapor
+                                        - Ls<TF> / cp<TF> * graupel_to_vapor
+                                        + Lf<TF> / cp<TF> * cloud_to_snow
+                                        + Lf<TF> / cp<TF> * cloud_to_graupel
+                                        - Lf<TF> / cp<TF> * snow_to_rain
+                                        - Lf<TF> / cp<TF> * graupel_to_rain
+                                        + Lf<TF> / cp<TF> * rain_to_snow
+                                        + Lf<TF> / cp<TF> * rain_to_graupel;
+
+                        TF T_end = T + dT * dt;
+
+                        //MT: is this satad needed?
+                        Struct_sat_adjust<TF> ssa = sat_adjust_absolute_T_ice<TF>(T_end, qt_end, p[k], qc_end, qv_end, qi_end, Lv<TF>, Ls<TF>);
+                        T_end = ssa.t;
+                        qc_end = ssa.ql;
+                        qi_end = ssa.qi;
+
+                        thl_end = T_end/exner[k] - Lv<TF>*qc_end/(cp<TF> * exner[k]) - Ls<TF>*qi_end/(cp<TF> * exner[k]);
+                    }
+                    else    // Satadjust_type::Liquid_ice_deep, with other options you should not reach this point
+                    {
+                        // constant Lv/Ls/Lf for thlE and thlF
+                        const TF dT =   - Lv<TF> / cp<TF> * rain_to_vapor
+                                        - Ls<TF> / cp<TF> * snow_to_vapor
+                                        - Ls<TF> / cp<TF> * graupel_to_vapor
+                                        + Lf<TF> / cp<TF> * cloud_to_snow
+                                        + Lf<TF> / cp<TF> * cloud_to_graupel
+                                        - Lf<TF> / cp<TF> * snow_to_rain
+                                        - Lf<TF> / cp<TF> * graupel_to_rain
+                                        + Lf<TF> / cp<TF> * rain_to_snow
+                                        + Lf<TF> / cp<TF> * rain_to_graupel;
+
+                        TF T_end = T + dT * dt;
+
+                        Struct_sat_adjust<TF> ssa = sat_adjust_absolute_T_ice<TF>(T_end, qt_end, p[k], qc_end, qv_end, qi_end, Lv<TF>, Ls<TF>);
+                        T_end = ssa.t;
+                        qc_end = ssa.ql;
+                        qi_end = ssa.qi;
+
+                        // thlE
+                        thl_end = T_end/exner[k] / (1   + Lv<TF>*qc_end/(cp<TF> * T_end)
+                                                    + Ls<TF>*qi_end/(cp<TF> * T_end));
+
+                        // thlF
+                        // thl_end = T_end/exner[k] / (1   + Lv<TF>*qc_end/(cp<TF> * std::max(T_end, TF(253)))
+                        //                                 + Ls<TF>*qi_end/(cp<TF> * std::max(T_end, TF(253))));
+
+
+                        // T-dependent Lv/Ls/Lf for thlG
+                        // MT: if we are going to use thlG, these constants can be moved to the constants.
+                        //const TF cl = 4186;
+                        //const TF ci = 2106;
+                        //const TF lv1 = Lv<TF> + (cl - cpv<TF>) * T0<TF>;
+                        //const TF lv2 = cl - cpv<TF>;
+                        //const TF ls1 = Ls<TF> + (ci - cpv<TF>) * T0<TF>;
+                        //const TF ls2 = ci - cpv<TF>;
+                        //
+                        //const TF Lv_T_start = lv1 - lv2 * T;
+                        //const TF Ls_T_start = ls1 - ls2 * T;
+                        //const TF Lf_T_start = Ls_T_start - Lv_T_start;
+                        //
+                        //const TF dT =   - Lv_T_start / cp<TF> * rain_to_vapor
+                        //                - Ls_T_start / cp<TF> * snow_to_vapor
+                        //                - Ls_T_start / cp<TF> * graupel_to_vapor
+                        //                + Lf_T_start / cp<TF> * cloud_to_snow
+                        //                + Lf_T_start / cp<TF> * cloud_to_graupel
+                        //                - Lf_T_start / cp<TF> * snow_to_rain
+                        //                - Lf_T_start / cp<TF> * graupel_to_rain
+                        //                + Lf_T_start / cp<TF> * rain_to_snow
+                        //                + Lf_T_start / cp<TF> * rain_to_graupel;
+                        //
+                        //TF T_end = T + dT * dt;
+                        //
+                        //const TF Lv_T_end = lv1 - lv2 * T_end;
+                        //const TF Ls_T_end = ls1 - ls2 * T_end;
+                        //
+                        //Struct_sat_adjust<TF> ssa = sat_adjust_absolute_T_ice<TF>(T_end, qt_end, p[k], qc_end, qv_end, qi_end, Lv_T_end, Ls_T_end);
+                        //T_end = ssa.t;
+                        //qc_end = ssa.ql;
+                        //qi_end = ssa.qi;
+                        //
+                        //const TF chi = (Rd<TF> + Rv<TF> * qt_end) / (cp<TF> + cpv<TF> * qt_end);
+                        //const TF gamma = (Rv<TF> * qt_end) / (cp<TF> + cpv<TF> * qt_end);
+                        //const TF epsilon = Rd<TF> / Rv<TF>;
+                        //
+                        //thl_end = T_end * pow((p0<TF>/p[k]), chi)
+                        //                * pow((1 - (qc_end + qi_end) / (epsilon + qt_end)), chi)
+                        //                * pow((1 - (qc_end + qi_end) / qt_end), -gamma)
+                        //                * std::exp((-Lv_T_end * qc_end - Ls_T_end * qi_end) / ((cp<TF> + cpv<TF> * qt_end) * T_end));
+
+                    }
+
+                    TF dthl_from_dT = (thl_end - thl[ijk])/dt;
+                    qtt[ijk] += dqc + dqi + dqv;
+                    thlt[ijk] += dthl_from_dT;
 
                 }
         }
