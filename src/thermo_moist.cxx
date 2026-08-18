@@ -166,6 +166,16 @@ namespace
                         ql[ijk] = ssa.ql;
                         qi[ijk] = ssa.qi;
                     }
+
+                for (int j=jstart; j<jend; j++)
+                #pragma ivdep
+                    for (int i=istart; i<iend; i++)
+                    {
+                        const int ijk = i + j*jj + k*kk;
+                        Struct_sat_adjust<TF> ssa =
+                                sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex);
+                        b[ijk] = buoyancy<TF, sw_satadjust>(ex, thl[ijk], qt[ijk], ql[ijk], qi[ijk], thvref[k], ssa.t);
+                    }
             }
             else
             {
@@ -178,16 +188,14 @@ namespace
                         qi[ijk] = 0.;
                     }
 
-            }
-            for (int j=jstart; j<jend; j++)
+                for (int j=jstart; j<jend; j++)
                 #pragma ivdep
-                for (int i=istart; i<iend; i++)
-                {
-                    const int ijk = i + j*jj + k*kk;
-                    Struct_sat_adjust<TF> ssa =
-                            sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex);
-                    b[ijk] = buoyancy<TF, sw_satadjust>(ex, thl[ijk], qt[ijk], ql[ijk], qi[ijk], thvref[k], ssa.t);
-                }
+                        for (int i=istart; i<iend; i++)
+                        {
+                            const int ijk = i + j*jj + k*kk;
+                            b[ijk] = buoyancy_no_ql(thl[ijk], qt[ijk], thvref[k]);
+                        }
+            }
         }
     }
 
@@ -238,6 +246,19 @@ namespace
                         ql[ij] = ssa.ql;
                         qi[ij] = ssa.qi;
                     }
+
+                for (int j=jstart; j<jend; j++)
+                #pragma ivdep
+                    for (int i=istart; i<iend; i++)
+                    {
+                        const int ijk = i + j*jj + k*kk;
+                        const int ij  = i + j*jj;
+
+                        Struct_sat_adjust<TF> ssa =
+                                sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh);
+
+                        bh[ijk] = buoyancy<TF, sw_satadjust>(exnh, thlh[ij], qth[ij], ql[ij], qi[ij], thvrefh[k], ssa.t);
+                    }
             }
             else
             {
@@ -249,20 +270,17 @@ namespace
                         ql[ij] = 0.;
                         qi[ij] = 0.;
                     }
-            }
 
-            for (int j=jstart; j<jend; j++)
+                for (int j=jstart; j<jend; j++)
                 #pragma ivdep
-                for (int i=istart; i<iend; i++)
-                {
-                    const int ijk = i + j*jj + k*kk;
-                    const int ij  = i + j*jj;
+                    for (int i=istart; i<iend; i++)
+                    {
+                        const int ijk = i + j*jj + k*kk;
+                        const int ij  = i + j*jj;
 
-                    Struct_sat_adjust<TF> ssa =
-                            sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh);
-
-                    bh[ijk] = buoyancy<TF, sw_satadjust>(exnh, thlh[ij], qth[ij], ql[ij], qi[ij], thvrefh[k], ssa.t);
-                }
+                        bh[ijk] = buoyancy_no_ql(thlh[ij], qth[ij], thvrefh[k]);
+                    }
+            }
         }
     }
 
