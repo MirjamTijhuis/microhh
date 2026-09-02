@@ -182,6 +182,9 @@ Microphys_sb06<TF>::Microphys_sb06(
         throw std::runtime_error("SB06 microphysics requires liquid water from saturation adjustment, so swsatadjust_ql=false is not allowed");
     if (sw_debug && sw_check)
         throw std::runtime_error("Debug is the extended version of check, so combining them in not allowed");
+
+    if (sw_microbudget && !sw_ice)
+        throw std::runtime_error("Micro budget not supported for runs with only warm micropysics");
 }
 
 template<typename TF>

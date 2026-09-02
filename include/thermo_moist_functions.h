@@ -45,7 +45,8 @@ namespace Thermo_moist_functions
 
     // INLINE FUNCTIONS
     template<typename TF, Satadjust_type sw_satadjust>
-    CUDA_MACRO inline TF virtual_temperature(const TF exn, const TF thl, const TF qt, const TF ql, const TF qi, const TF T)
+    CUDA_MACRO inline TF virtual_temperature(const TF exn, const TF thl, const TF qt, const TF ql, const TF qi,
+                                             const TF T, const TF qhm)
     {
         if (sw_satadjust == Satadjust_type::Disabled)
         {
@@ -55,12 +56,12 @@ namespace Thermo_moist_functions
         {
             // const TF th = thl + Lv<TF>*ql/(cp<TF>*exn);
             const TF th = T / exn;
-            return th * (TF(1.) - (TF(1.) - Rv<TF>/Rd<TF>)*qt - Rv<TF>/Rd<TF>*(ql));
+            return th * (TF(1.) - (TF(1.) - Rv<TF>/Rd<TF>)*qt - Rv<TF>/Rd<TF>*(ql) - qhm);
         }
         else if (sw_satadjust == Satadjust_type::Liquid_ice || sw_satadjust == Satadjust_type::Liquid_ice_deep)
         {
             const TF th = T / exn;
-            return th * (TF(1.) - (TF(1.) - Rv<TF>/Rd<TF>)*qt - Rv<TF>/Rd<TF>*(ql+qi));
+            return th * (TF(1.) - (TF(1.) - Rv<TF>/Rd<TF>)*qt - Rv<TF>/Rd<TF>*(ql+qi) - qhm);
         }
     }
 
@@ -71,9 +72,9 @@ namespace Thermo_moist_functions
     }
 
     template<typename TF, Satadjust_type sw_satadjust>
-    CUDA_MACRO inline TF buoyancy(const TF exn, const TF thl, const TF qt, const TF ql, const TF qi, const TF thvref, const TF T)
+    CUDA_MACRO inline TF buoyancy(const TF exn, const TF thl, const TF qt, const TF ql, const TF qi, const TF thvref, const TF T, const TF qhm)
     {
-        return grav<TF> * (virtual_temperature<TF, sw_satadjust>(exn, thl, qt, ql, qi, T) - thvref) / thvref;
+        return grav<TF> * (virtual_temperature<TF, sw_satadjust>(exn, thl, qt, ql, qi, T, qhm) - thvref) / thvref;
     }
 
     template<typename TF>
@@ -761,6 +762,7 @@ namespace Thermo_moist_functions
             TF* restrict exh,
             const TF* restrict thlmean,
             const TF* restrict qtmean,
+            const TF* restrict qhmmean,
             const TF pbot,
             const int kstart,
             const int kend,
@@ -770,6 +772,7 @@ namespace Thermo_moist_functions
     {
         const TF thlsurf = TF(0.5)*(thlmean[kstart-1] + thlmean[kstart]);
         const TF qtsurf = TF(0.5)*(qtmean [kstart-1] + qtmean[kstart]);
+        const TF qhmsurf = TF(0.5)*(qhmmean [kstart-1] + qhmmean[kstart]);
 
         // Calculate the values at the surface (half level == kstart)
         prefh[kstart] = pbot;
@@ -778,7 +781,7 @@ namespace Thermo_moist_functions
         Struct_sat_adjust<TF> ssa =
             sat_adjust<TF, sw_satadjust>(thlsurf, qtsurf, prefh[kstart], exh[kstart]);
 
-        thvh[kstart] = virtual_temperature<TF, sw_satadjust>(exh[kstart], thlsurf, qtsurf, ssa.ql, ssa.qi, ssa.t);
+        thvh[kstart] = virtual_temperature<TF, sw_satadjust>(exh[kstart], thlsurf, qtsurf, ssa.ql, ssa.qi, ssa.t, qhmsurf);
         rhoh[kstart] = pbot / (Rd<TF> * exh[kstart] * thvh[kstart]);
 
         // Calculate the first full level pressure
@@ -789,7 +792,7 @@ namespace Thermo_moist_functions
             // 1. Calculate remaining values (thv and rho) at full-level[k-1]
             ex[k-1]  = exner(pref[k-1]);
             ssa = sat_adjust<TF, sw_satadjust>(thlmean[k-1], qtmean[k-1], pref[k-1], ex[k-1]);
-            thv[k-1] = virtual_temperature<TF, sw_satadjust>(ex[k-1], thlmean[k-1], qtmean[k-1], ssa.ql, ssa.qi, ssa.t);
+            thv[k-1] = virtual_temperature<TF, sw_satadjust>(ex[k-1], thlmean[k-1], qtmean[k-1], ssa.ql, ssa.qi, ssa.t, qhmmean[k-1]);
             rho[k-1] = pref[k-1] / (Rd<TF> * ex[k-1] * thv[k-1]);
 
             // 2. Calculate pressure at half-level[k]
@@ -799,10 +802,11 @@ namespace Thermo_moist_functions
             // 3. Use interpolated conserved quantities to calculate half-level[k] values
             const TF thli = TF(0.5)*(thlmean[k-1] + thlmean[k]);
             const TF qti = TF(0.5)*(qtmean [k-1] + qtmean [k]);
+            const TF qhmi = TF(0.5)*(qhmmean [k-1] + qhmmean [k]);
 
             ssa = sat_adjust<TF, sw_satadjust>(thli, qti, prefh[k], exh[k]);
 
-            thvh[k] = virtual_temperature<TF, sw_satadjust>(exh[k], thli, qti, ssa.ql, ssa.qi, ssa.t);
+            thvh[k] = virtual_temperature<TF, sw_satadjust>(exh[k], thli, qti, ssa.ql, ssa.qi, ssa.t, qhmi);
             rhoh[k] = prefh[k] / (Rd<TF> * exh[k] * thvh[k]);
 
             // 4. Calculate pressure at full-level[k]
@@ -866,6 +870,83 @@ namespace Thermo_moist_functions
         }
 
         pref[kstart-1] = TF(2.)*prefh[kstart] - pref[kstart];
+    }
+
+    template<typename TF>
+    void calc_hydrometeors_double_ice(
+            TF* restrict qhm,
+            TF* restrict qi,
+            TF* restrict qs,
+            TF* restrict qh,
+            TF* restrict qr,
+            TF* restrict qg,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int jj, const int kk)
+    {
+        for (int k = kstart; k < kend; k++)
+            for (int j=jstart; j<jend; j++)
+                for (int i=istart; i<iend; i++)
+                {
+                    const int ijk = i + j*jj + k*kk;
+                    qhm[ijk] = qi[ijk] + qs[ijk] + qh[ijk] + qr[ijk] + qg[ijk];
+                }
+    }
+
+    template<typename TF>
+    void calc_hydrometeors_single(
+            TF* restrict qhm,
+            TF* restrict qs,
+            TF* restrict qr,
+            TF* restrict qg,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int jj, const int kk)
+    {
+        for (int k = kstart; k < kend; k++)
+            for (int j=jstart; j<jend; j++)
+                for (int i=istart; i<iend; i++)
+                {
+                    const int ijk = i + j*jj + k*kk;
+                    qhm[ijk] = qs[ijk] + qr[ijk] + qg[ijk];
+                }
+    }
+
+    template<typename TF>
+    void calc_hydrometeors_double_warm(
+            TF* restrict qhm,
+            TF* restrict qr,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int jj, const int kk)
+    {
+        for (int k = kstart; k < kend; k++)
+            for (int j=jstart; j<jend; j++)
+                for (int i=istart; i<iend; i++)
+                {
+                    const int ijk = i + j*jj + k*kk;
+                    qhm[ijk] = qr[ijk];
+                }
+    }
+
+    template<typename TF>
+    void calc_hydrometeors_no_micro(
+            TF* restrict qhm,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int jj, const int kk)
+    {
+        for (int k = kstart; k < kend; k++)
+            for (int j=jstart; j<jend; j++)
+                for (int i=istart; i<iend; i++)
+                {
+                    const int ijk = i + j*jj + k*kk;
+                    qhm[ijk] = TF(0);
+                }
     }
 }
 #endif

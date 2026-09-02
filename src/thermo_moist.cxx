@@ -82,9 +82,11 @@ namespace
             TF* restrict wt,
             TF* restrict thl,
             TF* restrict qt,
+            TF* restrict qhm,
             TF* restrict ph,
             TF* restrict thlh,
             TF* restrict qth,
+            TF* restrict qhmh,
             TF* restrict ql,
             TF* restrict qi,
             TF* restrict thvrefh,
@@ -105,6 +107,7 @@ namespace
                     const int ij  = i + j*jj;
                     thlh[ij] = interp2(thl[ijk-kk], thl[ijk]);
                     qth[ij]  = interp2(qt[ijk-kk], qt[ijk]);
+                    qhmh[ij]  = interp2(qhm[ijk-kk], qhm[ijk]);
                 }
 
             for (int j=jstart; j<jend; j++)
@@ -129,7 +132,7 @@ namespace
                     Struct_sat_adjust<TF> ssa =
                             sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh);
 
-                    wt[ijk] += buoyancy<TF, sw_satadjust>(exnh, thlh[ij], qth[ij], ql[ij], qi[ij], thvrefh[k], ssa.t);
+                    wt[ijk] += buoyancy<TF, sw_satadjust>(exnh, thlh[ij], qth[ij], ql[ij], qi[ij], thvrefh[k], ssa.t, qhmh[ij]);
                 }
         }
     }
@@ -139,6 +142,7 @@ namespace
             TF* restrict b,
             TF* restrict thl,
             TF* restrict qt,
+            TF* restrict qhm,
             TF* restrict p,
             TF* restrict ql,
             TF* restrict qi,
@@ -174,7 +178,7 @@ namespace
                         const int ijk = i + j*jj + k*kk;
                         Struct_sat_adjust<TF> ssa =
                                 sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex);
-                        b[ijk] = buoyancy<TF, sw_satadjust>(ex, thl[ijk], qt[ijk], ql[ijk], qi[ijk], thvref[k], ssa.t);
+                        b[ijk] = buoyancy<TF, sw_satadjust>(ex, thl[ijk], qt[ijk], ql[ijk], qi[ijk], thvref[k], ssa.t, qhm[ijk]);
                     }
             }
             else
@@ -204,10 +208,12 @@ namespace
             TF* restrict bh,
             TF* restrict thl,
             TF* restrict qt,
+            TF* restrict qhm,
             TF* restrict ph,
             TF* restrict thvrefh,
             TF* restrict thlh,
             TF* restrict qth,
+            TF* restrict qhmh,
             TF* restrict ql,
             TF* restrict qi,
             const int istart, const int iend,
@@ -232,6 +238,7 @@ namespace
 
                         thlh[ij] = interp2(thl[ijk-kk], thl[ijk]);
                         qth[ij]  = interp2(qt[ijk-kk], qt[ijk]);
+                        qhmh[ij]  = interp2(qhm[ijk-kk], qhm[ijk]);
                     }
 
                 for (int j=jstart; j<jend; j++)
@@ -257,7 +264,7 @@ namespace
                         Struct_sat_adjust<TF> ssa =
                                 sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh);
 
-                        bh[ijk] = buoyancy<TF, sw_satadjust>(exnh, thlh[ij], qth[ij], ql[ij], qi[ij], thvrefh[k], ssa.t);
+                        bh[ijk] = buoyancy<TF, sw_satadjust>(exnh, thlh[ij], qth[ij], ql[ij], qi[ij], thvrefh[k], ssa.t, qhmh[ij]);
                     }
             }
             else
@@ -579,6 +586,7 @@ namespace
             TF* const restrict thv,
             const TF* const restrict thl,
             const TF* const restrict qt,
+            const TF* const restrict qhm,
             const TF* const restrict p,
             const int istart, const int iend,
             const int jstart, const int jend,
@@ -624,7 +632,7 @@ namespace
                     Struct_sat_adjust<TF> ssa =
                             sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], ex);
 
-                    thv[ijk] = virtual_temperature<TF, sw_satadjust>(ex, thl[ijk], qt[ijk], ssa.ql, ssa.qi, ssa.t);
+                    thv[ijk] = virtual_temperature<TF, sw_satadjust>(ex, thl[ijk], qt[ijk], ssa.ql, ssa.qi, ssa.t, qhm[ijk]);
                 }
         }
     }
@@ -1083,6 +1091,7 @@ void Thermo_moist<TF>::init()
 
     bs.thl0.resize(gd.kcells);
     bs.qt0.resize(gd.kcells);
+    bs.qhm0.resize(gd.kcells);
     bs.thvref.resize(gd.kcells);
     bs.thvrefh.resize(gd.kcells);
     bs.exnref.resize(gd.kcells);
@@ -1120,6 +1129,7 @@ void Thermo_moist<TF>::save(const int iotime)
 
         fwrite(&bs.thl0 [gd.kstart], sizeof(TF), gd.ktot, pFile);
         fwrite(&bs.qt0  [gd.kstart], sizeof(TF), gd.ktot, pFile);
+        fwrite(&bs.qhm0  [gd.kstart], sizeof(TF), gd.ktot, pFile);
 
         fwrite(&bs.thvref [gd.kstart], sizeof(TF), gd.ktot  , pFile);
         fwrite(&bs.thvrefh[gd.kstart], sizeof(TF), gd.ktot+1, pFile);
@@ -1205,6 +1215,7 @@ void Thermo_moist<TF>::load(const int iotime)
 
             read(bs.thl0, gd.ktot);
             read(bs.qt0, gd.ktot);
+            read(bs.qhm0, gd.ktot);
 
             read(bs.thvref, gd.ktot);
             read(bs.thvrefh, gd.ktot+1);
@@ -1259,6 +1270,7 @@ void Thermo_moist<TF>::load(const int iotime)
     // Broadcast to other MPI tasks.
     master.broadcast(bs.thl0.data(), gd.kcells);
     master.broadcast(bs.qt0.data(), gd.kcells);
+    master.broadcast(bs.qhm0.data(), gd.kcells);
 
     master.broadcast(bs.thvref.data(), gd.kcells);
     master.broadcast(bs.thvrefh.data(), gd.kcells);
@@ -1308,6 +1320,12 @@ void Thermo_moist<TF>::create_basestate(
             gd.kstart,
             gd.kend);
 
+    // MT: assume that the initial base state contains no hydrometeors
+    for (int k=0; k<gd.ktot; ++k)
+    {
+        bs.qhm0[k]  = TF(0.);
+    }
+
     // 4. Calculate the initial/reference base state
     auto calc_base_state_wrapper = [&]<Satadjust_type sw_satadjust>()
     {
@@ -1322,6 +1340,7 @@ void Thermo_moist<TF>::create_basestate(
             bs.exnrefh.data(),
             bs.thl0.data(),
             bs.qt0.data(),
+            bs.qhm0.data(),
             bs.pbot,
             gd.kstart, gd.kend,
             gd.z.data(),
@@ -1391,8 +1410,70 @@ void Thermo_moist<TF>::exec(const double dt, Stats<TF>& stats)
     // Re-calculate base state.
     auto tmp = fields.get_tmp();
 
+    // calculate sum of hydrometeors
+    auto qhm = fields.get_tmp();
+
+    if (fields.sp.find("qh") != fields.sp.end())
+    {
+        std::string error = "qh exists, hence double moment micro with ice";
+        // std::cout<<error<<std::endl;
+        calc_hydrometeors_double_ice(
+                qhm->fld.data(),
+                fields.sp.at("qi")->fld.data(),
+                fields.sp.at("qs")->fld.data(),
+                fields.sp.at("qh")->fld.data(),
+                fields.sp.at("qr")->fld.data(),
+                fields.sp.at("qg")->fld.data(),
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.kstart, gd.kend,
+                gd.icells, gd.ijcells
+        );
+    }
+    else if (fields.sp.find("qs") != fields.sp.end())
+    {
+        std::string error = "qh does not exist, but qs does, hence single moment micro";
+        // std::cout<<error<<std::endl;
+        calc_hydrometeors_single(
+                qhm->fld.data(),
+                fields.sp.at("qs")->fld.data(),
+                fields.sp.at("qr")->fld.data(),
+                fields.sp.at("qg")->fld.data(),
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.kstart, gd.kend,
+                gd.icells, gd.ijcells
+        );
+    }
+    else if (fields.sp.find("qr") != fields.sp.end())
+    {
+        std::string error = "qh and qs do not exist, but qr does, hence double moment micro without ice / 2mom warm";
+        // std::cout<<error<<std::endl;
+        calc_hydrometeors_double_warm(
+                qhm->fld.data(),
+                fields.sp.at("qr")->fld.data(),
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.kstart, gd.kend,
+                gd.icells, gd.ijcells
+        );
+    }
+    else
+    {
+        std::string error = "no prognostic hydrometeors";
+        // std::cout<<error<<std::endl;
+        calc_hydrometeors_no_micro(
+                qhm->fld.data(),
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.kstart, gd.kend,
+                gd.icells, gd.ijcells
+        );
+    }
+
     if (bs.swupdatebasestate)
     {
+        field3d_operators.calc_mean_profile(qhm->fld_mean.data(), qhm->fld.data());
         auto calc_base_state_wrapper = [&]<Satadjust_type sw_satadjust>()
         {
             calc_base_state<TF, sw_satadjust>(
@@ -1406,6 +1487,7 @@ void Thermo_moist<TF>::exec(const double dt, Stats<TF>& stats)
                     bs.exnrefh.data(),
                     fields.sp.at("thl")->fld_mean.data(),
                     fields.sp.at("qt")->fld_mean.data(),
+                    qhm->fld_mean.data(),
                     bs.pbot,
                     gd.kstart,
                     gd.kend,
@@ -1433,11 +1515,13 @@ void Thermo_moist<TF>::exec(const double dt, Stats<TF>& stats)
                 fields.mt.at("w")->fld.data(),
                 fields.sp.at("thl")->fld.data(),
                 fields.sp.at("qt")->fld.data(),
+                qhm->fld.data(),
                 bs.prefh.data(),
                 &tmp->fld[0*gd.ijcells],
                 &tmp->fld[1*gd.ijcells],
                 &tmp->fld[2*gd.ijcells],
                 &tmp->fld[3*gd.ijcells],
+                &tmp->fld[4*gd.ijcells],
                 bs.thvrefh.data(),
                 gd.istart, gd.iend,
                 gd.jstart, gd.jend,
@@ -1457,6 +1541,7 @@ void Thermo_moist<TF>::exec(const double dt, Stats<TF>& stats)
         calc_buoyancy_tend_2nd_wrapper.template operator()<Satadjust_type::Disabled>();
 
     fields.release_tmp(tmp);
+    fields.release_tmp(qhm);
 
     stats.calc_tend(*fields.mt.at("w"), tend_name);
 }
@@ -1580,6 +1665,70 @@ void Thermo_moist<TF>::get_thermo_field(
     else
         base = bs;
 
+    // calculate sum of hydrometeors
+    auto qhm = fields.get_tmp();
+
+    if (bs.swupdatebasestate || name == "b" || name == "b_h" || name == "thv")
+    {
+        if (fields.sp.find("qh") != fields.sp.end())
+        {
+            std::string error = "qh exists, hence double moment micro with ice";
+            // std::cout<<error<<std::endl;
+            calc_hydrometeors_double_ice(
+                    qhm->fld.data(),
+                    fields.sp.at("qi")->fld.data(),
+                    fields.sp.at("qs")->fld.data(),
+                    fields.sp.at("qh")->fld.data(),
+                    fields.sp.at("qr")->fld.data(),
+                    fields.sp.at("qg")->fld.data(),
+                    gd.istart, gd.iend,
+                    gd.jstart, gd.jend,
+                    gd.kstart, gd.kend,
+                    gd.icells, gd.ijcells
+            );
+        }
+        else if (fields.sp.find("qs") != fields.sp.end())
+        {
+            std::string error = "qh does not exist, but qs does, hence single moment micro";
+            // std::cout<<error<<std::endl;
+            calc_hydrometeors_single(
+                    qhm->fld.data(),
+                    fields.sp.at("qs")->fld.data(),
+                    fields.sp.at("qr")->fld.data(),
+                    fields.sp.at("qg")->fld.data(),
+                    gd.istart, gd.iend,
+                    gd.jstart, gd.jend,
+                    gd.kstart, gd.kend,
+                    gd.icells, gd.ijcells
+            );
+        }
+        else if (fields.sp.find("qr") != fields.sp.end())
+        {
+            std::string error = "qh and qs do not exist, but qr does, hence double moment micro without ice / 2mom warm";
+            // std::cout<<error<<std::endl;
+            calc_hydrometeors_double_warm(
+                    qhm->fld.data(),
+                    fields.sp.at("qr")->fld.data(),
+                    gd.istart, gd.iend,
+                    gd.jstart, gd.jend,
+                    gd.kstart, gd.kend,
+                    gd.icells, gd.ijcells
+            );
+        }
+        else
+        {
+            std::string error = "no prognostic hydrometeors";
+            // std::cout<<error<<std::endl;
+            calc_hydrometeors_no_micro(
+                    qhm->fld.data(),
+                    gd.istart, gd.iend,
+                    gd.jstart, gd.jend,
+                    gd.kstart, gd.kend,
+                    gd.icells, gd.ijcells
+            );
+        }
+    }
+
     // BvS: get_thermo_field() is called from subgrid-model, before thermo(), so re-calculate the hydrostatic pressure
     // Pass dummy as rhoref,bs.thvref to prevent overwriting base state
     if (bs.swupdatebasestate)
@@ -1592,6 +1741,7 @@ void Thermo_moist<TF>::get_thermo_field(
 
         auto calc_base_state_wrapper = [&]<Satadjust_type sw_satadjust>()
         {
+            field3d_operators.calc_mean_profile(qhm->fld_mean.data(), qhm->fld.data());
             calc_base_state<TF, sw_satadjust>(
                     base.pref.data(),
                     base.prefh.data(),
@@ -1603,6 +1753,7 @@ void Thermo_moist<TF>::get_thermo_field(
                     base.exnrefh.data(),
                     fields.sp.at("thl")->fld_mean.data(),
                     fields.sp.at("qt")->fld_mean.data(),
+                    qhm->fld_mean.data(),
                     base.pbot,
                     gd.kstart, gd.kend,
                     gd.z.data(), gd.dz.data(), gd.dzh.data());
@@ -1648,6 +1799,7 @@ void Thermo_moist<TF>::get_thermo_field(
                     fld.fld.data(),
                     fields.sp.at("thl")->fld.data(),
                     fields.sp.at("qt")->fld.data(),
+                    qhm->fld.data(),
                     base.pref.data(),
                     tmp->fld.data(),
                     tmp2->fld.data(),
@@ -1683,12 +1835,14 @@ void Thermo_moist<TF>::get_thermo_field(
                     fld.fld.data(),
                     fields.sp.at("thl")->fld.data(),
                     fields.sp.at("qt")->fld.data(),
+                    qhm->fld.data(),
                     base.prefh.data(),
                     base.thvrefh.data(),
                     &tmp->fld[0*gd.ijcells],
                     &tmp->fld[1*gd.ijcells],
                     &tmp->fld[2*gd.ijcells],
                     &tmp->fld[3*gd.ijcells],
+                    &tmp->fld[4*gd.ijcells],
                     gd.istart, gd.iend,
                     gd.jstart, gd.jend,
                     gd.kstart, gd.kend,
@@ -1896,6 +2050,7 @@ void Thermo_moist<TF>::get_thermo_field(
                     fld.fld.data(),
                     fields.sp.at("thl")->fld.data(),
                     fields.sp.at("qt")->fld.data(),
+                    qhm->fld.data(),
                     base.pref.data(),
                     gd.istart, gd.iend,
                     gd.jstart, gd.jend,
@@ -1927,6 +2082,8 @@ void Thermo_moist<TF>::get_thermo_field(
         std::string error_message = "Can not get thermo field: \"" + name + "\"";
         throw std::runtime_error(error_message);
     }
+
+    fields.release_tmp(qhm);
 
     if (cyclic)
         boundary_cyclic.exec(fld.fld.data());
