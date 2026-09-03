@@ -90,6 +90,7 @@ namespace
     template<typename TF> constexpr TF f_2g = 0.27; // First coefficient of ventilation factor for graupel.
 
     template<typename TF> constexpr TF E_ri = 1.;  // Collection efficiency of ice for rain.
+    template<typename TF> constexpr TF E_iw = 1.;  // Collection efficiency of ice for cloud water.
     template<typename TF> constexpr TF E_rw = 1.;  // Collection efficiency of rain for cloud water.
     template<typename TF> constexpr TF E_sw = 1.;  // Collection efficiency of snow for cloud water.
     template<typename TF> constexpr TF E_gw = 1.;  // Collection efficiency of graupel for cloud water.
@@ -112,6 +113,11 @@ namespace
     template<typename TF> constexpr TF gamma_gaut = 90.e-3;
 
     template<typename TF> constexpr TF nu = 1.5e-5; // Kinematic viscosity of air.
+
+    template<typename TF> constexpr TF mi40 = 2.46e-10; // mass of a 40 micron ice crystal [kg]
+    template<typename TF> constexpr TF mi50 = 4.80E-10; // mass of a 50 micron ice crystal [kg]
+    template<typename TF> constexpr TF vti50 = 1.0; // terminal velocity of a 50 micron ice crystal [m/s]
+    template<typename TF> constexpr TF Ri50 = 5.e-5; // radius of a 50 micron ice crystal [m]
 }
 
 namespace
@@ -120,6 +126,39 @@ namespace
     using namespace Thermo_moist_functions;
     using namespace Fast_math;
     using Micro_2mom_warm_functions::minmod;
+
+    template<typename TF>
+    void bergeron_param(
+            TF& a1, TF& a2, TF& ma2, const TF& T)
+    {
+        static constexpr TF a1_tab[] = {
+                TF(0.0001e-7), TF(0.7939e-7), TF(0.7841e-6), TF(0.3369e-5), TF(0.4336e-5),
+                TF(0.5285e-5), TF(0.3728e-5), TF(0.1852e-5), TF(0.2991e-6), TF(0.4248e-6),
+                TF(0.7434e-6), TF(0.1812e-5), TF(0.4394e-5), TF(0.9145e-5), TF(0.1725e-4),
+                TF(0.3348e-4), TF(0.1725e-4), TF(0.9175e-5), TF(0.4412e-5), TF(0.2252e-5),
+                TF(0.9115e-6), TF(0.4876e-6), TF(0.3473e-6), TF(0.4758e-6), TF(0.6306e-6),
+                TF(0.8573e-6), TF(0.7868e-6), TF(0.7192e-6), TF(0.6513e-6), TF(0.5956e-6),
+                TF(0.5333e-6), TF(0.4834e-6) };
+
+        static constexpr TF a2_tab[] = {
+                TF(0.0100), TF(0.4006), TF(0.4831), TF(0.5320), TF(0.5307),
+                TF(0.5319), TF(0.5249), TF(0.4888), TF(0.3849), TF(0.4047),
+                TF(0.4318), TF(0.4771), TF(0.5183), TF(0.5463), TF(0.5651),
+                TF(0.5813), TF(0.5655), TF(0.5478), TF(0.5203), TF(0.4906),
+                TF(0.4447), TF(0.4126), TF(0.3960), TF(0.4149), TF(0.4320),
+                TF(0.4506), TF(0.4483), TF(0.4460), TF(0.4433), TF(0.4413),
+                TF(0.4382), TF(0.4361) };
+
+        const TF temc = std::min(std::max(T - T0<TF>, TF(-30.99)), TF(0.));
+        const int itemc = static_cast<int>(-temc);
+        const TF fact = -(temc + static_cast<TF>(itemc));
+
+        a1 = (TF(1.) - fact) * a1_tab[itemc] + fact * a1_tab[itemc + 1];
+        a2 = (TF(1.) - fact) * a2_tab[itemc] + fact * a2_tab[itemc + 1];
+
+        ma2 = TF(1.) - a2;
+        a1 *= std::exp(std::log(TF(1.e-3)) * ma2);
+    }
 
     // Compute all microphysical tendencies.
     template<typename TF>
@@ -463,6 +502,27 @@ namespace
                         TF(20.) * pi_2<TF> * B_prime * N_0r<TF> * rho_w<TF> / rho[k]
                         * (std::exp(A_prime * (T0<TF> - T)) - TF(1.)) / pow7(lambda_r);
 
+                    // Bergeron process
+                    const bool has_bergeron = (T >= T0<TF> - TF(30.) && T <= T0<TF>);
+
+                    TF a1, a2, ma2;
+                    bergeron_param(a1, a2, ma2, T);
+
+                    // Tomita Eq. 73: time [s] for an ice particle to grow from 40 to 50 micron.
+                    const TF dt1 = (std::pow(mi50<TF>, ma2) - std::pow(mi40<TF>, ma2)) / (a1 * ma2);
+
+                    // Tomita Eq. 74: number of 50 micron ice particles generated this time step.
+                    const TF Ni50 = qi[ijk] * dt / (mi50<TF> * dt1);
+
+                    // Tomita Eq. 71
+                    TF P_sfw = !(has_bergeron) ? TF(0.) :
+                               Ni50 * ( a1 * std::pow(mi50<TF>, a2)
+                                        + pi<TF> * E_iw<TF> * rho[k] * ql[ijk] * Ri50<TF>*Ri50<TF> * vti50<TF> );
+
+                    // Tomita Eq. 72
+                    TF P_sfi = !(has_bergeron) ? TF(0.) :
+                               qi[ijk] / dt1;
+
                     // COMPUTE THE TENDENCIES.
                     // Limit the production terms to avoid instability.
                     auto limit_tend = [&](TF& tend, const TF tend_limit)
@@ -509,6 +569,10 @@ namespace
                     limit_tend(P_gmlt, dqg_dt_max);
                     limit_tend(P_gfrz, dqr_dt_max);
 
+                    // limit bergeron
+                    limit_tend(P_sfw  , dql_dt_max);
+                    limit_tend(P_sfi  , dqi_dt_max);
+
                     // P_iacr_s = 0;
                     // P_iacr_g = 0;
                     // P_raci_s = 0;
@@ -544,13 +608,13 @@ namespace
 
                     TF cloud_to_rain = P_racw + P_sacw * T_pos + P_raut + P_gacw * T_pos;
                     TF cloud_to_graupel = P_gacw * T_neg;
-                    TF cloud_to_snow = P_sacw * T_neg;
+                    TF cloud_to_snow = P_sacw * T_neg + P_sfw;
 
                     TF rain_to_vapor = P_revp;
                     TF rain_to_graupel = P_gacr * T_neg + P_iacr_g + P_sacr_g * T_neg + P_gfrz * T_neg;
                     TF rain_to_snow = P_sacr_s * T_neg + P_iacr_s;
 
-                    TF ice_to_snow = P_raci_s + P_saci + P_saut;
+                    TF ice_to_snow = P_raci_s + P_saci + P_saut + P_sfi;
                     TF ice_to_graupel = P_raci_g + P_gaci;
 
                     TF snow_to_graupel = P_gacs + P_racs * T_neg + P_gaut * T_neg;
