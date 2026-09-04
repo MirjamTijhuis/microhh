@@ -396,22 +396,23 @@ namespace
 //                        TF(16.7)/rho[k] * pow2(rho[k]*ql[ijk]) / (TF(5.) + TF(3.66e-2) * TF(1.e-6)*Nc0 / (D_d*rho[k]*ql[ijk]));
 
                      // Kharoutdinov and Kogan autoconversion.
-                     TF P_raut = (has_liq) ?
-                         TF(1350.)
-                         * std::pow(ql[ijk], TF(2.47))
-                         * std::pow(Nc0 * TF(1.e-6), TF(-1.79))
-                         : TF(0.);
+//                     TF P_raut = (has_liq) ?
+//                         TF(1350.)
+//                         * std::pow(ql[ijk], TF(2.47))
+//                         * std::pow(Nc0 * TF(1.e-6), TF(-1.79))
+//                         : TF(0.);
 
                     // Seifert and Beheng autoconversion.
-                    // const TF x_star = TF(2.6e-10); // SB06, list of symbols, same as UCLA-LES
-                    // const TF k_cc = TF(9.44e9); // UCLA-LES (Long, 1974), 4.44e9 in SB06, p48
-                    // const TF nu_c = TF(1.); // SB06, Table 1., same as UCLA-LES
-                    // const TF kccxs = k_cc / (TF(20.) * x_star) * (nu_c+2)*(nu_c+4) / pow2(nu_c+1);
-                    // const TF xc  = rho[k] * ql[ijk] / Nc0; // Mean mass of cloud drops [kg]
-                    // const TF tau = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk] + dsmall); // SB06, Eq 5
-                    // const TF phi_au = TF(600.) * std::pow(tau, TF(0.68)) * pow3(TF(1.) - pow(tau, TF(0.68))); // UCLA-LES
+                     const TF eps  = 1.00e-25;
+                     const TF x_star = TF(2.6e-10); // SB06, list of symbols, same as UCLA-LES
+                     const TF k_cc = TF(9.44e9); // UCLA-LES (Long, 1974), 4.44e9 in SB06, p48
+                     const TF nu_c = TF(1.); // SB06, Table 1., same as UCLA-LES
+                     const TF kccxs = k_cc / (TF(20.) * x_star) * (nu_c+2)*(nu_c+4) / pow2(nu_c+1);
+                     const TF xc  = rho[k] * ql[ijk] / Nc0; // Mean mass of cloud drops [kg]
+                     const TF tau = std::min(std::max(TF(1) - ql[ijk] / (ql[ijk] + qr[ijk] + eps), eps), TF(0.9));; // SB06, Eq 5
+                     const TF phi_au = TF(600.) * std::pow(tau, TF(0.68)) * pow3(TF(1.) - pow(tau, TF(0.68))); // UCLA-LES
 
-                    // TF P_raut = rho[k] * kccxs * pow(ql[ijk], 2) * pow(xc, 2) * (TF(1.) + phi_au / pow2(TF(1.)-tau)); // SB06, eq 4
+                     TF P_raut = rho[k] * kccxs * pow(ql[ijk], 2) * pow(xc, 2) * (TF(1.) + phi_au / pow2(TF(1.)-tau)); // SB06, eq 4
 
                     // Tomita Eq. 52
                     TF P_saut = !(has_ice) ? TF(0.) :

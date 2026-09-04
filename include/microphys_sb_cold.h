@@ -159,6 +159,26 @@ namespace Sb_cold
     }
 
     template<typename TF>
+    inline TF e_stick_connolly_high(const TF T_c)
+    {
+        TF e_i;
+        if (T_c >= 0)
+            e_i = 0.14;
+        else if (T_c >= -10)
+            e_i = -0.01 * (T_c + 10) + 0.24;
+        else if (T_c >= -15)
+            e_i = -0.08 * (T_c + 15) + 0.64;
+        else if (T_c >= -20)
+            e_i = 0.10 * (T_c + 20) + 0.14;
+        else if (T_c >= -40)
+            e_i = 0.005 * (T_c + 40) + 0.04;
+        else
+            e_i = 0.04;
+
+        return e_i;
+    }
+
+    template<typename TF>
     void setup_cloud_autoconversion(
             Particle<TF>& cloud,
             Particle_cloud_coeffs<TF>& cloud_coeffs)
@@ -952,7 +972,8 @@ namespace Sb_cold
                     //.. Sticking efficiency of Lin (1983)
                     // MT: note that this parameterization differs from the default in ICON (2024-01 open-source release)
                     // MT: we opted for a simple parameterization here, which can be used in ICON by setting iparti_stick=1
-                    const TF e_coll = std::min(std::exp(TF(0.09) * (Ta[ij] - Constants::T0<TF>)), TF(1));
+                    // const TF e_coll = std::min(std::exp(TF(0.09) * (Ta[ij] - Constants::T0<TF>)), TF(1));
+                    const TF e_coll = e_stick_connolly_high(Ta[ij] - Constants::T0<TF>);
 
                     const TF xp = particle_meanmass(ptype, qp[ij], np[ij]);
                     const TF dp = particle_diameter(ptype, xp);
@@ -1337,7 +1358,8 @@ namespace Sb_cold
                     //.. Temperaturabhaengige sticking efficiency nach Lin (1983)
                     // MT: note that this parameterization differs from the default in ICON (2024-01 open-source release)
                     // MT: we opted for a simple parameterization here, which can be used in ICON by setting isnow_stick=1
-                    const TF e_coll = std::min(std::exp(TF(0.09)*(T [ij]-Constants::T0<TF>)), TF(1.0));
+                    // const TF e_coll = std::min(std::exp(TF(0.09)*(T [ij]-Constants::T0<TF>)), TF(1.0));
+                    const TF e_coll = e_stick_connolly_high(T[ij] - Constants::T0<TF>);
 
                     const TF x_s = particle_meanmass(snow, qs[ij], ns[ij]);
                     const TF D_s = particle_diameter(snow, x_s);
