@@ -578,14 +578,14 @@ namespace Thermo_moist_functions
 
     template<typename TF>
     inline Struct_sat_adjust<TF> sat_adjust_absolute_T(
-            const TF T, const TF qt, const TF p, const TF qc, const TF qv, const TF Lv)
+            const TF T, const TF qt, const TF p, const TF qc, const TF qv, const TF Lv, const TF cp)
     {
         int niter = 0;
         int nitermax = 10;
         TF tnr_old = TF(1.e9);
 
         // the essential difference with the satadjust above is in the tl here:
-        TF tl = T - (Lv / cp<TF>) * qc;
+        TF tl = T - (Lv / cp) * qc;
         TF qs = qsat_liq(p, tl);
 
         Struct_sat_adjust<TF> ans =
@@ -614,8 +614,8 @@ namespace Thermo_moist_functions
                 tnr_old = tnr;
 
                 qs = qsat_liq(p, tnr);
-                const TF f = tnr - tl - Lv / cp<TF> * (qt - qs);
-                const TF f_prime = TF(1.) + Lv / cp<TF> * dqsatdT_liq(p, tnr);
+                const TF f = tnr - tl - Lv / cp * (qt - qs);
+                const TF f_prime = TF(1.) + Lv / cp * dqsatdT_liq(p, tnr);
 
                 tnr -= f / f_prime;
             }
@@ -648,14 +648,14 @@ namespace Thermo_moist_functions
 
     template<typename TF>
     inline Struct_sat_adjust<TF> sat_adjust_absolute_T_ice(
-            const TF T, const TF qt, const TF p, const TF qc, const TF qv, const TF qi, const TF Lv, const TF Ls)
+            const TF T, const TF qt, const TF p, const TF qc, const TF qv, const TF qi, const TF Lv, const TF Ls, const TF cp)
     {
         int niter = 0;
         int nitermax = 10;
         TF tnr_old = TF(1.e9);
 
         // the essential difference with the satadjust above is in the tl here:
-        TF tl = T - (Lv / cp<TF>) * qc -  Ls / cp<TF> * qi;
+        TF tl = T - (Lv / cp) * qc -  Ls / cp * qi;
         TF qs = qsat_liq(p, tl);
 
         Struct_sat_adjust<TF> ans =
@@ -686,8 +686,8 @@ namespace Thermo_moist_functions
                 tnr_old = tnr;
 
                 qs = qsat_liq(p, tnr);
-                const TF f = tnr - tl - Lv/cp<TF>*(qt - qs);
-                const TF f_prime = TF(1.) + Lv/cp<TF>*dqsatdT_liq(p, tnr);
+                const TF f = tnr - tl - Lv/cp*(qt - qs);
+                const TF f_prime = TF(1.) + Lv/cp*dqsatdT_liq(p, tnr);
 
                 tnr -= f / f_prime;
             }
@@ -706,14 +706,14 @@ namespace Thermo_moist_functions
                 const TF dqsatdT_i = dqsatdT_ice(p, tnr);
 
                 const TF f =
-                        tnr - tl - alpha_w * Lv / cp<TF> * qt - alpha_i * Ls / cp<TF> * qt
-                        + alpha_w * Lv / cp<TF> * qs + alpha_i * Ls / cp<TF> * qs;
+                        tnr - tl - alpha_w * Lv / cp * qt - alpha_i * Ls / cp * qt
+                        + alpha_w * Lv / cp * qs + alpha_i * Ls / cp * qs;
 
                 const TF f_prime = TF(1.)
-                                   - dalphadT * Lv / cp<TF> * qt + dalphadT * Ls / cp<TF> * qt
-                                   + dalphadT * Lv / cp<TF> * qs - dalphadT * Ls / cp<TF> * qs
-                                   + alpha_w * Lv / cp<TF> * dqsatdT_w
-                                   + alpha_i * Ls / cp<TF> * dqsatdT_i;
+                                   - dalphadT * Lv / cp * qt + dalphadT * Ls / cp * qt
+                                   + dalphadT * Lv / cp * qs - dalphadT * Ls / cp * qs
+                                   + alpha_w * Lv / cp * dqsatdT_w
+                                   + alpha_i * Ls / cp * dqsatdT_i;
 
                 tnr -= f / f_prime;
             }

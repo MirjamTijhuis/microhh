@@ -32,6 +32,8 @@ namespace Constants
     template<typename TF> constexpr TF Rv    = 461.5;         // Gas constant for water vapor [J K-1 kg-1]
     template<typename TF> constexpr TF cp    = 1005;          // Specific heat of air at constant pressure [J kg-1 K-1]
     template<typename TF> constexpr TF cpv    = 1885;         // Specific heat of water vapour at constant pressure [J kg-1 K-1]
+    template<typename TF> constexpr TF cl    = 4186;          // Specific heat of liquid water at constant pressure [J kg-1 K-1]
+    template<typename TF> constexpr TF ci    = 2106;          // Specific heat of ice water at constant pressure [J kg-1 K-1]
     template<typename TF> constexpr TF Lv    = 2.501e6;       // Latent heat of vaporization [J kg-1]
     template<typename TF> constexpr TF Lf    = 3.337e5;       // Latent heat of fusion [J kg-1]
     template<typename TF> constexpr TF Ls    = Lv<TF>+Lf<TF>; // Latent heat of sublimation [J kg-1]
