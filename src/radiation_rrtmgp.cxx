@@ -650,6 +650,48 @@ namespace
     {
         return Float(2.*M_PI/360. * deg);
     }
+
+    void effective_radius_and_ciwp_to_gm2(
+            Float* restrict rel, Float* restrict dei,
+            Float* restrict clwp, Float* restrict ciwp,
+            const Float* const restrict dz,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int jj_nogc, const int kk_nogc,
+            const int igc, const int jgc, const int kgc,
+            const Float four_third_pi_Nc0_rho_w,
+            const Float four_third_pi_Ni0_rho_i,
+            const Float sig_g_fac)
+    {
+        for (int k=kstart; k<kend; ++k)
+        {
+            const Float layer_thickness = dz[k];
+            for (int j=jstart; j<jend; ++j)
+                for (int i=istart; i<iend; ++i)
+                {
+                    // const int ijk = i + j*jj + k*kk;
+                    const int ijk_nogc = (i-igc) + (j-jgc)*jj_nogc + (k-kgc)*kk_nogc;
+
+                    Float rel_value = clwp[ijk_nogc] > Float(0.) ?
+                                      1.e6 * sig_g_fac * std::pow((clwp[ijk_nogc]/layer_thickness) / four_third_pi_Nc0_rho_w, (1./3.)) : Float(0.);
+
+                    // Limit the values between 2.5 and 21.5 (limits of cloud optics lookup table).
+                    rel[ijk_nogc] = std::max(Float(2.5), std::min(rel_value, Float(21.5)));
+
+                    // Calculate the effective radius of ice from the mass and the number concentration.
+                    Float dei_value = ciwp[ijk_nogc] > Float(0.) ?
+                                      2 * 1.e6 * std::pow((ciwp[ijk_nogc]/layer_thickness) / four_third_pi_Ni0_rho_i, (1./3.)) : Float(0.);
+
+                    // Limit the values between 10. and 180 (limits of cloud optics lookup table).
+                    dei[ijk_nogc] = std::max(Float(10.), std::min(dei_value, Float(180.)));
+
+                    clwp[ijk_nogc] *= Float(1.e3);
+                    ciwp[ijk_nogc] *= Float(1.e3);
+                }
+        }
+    };
+
 }
 
 
@@ -1680,6 +1722,9 @@ void Radiation_rrtmgp<TF>::exec(
 
         // Set the input to the radiation on a 3D grid without ghost cells.
         thermo.get_radiation_fields(*t_lay, *t_lev, *h2o, *rh, *clwp, *ciwp);
+        const TF Nc0 = microphys.get_Nc0();
+        const TF Ni0 = microphys.get_Ni0();
+
         const int nmaxh = gd.imax*gd.jmax*(gd.ktot+1);
         const int ijmax = gd.imax*gd.jmax;
 
@@ -1696,6 +1741,25 @@ void Radiation_rrtmgp<TF>::exec(
         Array<Float,2> flux_net({gd.imax*gd.jmax, gd.ktot+1});
 
         const bool compute_clouds = true;
+
+        Array<Float,2> rel({gd.imax*gd.jmax, gd.ktot});
+        Array<Float,2> dei({gd.imax*gd.jmax, gd.ktot});
+
+        const Float sig_g = 1.34;
+        const Float fac = std::exp(std::log(sig_g)*std::log(sig_g)); // no conversion to micron yet.
+
+        const Float four_third_pi_Nc0_rho_w = (4./3.)*M_PI*Nc0*Constants::rho_w<Float>;
+        const Float four_third_pi_Ni0_rho_i = (4./3.)*M_PI*Ni0*Constants::rho_i<Float>;
+
+        effective_radius_and_ciwp_to_gm2(rel.ptr(), dei.ptr(),
+                                         clwp_a.ptr(), ciwp_a.ptr(),
+                                         gd.dz.data(),
+                                         gd.istart, gd.iend,
+                                         gd.jstart, gd.jend,
+                                         gd.kstart, gd.kend,
+                                         gd.imax, gd.imax * gd.jmax,
+                                         gd.igc, gd.jgc, gd.kgc,
+                                         four_third_pi_Nc0_rho_w, four_third_pi_Ni0_rho_i, sig_g);
 
         // get aerosol mixing ratios
         if (sw_aerosol && swtimedep_aerosol)
@@ -1729,7 +1793,7 @@ void Radiation_rrtmgp<TF>::exec(
                 exec_longwave(
                         thermo, microphys, timeloop, stats,
                         flux_up, flux_dn, flux_net,
-                        t_lay_a, t_lev_a, t_sfc_a, h2o_a, clwp_a, ciwp_a,
+                        t_lay_a, t_lev_a, t_sfc_a, h2o_a, clwp_a, ciwp_a, rel, dei,
                         compute_clouds, gd.imax*gd.jmax);
 
                 calc_tendency(
@@ -1773,7 +1837,7 @@ void Radiation_rrtmgp<TF>::exec(
                         exec_longwave(
                                 thermo, microphys, timeloop, stats,
                                 flux_up, flux_dn, flux_net,
-                                t_lay_a, t_lev_a, t_sfc_a, h2o_a, clwp_a, ciwp_a,
+                                t_lay_a, t_lev_a, t_sfc_a, h2o_a, clwp_a, ciwp_a, rel, dei,
                                 !compute_clouds, gd.imax*gd.jmax);
 
                         do_gcs(*fields.sd.at("lw_flux_up_clear"), flux_up);
@@ -1807,7 +1871,7 @@ void Radiation_rrtmgp<TF>::exec(
                             thermo, microphys, timeloop, stats,
                             flux_up, flux_dn, flux_dn_dir, flux_net,
                             aod550,
-                            t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a,
+                            t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a, rel, dei,
                             compute_clouds, gd.imax * gd.jmax);
 
                     calc_tendency(
@@ -1892,7 +1956,7 @@ void Radiation_rrtmgp<TF>::exec(
                                     thermo, microphys, timeloop, stats,
                                     flux_up, flux_dn, flux_dn_dir, flux_net,
                                     aod550,
-                                    t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a,
+                                    t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a, rel, dei,
                                     !compute_clouds, gd.imax * gd.jmax);
                         }
                         do_gcs(*fields.sd.at("sw_flux_up_clear"), flux_up);
@@ -2106,6 +2170,8 @@ void Radiation_rrtmgp<TF>::exec_individual_column_stats(
 
     auto tmp = fields.get_tmp();
     thermo.get_radiation_columns(*tmp, col_i, col_j);
+    const TF Nc0 = microphys.get_Nc0();
+    const TF Ni0 = microphys.get_Ni0();
 
     // Pack radiation input in `Array` objects.
     typename std::vector<TF>::iterator it = tmp->fld.begin();
@@ -2142,6 +2208,48 @@ void Radiation_rrtmgp<TF>::exec_individual_column_stats(
     Array<Float,2> flux_dn    ({n_cols, gd.ktot+1});
     Array<Float,2> flux_dn_dir({n_cols, gd.ktot+1});
     Array<Float,2> flux_net   ({n_cols, gd.ktot+1});
+
+    Array<Float,2> rel   ({n_cols, gd.ktot});
+    Array<Float,2> dei   ({n_cols, gd.ktot});
+
+    const Float sig_g = 1.34;
+    const Float fac = std::exp(std::log(sig_g)*std::log(sig_g)); // no conversion to micron yet.
+
+    const Float four_third_pi_Nc0_rho_w = (4./3.)*M_PI*Nc0*Constants::rho_w<Float>;
+    const Float four_third_pi_Ni0_rho_i = (4./3.)*M_PI*Ni0*Constants::rho_i<Float>;
+
+    for (int ilay=1; ilay<=gd.ktot; ++ilay)
+    {
+        // const Float layer_mass = (p_lev({1, ilay}) - p_lev({1, ilay+1})) / Constants::grav<Float>;
+        const Float layer_thickness = gd.dz[ilay + gd.kstart - 1];
+
+        for (int icol=1; icol<=n_cols; ++icol)
+        {
+            // Parametrization according to Martin et al., 1994 JAS. Fac multiplication taken from DALES.
+            // CvH: Potentially better using moments from microphysics.
+            Float rel_value = clwp_a({icol, ilay}) > Float(0.) ?
+                1.e6 * fac * std::pow((clwp_a({icol, ilay})/layer_thickness) / four_third_pi_Nc0_rho_w, (1./3.)) : Float(0.);
+
+            // Limit the values between 2.5 and 21.5 (limits of cloud optics lookup table).
+            rel({icol, ilay}) = std::max(Float(2.5), std::min(rel_value, Float(21.5)));
+
+            // Calculate the effective radius of ice from the mass and the number concentration.
+            Float dei_value = ciwp_a({icol, ilay}) > Float(0.) ?
+                2 * 1.e6 * std::pow((ciwp_a({icol, ilay})/layer_thickness) / four_third_pi_Ni0_rho_i, (1./3.)) : Float(0.);
+
+            // Limit the values between 10. and 180 (limits of cloud optics lookup table).
+            dei({icol, ilay}) = std::max(Float(10.), std::min(dei_value, Float(180.)));
+        }
+    }
+
+    // Convert to g/m2.
+    for (int i=0; i<clwp_a.size(); ++i)
+        clwp_a.v()[i] *= 1e3;
+
+    for (int i=0; i<ciwp_a.size(); ++i)
+        ciwp_a.v()[i] *= 1e3;
+
+
 
     // Set tmp location flag to flux levels.
     tmp->loc = gd.wloc;
@@ -2197,7 +2305,7 @@ void Radiation_rrtmgp<TF>::exec_individual_column_stats(
             exec_longwave(
                     thermo, microphys, timeloop, stats,
                     flux_up, flux_dn, flux_net,
-                    t_lay_a, t_lev_a, t_sfc_a, h2o_a, clwp_a, ciwp_a,
+                    t_lay_a, t_lev_a, t_sfc_a, h2o_a, clwp_a, ciwp_a, rel, dei,
                     compute_clouds, n_cols);
 
             save_column(flux_up, "lw_flux_up");
@@ -2208,7 +2316,7 @@ void Radiation_rrtmgp<TF>::exec_individual_column_stats(
                 exec_longwave(
                         thermo, microphys, timeloop, stats,
                         flux_up, flux_dn, flux_net,
-                        t_lay_a, t_lev_a, t_sfc_a, h2o_a, clwp_a, ciwp_a,
+                        t_lay_a, t_lev_a, t_sfc_a, h2o_a, clwp_a, ciwp_a, rel, dei,
                         !compute_clouds, n_cols);
 
                 save_column(flux_up, "lw_flux_up_clear");
@@ -2261,7 +2369,7 @@ void Radiation_rrtmgp<TF>::exec_individual_column_stats(
                         thermo, microphys, timeloop, stats,
                         flux_up, flux_dn, flux_dn_dir, flux_net,
                         aod550_column_stats,
-                        t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a,
+                        t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a, rel, dei,
                         compute_clouds, n_cols);
 
                 save_column(flux_up, "sw_flux_up");
@@ -2274,7 +2382,7 @@ void Radiation_rrtmgp<TF>::exec_individual_column_stats(
                             thermo, microphys, timeloop, stats,
                             flux_up, flux_dn, flux_dn_dir, flux_net,
                             aod550_column_stats,
-                            t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a,
+                            t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a, rel, dei,
                             !compute_clouds, n_cols);
 
                     save_column(flux_up, "sw_flux_up_clear");
@@ -2306,6 +2414,7 @@ void Radiation_rrtmgp<TF>::exec_longwave(
         Array<Float,2>& flux_up, Array<Float,2>& flux_dn, Array<Float,2>& flux_net,
         const Array<Float,2>& t_lay, const Array<Float,2>& t_lev, const Array<Float,1>& t_sfc,
         const Array<Float,2>& h2o, const Array<Float,2>& clwp, const Array<Float,2>& ciwp,
+        const Array<Float,2>& rel, const Array<Float,2>& dei,
         const bool compute_clouds, const int n_col)
 {
     // How many profiles are solved simultaneously?
@@ -2384,53 +2493,56 @@ void Radiation_rrtmgp<TF>::exec_longwave(
             Array<Float,2> clwp_subset(clwp.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}));
             Array<Float,2> ciwp_subset(ciwp.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}));
 
-            // Compute the effective droplet radius.
-            Array<Float,2> rel({n_col_in, n_lay});
-            Array<Float,2> dei({n_col_in, n_lay});
+            Array<Float,2> rel_subset(rel.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}));
+            Array<Float,2> dei_subset(dei.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}));
 
-            const Float sig_g = 1.34;
-            const Float fac = std::exp(std::log(sig_g)*std::log(sig_g)); // no conversion to micron yet.
-
-            const TF Nc0 = microphys.get_Nc0();
-            const TF Ni0 = microphys.get_Ni0();
-
-            const Float four_third_pi_Nc0_rho_w = (4./3.)*M_PI*Nc0*Constants::rho_w<Float>;
-            const Float four_third_pi_Ni0_rho_i = (4./3.)*M_PI*Ni0*Constants::rho_i<Float>;
-
-            for (int ilay=1; ilay<=n_lay; ++ilay)
-            {
-                // const Float layer_mass = (p_lev({1, ilay}) - p_lev({1, ilay+1})) / Constants::grav<Float>;
-                const Float layer_thickness = gd.dz[ilay + gd.kstart - 1];
-
-                for (int icol=1; icol<=n_col_in; ++icol)
-                {
-                    // Parametrization according to Martin et al., 1994 JAS. Fac multiplication taken from DALES.
-                    // CvH: Potentially better using moments from microphysics.
-                    Float rel_value = clwp_subset({icol, ilay}) > Float(0.) ?
-                        1.e6 * fac * std::pow((clwp_subset({icol, ilay})/layer_thickness) / four_third_pi_Nc0_rho_w, (1./3.)) : Float(0.);
-
-                    // Limit the values between 2.5 and 21.5 (limits of cloud optics lookup table).
-                    rel({icol, ilay}) = std::max(Float(2.5), std::min(rel_value, Float(21.5)));
-
-                    // Calculate the effective radius of ice from the mass and the number concentration.
-                    Float dei_value = ciwp_subset({icol, ilay}) > Float(0.) ?
-                        2 * 1.e6 * std::pow((ciwp_subset({icol, ilay})/layer_thickness) / four_third_pi_Ni0_rho_i, (1./3.)) : Float(0.);
-
-                    // Limit the values between 10. and 180 (limits of cloud optics lookup table).
-                    dei({icol, ilay}) = std::max(Float(10.), std::min(dei_value, Float(180.)));
-                }
-            }
-
-            // Convert to g/m2.
-            for (int i=0; i<clwp_subset.size(); ++i)
-                clwp_subset.v()[i] *= 1e3;
-
-            for (int i=0; i<ciwp_subset.size(); ++i)
-                ciwp_subset.v()[i] *= 1e3;
+//            // Compute the effective droplet radius.
+//            Array<Float,2> rel({n_col_in, n_lay});
+//            Array<Float,2> dei({n_col_in, n_lay});
+//
+//            const Float sig_g = 1.34;
+//            const Float fac = std::exp(std::log(sig_g)*std::log(sig_g)); // no conversion to micron yet.
+//
+//            const TF Nc0 = microphys.get_Nc0();
+//            const TF Ni0 = microphys.get_Ni0();
+//
+//            const Float four_third_pi_Nc0_rho_w = (4./3.)*M_PI*Nc0*Constants::rho_w<Float>;
+//            const Float four_third_pi_Ni0_rho_i = (4./3.)*M_PI*Ni0*Constants::rho_i<Float>;
+//
+//            for (int ilay=1; ilay<=n_lay; ++ilay)
+//            {
+//                // const Float layer_mass = (p_lev({1, ilay}) - p_lev({1, ilay+1})) / Constants::grav<Float>;
+//                const Float layer_thickness = gd.dz[ilay + gd.kstart - 1];
+//
+//                for (int icol=1; icol<=n_col_in; ++icol)
+//                {
+//                    // Parametrization according to Martin et al., 1994 JAS. Fac multiplication taken from DALES.
+//                    // CvH: Potentially better using moments from microphysics.
+//                    Float rel_value = clwp_subset({icol, ilay}) > Float(0.) ?
+//                        1.e6 * fac * std::pow((clwp_subset({icol, ilay})/layer_thickness) / four_third_pi_Nc0_rho_w, (1./3.)) : Float(0.);
+//
+//                    // Limit the values between 2.5 and 21.5 (limits of cloud optics lookup table).
+//                    rel({icol, ilay}) = std::max(Float(2.5), std::min(rel_value, Float(21.5)));
+//
+//                    // Calculate the effective radius of ice from the mass and the number concentration.
+//                    Float dei_value = ciwp_subset({icol, ilay}) > Float(0.) ?
+//                        2 * 1.e6 * std::pow((ciwp_subset({icol, ilay})/layer_thickness) / four_third_pi_Ni0_rho_i, (1./3.)) : Float(0.);
+//
+//                    // Limit the values between 10. and 180 (limits of cloud optics lookup table).
+//                    dei({icol, ilay}) = std::max(Float(10.), std::min(dei_value, Float(180.)));
+//                }
+//            }
+//
+//            // Convert to g/m2.
+//            for (int i=0; i<clwp_subset.size(); ++i)
+//                clwp_subset.v()[i] *= 1e3;
+//
+//            for (int i=0; i<ciwp_subset.size(); ++i)
+//                ciwp_subset.v()[i] *= 1e3;
 
             cloud_lw->cloud_optics(
                     clwp_subset, ciwp_subset,
-                    rel, dei,
+                    rel_subset, dei_subset,
                     *cloud_optical_props_in);
 
             // Add the cloud optical props to the gas optical properties.
@@ -2514,6 +2626,7 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
         const Array<Float,2>& t_lay, const Array<Float,2>& t_lev,
         const Array<Float,2>& h2o, const Array<Float, 2>& rh,
         const Array<Float,2>& clwp, const Array<Float,2>& ciwp,
+        const Array<Float,2>& rel, const Array<Float,2>& dei,
         const bool compute_clouds, const int n_col)
 {
     // How many profiles are solved simultaneously?
@@ -2606,53 +2719,56 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
             Array<Float,2> clwp_subset(clwp.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}));
             Array<Float,2> ciwp_subset(ciwp.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}));
 
-            // Compute the effective droplet radius.
-            Array<Float,2> rel({n_col_in, n_lay});
-            Array<Float,2> dei({n_col_in, n_lay});
+            Array<Float,2> rel_subset(rel.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}));
+            Array<Float,2> dei_subset(dei.subset({{ {col_s_in, col_e_in}, {1, n_lay} }}));
 
-            const Float sig_g = 1.34;
-            const Float fac = std::exp(std::log(sig_g)*std::log(sig_g)); // no conversion to micron yet.
-
-            const TF Nc0 = microphys.get_Nc0();
-            const TF Ni0 = microphys.get_Ni0();
-
-            const Float four_third_pi_Nc0_rho_w = (4./3.)*M_PI*Nc0*Constants::rho_w<Float>;
-            const Float four_third_pi_Ni0_rho_i = (4./3.)*M_PI*Ni0*Constants::rho_i<Float>;
-
-            for (int ilay=1; ilay<=n_lay; ++ilay)
-            {
-                // const Float layer_mass = (p_lev({1, ilay}) - p_lev({1, ilay+1})) / Constants::grav<Float>;
-                const Float layer_thickness = gd.dz[ilay + gd.kstart - 1];
-
-                for (int icol=1; icol<=n_col_in; ++icol)
-                {
-                    // Parametrization according to Martin et al., 1994 JAS. Fac multiplication taken from DALES.
-                    // CvH: Potentially better using moments from microphysics.
-                    Float rel_value = clwp_subset({icol, ilay}) > Float(0.) ?
-                        1.e6 * fac * std::pow((clwp_subset({icol, ilay})/layer_thickness) / four_third_pi_Nc0_rho_w, (1./3.)) : Float(0.);
-
-                    // Limit the values between 2.5 and 21.5 (limits of cloud optics lookup table).
-                    rel({icol, ilay}) = std::max(Float(2.5), std::min(rel_value, Float(21.5)));
-
-                    // Calculate the effective radius of ice from the mass and the number concentration.
-                    Float dei_value = ciwp_subset({icol, ilay}) > Float(0.) ?
-                        2* 1.e6 * std::pow((ciwp_subset({icol, ilay})/layer_thickness) / four_third_pi_Ni0_rho_i, (1./3.)) : Float(0.);
-
-                    // Limit the values between 10. and 180 (limits of cloud optics lookup table).
-                    dei({icol, ilay}) = std::max(Float(10.), std::min(dei_value, Float(180.)));
-                }
-            }
-
-            // Convert to g/m2.
-            for (int i=0; i<clwp_subset.size(); ++i)
-                clwp_subset.v()[i] *= 1e3;
-
-            for (int i=0; i<ciwp_subset.size(); ++i)
-                ciwp_subset.v()[i] *= 1e3;
+//            // Compute the effective droplet radius.
+//            Array<Float,2> rel({n_col_in, n_lay});
+//            Array<Float,2> dei({n_col_in, n_lay});
+//
+//            const Float sig_g = 1.34;
+//            const Float fac = std::exp(std::log(sig_g)*std::log(sig_g)); // no conversion to micron yet.
+//
+//            const TF Nc0 = microphys.get_Nc0();
+//            const TF Ni0 = microphys.get_Ni0();
+//
+//            const Float four_third_pi_Nc0_rho_w = (4./3.)*M_PI*Nc0*Constants::rho_w<Float>;
+//            const Float four_third_pi_Ni0_rho_i = (4./3.)*M_PI*Ni0*Constants::rho_i<Float>;
+//
+//            for (int ilay=1; ilay<=n_lay; ++ilay)
+//            {
+//                // const Float layer_mass = (p_lev({1, ilay}) - p_lev({1, ilay+1})) / Constants::grav<Float>;
+//                const Float layer_thickness = gd.dz[ilay + gd.kstart - 1];
+//
+//                for (int icol=1; icol<=n_col_in; ++icol)
+//                {
+//                    // Parametrization according to Martin et al., 1994 JAS. Fac multiplication taken from DALES.
+//                    // CvH: Potentially better using moments from microphysics.
+//                    Float rel_value = clwp_subset({icol, ilay}) > Float(0.) ?
+//                        1.e6 * fac * std::pow((clwp_subset({icol, ilay})/layer_thickness) / four_third_pi_Nc0_rho_w, (1./3.)) : Float(0.);
+//
+//                    // Limit the values between 2.5 and 21.5 (limits of cloud optics lookup table).
+//                    rel({icol, ilay}) = std::max(Float(2.5), std::min(rel_value, Float(21.5)));
+//
+//                    // Calculate the effective radius of ice from the mass and the number concentration.
+//                    Float dei_value = ciwp_subset({icol, ilay}) > Float(0.) ?
+//                        2* 1.e6 * std::pow((ciwp_subset({icol, ilay})/layer_thickness) / four_third_pi_Ni0_rho_i, (1./3.)) : Float(0.);
+//
+//                    // Limit the values between 10. and 180 (limits of cloud optics lookup table).
+//                    dei({icol, ilay}) = std::max(Float(10.), std::min(dei_value, Float(180.)));
+//                }
+//            }
+//
+//            // Convert to g/m2.
+//            for (int i=0; i<clwp_subset.size(); ++i)
+//                clwp_subset.v()[i] *= 1e3;
+//
+//            for (int i=0; i<ciwp_subset.size(); ++i)
+//                 ciwp_subset.v()[i] *= 1e3;
 
             cloud_sw->cloud_optics(
                     clwp_subset, ciwp_subset,
-                    rel, dei,
+                    rel_subset, dei_subset,
                     *cloud_optical_props_in);
 
             if (sw_delta_cloud)

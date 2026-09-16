@@ -167,12 +167,14 @@ class Radiation_rrtmgp : public Radiation<TF>
                 Array<Float,2>&, Array<Float,2>&, Array<Float,2>&,
                 const Array<Float,2>&, const Array<Float,2>&, const Array<Float,1>&,
                 const Array<Float,2>&, const Array<Float,2>&, const Array<Float,2>&,
+                const Array<Float,2>&, const Array<Float,2>&,
                 const bool, const int);
 
         void exec_shortwave(
                 Thermo<TF>&, Microphys<TF>&, Timeloop<TF>&, Stats<TF>&,
                 Array<Float,2>&, Array<Float,2>&, Array<Float,2>&, Array<Float,2>&,
                 Array<Float,1>&,
+                const Array<Float,2>&, const Array<Float,2>&,
                 const Array<Float,2>&, const Array<Float,2>&,
                 const Array<Float,2>&, const Array<Float,2>&,
                 const Array<Float,2>&, const Array<Float,2>&,
@@ -234,7 +236,7 @@ class Radiation_rrtmgp : public Radiation<TF>
         Float tsi_scaling; // Total solar irradiance scaling factor.
         Float t_sfc;       // Surface absolute temperature in K.
         Float mu0;         // Cosine of solar zenith angle.
-        Float Nc0;         // Total droplet number concentration.
+        // Float Nc0;         // Total droplet number concentration.
 
         // The reference column for the full profile.
         Array<Float,2> lw_flux_dn_inc;
