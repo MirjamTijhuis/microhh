@@ -2135,20 +2135,22 @@ void Thermo_moist<TF>::get_radiation_fields(
 
 template<typename TF>
 void Thermo_moist<TF>::get_radiation_columns(
-    Field3d<TF>& tmp, std::vector<int>& col_i, std::vector<int>& col_j) const
+        TF* t_lay_a, TF* t_lev_a, TF* t_sfc_a,
+        TF* h2o_a, TF* rh_a,
+        TF* clwp_a, TF* ciwp_a,
+        std::vector<int>& col_i, std::vector<int>& col_j) const
 {
     auto& gd = grid.get_grid_data();
-
-    // Get slices from tmp field.
     const int n_cols = col_i.size();
-    int offset = 0;
-    TF* t_lay_a = &tmp.fld.data()[offset]; offset += n_cols * gd.ktot;
-    TF* t_lev_a = &tmp.fld.data()[offset]; offset += n_cols * (gd.ktot+1);
-    TF* t_sfc_a = &tmp.fld.data()[offset]; offset += n_cols;
-    TF* h2o_a   = &tmp.fld.data()[offset]; offset += n_cols * (gd.ktot);
-    TF* rh_a    = &tmp.fld.data()[offset]; offset += n_cols * (gd.ktot);
-    TF* clwp_a  = &tmp.fld.data()[offset]; offset += n_cols * (gd.ktot);
-    TF* ciwp_a  = &tmp.fld.data()[offset];
+
+//    int offset = 0;
+//    TF* t_lay_a = &tmp.fld.data()[offset]; offset += n_cols * gd.ktot;
+//    TF* t_lev_a = &tmp.fld.data()[offset]; offset += n_cols * (gd.ktot+1);
+//    TF* t_sfc_a = &tmp.fld.data()[offset]; offset += n_cols;
+//    TF* h2o_a   = &tmp.fld.data()[offset]; offset += n_cols * (gd.ktot);
+//    TF* rh_a    = &tmp.fld.data()[offset]; offset += n_cols * (gd.ktot);
+//    TF* clwp_a  = &tmp.fld.data()[offset]; offset += n_cols * (gd.ktot);
+//    TF* ciwp_a  = &tmp.fld.data()[offset];
 
     auto calc_radiation_columns_wrapper = [&]<Satadjust_type sw_satadjust>()
     {

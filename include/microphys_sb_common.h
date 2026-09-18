@@ -585,4 +585,76 @@ namespace Sb_common
                     conv[ij] += rho_i * (fld_new[ij] - fld_old[ij]);
                 }
     }
+
+    template<typename TF>
+    void calc_radiation_fields(
+            TF* restrict ciwp,
+            TF* restrict ni_rad,
+            const TF* restrict qi,
+            const TF* restrict ni_micro,
+            const TF* const restrict ph,
+            const TF* const restrict rho,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int igc, const int jgc, const int kgc,
+            const int jj, const int kk,
+            const int jj_nogc, const int kk_nogc)
+    {
+        // This routine strips off the ghost cells, because of the data handling in radiation.
+        #pragma omp parallel for
+        for (int k=kstart; k<kend; ++k)
+        {
+            const TF dpg = (ph[k] - ph[k+1]) / Constants::grav<TF>;
+            for (int j=jstart; j<jend; ++j)
+            #pragma ivdep
+                for (int i=istart; i<iend; ++i)
+                {
+                    const int ijk = i + j*jj + k*kk;
+                    const int ijk_nogc = (i-igc) + (j-jgc)*jj_nogc + (k-kgc)*kk_nogc;
+
+                    ciwp[ijk_nogc] = qi[ijk] * dpg;
+                    ni_rad[ijk_nogc] = ni_micro[ijk] * rho[k];       // conversion from kg-1 to m-3
+
+                }
+        }
+    }
+
+    template<typename TF>
+    void calc_radiation_columns(
+            TF* const restrict ciwp,
+            TF* const restrict ni_rad,
+            const TF* const restrict qi,
+            const TF* const restrict ni_micro,
+            const TF* const restrict ph,
+            const TF* const restrict rho,
+            const int* const col_i,
+            const int* const col_j,
+            const int n_cols,
+            const int kgc, const int kstart, const int kend,
+            const int icells, const int ijcells)
+    {
+        // This routine strips off the ghost cells, because of the data handling in radiation.
+
+        const int ktot = kend-kstart;
+
+        #pragma omp parallel for
+        for (int k=kstart; k<kend; ++k)
+        {
+            const TF dpg = (ph[k] - ph[k+1]) / Constants::grav<TF>;
+
+            #pragma ivdep
+            for (int n=0; n<n_cols; ++n)
+            {
+                const int i = col_i[n];
+                const int j = col_j[n];
+
+                const int ijk = i + j*icells + k*ijcells;
+                const int ijk_out = n + (k-kgc)*n_cols;
+
+                ciwp[ijk_out] = qi[ijk] * dpg;
+                ni_rad[ijk_out] = ni_micro[ijk] * rho[k];    // conversion from kg-1 to m-3
+            }
+        }
+    }
 }

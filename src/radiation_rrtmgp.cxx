@@ -654,6 +654,7 @@ namespace
     void effective_radius_and_ciwp_to_gm2(
             Float* restrict rel, Float* restrict dei,
             Float* restrict clwp, Float* restrict ciwp,
+            const Float* const restrict Ni0,
             const Float* const restrict dz,
             const int istart, const int iend,
             const int jstart, const int jend,
@@ -661,7 +662,7 @@ namespace
             const int jj_nogc, const int kk_nogc,
             const int igc, const int jgc, const int kgc,
             const Float four_third_pi_Nc0_rho_w,
-            const Float four_third_pi_Ni0_rho_i,
+            const Float four_third_pi_rho_i,
             const Float sig_g_fac)
     {
         for (int k=kstart; k<kend; ++k)
@@ -681,7 +682,7 @@ namespace
 
                     // Calculate the effective radius of ice from the mass and the number concentration.
                     Float dei_value = ciwp[ijk_nogc] > Float(0.) ?
-                                      2 * 1.e6 * std::pow((ciwp[ijk_nogc]/layer_thickness) / four_third_pi_Ni0_rho_i, (1./3.)) : Float(0.);
+                                      2 * 1.e6 * std::pow((ciwp[ijk_nogc]/layer_thickness) / (four_third_pi_rho_i * Ni0[ijk_nogc]), (1./3.)) : Float(0.);
 
                     // Limit the values between 10. and 180 (limits of cloud optics lookup table).
                     dei[ijk_nogc] = std::max(Float(10.), std::min(dei_value, Float(180.)));
@@ -690,7 +691,28 @@ namespace
                     ciwp[ijk_nogc] *= Float(1.e3);
                 }
         }
-    };
+    }
+
+    template<typename TF>
+    TF* get_tmp_slice(
+            Fields<TF>& fields,
+            std::vector<std::shared_ptr<Field3d<TF>>>& tmp_fields,
+            int& offset, const int ncells_slice, const int ncells_per_field)
+    {
+        if (ncells_slice > ncells_per_field)
+            throw std::runtime_error("Requested slice does not fit in a single tmp field");
+
+        // Not enough room left in the current tmp field? Grab a new one.
+        if (tmp_fields.empty() || offset + ncells_slice > ncells_per_field)
+        {
+            tmp_fields.push_back(fields.get_tmp());
+            offset = 0;
+        }
+
+        TF* ptr = &tmp_fields.back()->fld[offset];
+        offset += ncells_slice;
+        return ptr;
+    }
 
 }
 
@@ -1719,11 +1741,24 @@ void Radiation_rrtmgp<TF>::exec(
         auto rh    = fields.get_tmp();
         auto clwp  = fields.get_tmp();
         auto ciwp  = fields.get_tmp();
+        auto ni    = fields.get_tmp();
 
         // Set the input to the radiation on a 3D grid without ghost cells.
         thermo.get_radiation_fields(*t_lay, *t_lev, *h2o, *rh, *clwp, *ciwp);
         const TF Nc0 = microphys.get_Nc0();
-        const TF Ni0 = microphys.get_Ni0();
+        // const TF Ni0 = microphys.get_Ni0();
+
+        Microphys_type swmicro = microphys.get_swmicro();
+        if (swmicro == Microphys_type::SB06)
+        {
+            microphys.get_radiation_fields(thermo, *ciwp, *ni);
+        }
+        else
+        {
+            // fill ni with Ni0 here
+            const TF Ni0 = microphys.get_Ni0();
+            std::fill(ni->fld.begin(), ni->fld.end(), Ni0);
+        }
 
         const int nmaxh = gd.imax*gd.jmax*(gd.ktot+1);
         const int ijmax = gd.imax*gd.jmax;
@@ -1735,6 +1770,7 @@ void Radiation_rrtmgp<TF>::exec(
         Array<Float,2> rh_a(rh->fld, {gd.imax*gd.jmax, gd.ktot});
         Array<Float,2> clwp_a(clwp->fld, {gd.imax*gd.jmax, gd.ktot});
         Array<Float,2> ciwp_a(ciwp->fld, {gd.imax*gd.jmax, gd.ktot});
+        Array<Float,2> ni_a(ni->fld, {gd.imax*gd.jmax, gd.ktot});
 
         Array<Float,2> flux_up ({gd.imax*gd.jmax, gd.ktot+1});
         Array<Float,2> flux_dn ({gd.imax*gd.jmax, gd.ktot+1});
@@ -1749,17 +1785,18 @@ void Radiation_rrtmgp<TF>::exec(
         const Float fac = std::exp(std::log(sig_g)*std::log(sig_g)); // no conversion to micron yet.
 
         const Float four_third_pi_Nc0_rho_w = (4./3.)*M_PI*Nc0*Constants::rho_w<Float>;
-        const Float four_third_pi_Ni0_rho_i = (4./3.)*M_PI*Ni0*Constants::rho_i<Float>;
+        const Float four_third_pi_rho_i = (4./3.)*M_PI*Constants::rho_i<Float>;
 
         effective_radius_and_ciwp_to_gm2(rel.ptr(), dei.ptr(),
                                          clwp_a.ptr(), ciwp_a.ptr(),
+                                         ni_a.ptr(),
                                          gd.dz.data(),
                                          gd.istart, gd.iend,
                                          gd.jstart, gd.jend,
                                          gd.kstart, gd.kend,
                                          gd.imax, gd.imax * gd.jmax,
                                          gd.igc, gd.jgc, gd.kgc,
-                                         four_third_pi_Nc0_rho_w, four_third_pi_Ni0_rho_i, sig_g);
+                                         four_third_pi_Nc0_rho_w, four_third_pi_rho_i, sig_g);
 
         // get aerosol mixing ratios
         if (sw_aerosol && swtimedep_aerosol)
@@ -1982,6 +2019,7 @@ void Radiation_rrtmgp<TF>::exec(
         fields.release_tmp(rh);
         fields.release_tmp(clwp);
         fields.release_tmp(ciwp);
+        fields.release_tmp(ni);
     }
 
     // Always add the tendency.
@@ -2164,44 +2202,78 @@ void Radiation_rrtmgp<TF>::exec_individual_column_stats(
 
     // Get thermo fields for column locations.
     // NOTE: this should really be more flexible, like with the 2mom_micro `get_tmp_slice()`.
-    const int ncells = n_cols + 4*n_cols*gd.ktot + 1*n_cols*(gd.ktot+1);
-    if (ncells > gd.ncells)
-        throw std::runtime_error("Too many columns for exec_individual_column_stats()");
+    std::vector<std::shared_ptr<Field3d<TF>>> tmp_fields;
+    int offset = 0;
 
-    auto tmp = fields.get_tmp();
-    thermo.get_radiation_columns(*tmp, col_i, col_j);
+    TF* t_lay_ptr = get_tmp_slice<TF>(fields, tmp_fields, offset, n_cols*gd.ktot,     gd.ncells);
+    TF* t_lev_ptr = get_tmp_slice<TF>(fields, tmp_fields, offset, n_cols*(gd.ktot+1), gd.ncells);
+    TF* t_sfc_ptr = get_tmp_slice<TF>(fields, tmp_fields, offset, n_cols,             gd.ncells);
+    TF* h2o_ptr   = get_tmp_slice<TF>(fields, tmp_fields, offset, n_cols*gd.ktot,     gd.ncells);
+    TF* rh_ptr    = get_tmp_slice<TF>(fields, tmp_fields, offset, n_cols*gd.ktot,     gd.ncells);
+    TF* clwp_ptr  = get_tmp_slice<TF>(fields, tmp_fields, offset, n_cols*gd.ktot,     gd.ncells);
+    TF* ciwp_ptr  = get_tmp_slice<TF>(fields, tmp_fields, offset, n_cols*gd.ktot,     gd.ncells);
+    TF* ni_ptr  = get_tmp_slice<TF>(fields, tmp_fields, offset, n_cols*gd.ktot,     gd.ncells);
+
+//    const int ncells = n_cols + 4*n_cols*gd.ktot + 1*n_cols*(gd.ktot+1);
+//    if (ncells > gd.ncells)
+//        throw std::runtime_error("Too many columns for exec_individual_column_stats()");
+
+    // auto tmp = fields.get_tmp();
+    thermo.get_radiation_columns(t_lay_ptr, t_lev_ptr, t_sfc_ptr, h2o_ptr, rh_ptr, clwp_ptr, ciwp_ptr,col_i, col_j);
+
     const TF Nc0 = microphys.get_Nc0();
-    const TF Ni0 = microphys.get_Ni0();
+    // const TF Ni0 = microphys.get_Ni0();
 
-    // Pack radiation input in `Array` objects.
-    typename std::vector<TF>::iterator it = tmp->fld.begin();
+    Microphys_type swmicro = microphys.get_swmicro();
+    if (swmicro == Microphys_type::SB06)
+    {
+        microphys.get_radiation_columns(thermo, ciwp_ptr, ni_ptr, col_i, col_j);
+    }
+    else
+    {
+        const TF Ni0 = microphys.get_Ni0();
+        std::fill(ni_ptr, ni_ptr + n_cols*gd.ktot, Ni0);
+    }
 
-    Array<Float,2> t_lay_a(
-            std::vector<Float>(it, it + n_cols * gd.ktot), {n_cols, gd.ktot});
-    it += n_cols * gd.ktot;
+    Array<Float,2> t_lay_a(std::vector<Float>(t_lay_ptr, t_lay_ptr + n_cols*gd.ktot),     {n_cols, gd.ktot});
+    Array<Float,2> t_lev_a(std::vector<Float>(t_lev_ptr, t_lev_ptr + n_cols*(gd.ktot+1)), {n_cols, gd.ktot+1});
+    Array<Float,1> t_sfc_a(std::vector<Float>(t_sfc_ptr, t_sfc_ptr + n_cols),             {n_cols});
+    Array<Float,2> h2o_a  (std::vector<Float>(h2o_ptr,   h2o_ptr   + n_cols*gd.ktot),     {n_cols, gd.ktot});
+    Array<Float,2> rh_a   (std::vector<Float>(rh_ptr,    rh_ptr    + n_cols*gd.ktot),     {n_cols, gd.ktot});
+    Array<Float,2> clwp_a (std::vector<Float>(clwp_ptr,  clwp_ptr  + n_cols*gd.ktot),     {n_cols, gd.ktot});
+    Array<Float,2> ciwp_a (std::vector<Float>(ciwp_ptr,  ciwp_ptr  + n_cols*gd.ktot),     {n_cols, gd.ktot});
+    Array<Float,2> ni_a   (std::vector<Float>(ni_ptr,    ni_ptr    + n_cols*gd.ktot),     {n_cols, gd.ktot});
 
-    Array<Float,2> t_lev_a(
-            std::vector<Float>(it, it + n_cols * (gd.ktot+1)), {n_cols, (gd.ktot+1)});
-    it += n_cols * (gd.ktot+1);
-
-    Array<Float,1> t_sfc_a(
-            std::vector<Float>(it, it + n_cols), {n_cols});
-    it += n_cols;
-
-    Array<Float,2> h2o_a(
-            std::vector<Float>(it, it + n_cols * gd.ktot), {n_cols, gd.ktot});
-    it += n_cols * gd.ktot;
-
-    Array<Float,2> rh_a(
-            std::vector<Float>(it, it + n_cols * gd.ktot), {n_cols, gd.ktot});
-    it += n_cols * gd.ktot;
-
-    Array<Float,2> clwp_a(
-            std::vector<Float>(it, it + n_cols * gd.ktot), {n_cols, gd.ktot});
-    it += n_cols * gd.ktot;
-
-    Array<Float,2> ciwp_a(
-            std::vector<Float>(it, it + n_cols * gd.ktot), {n_cols, gd.ktot});
+    //
+//    // Pack radiation input in `Array` objects.
+//    typename std::vector<TF>::iterator it = tmp->fld.begin();
+//
+//    Array<Float,2> t_lay_a(
+//            std::vector<Float>(it, it + n_cols * gd.ktot), {n_cols, gd.ktot});
+//    it += n_cols * gd.ktot;
+//
+//    Array<Float,2> t_lev_a(
+//            std::vector<Float>(it, it + n_cols * (gd.ktot+1)), {n_cols, (gd.ktot+1)});
+//    it += n_cols * (gd.ktot+1);
+//
+//    Array<Float,1> t_sfc_a(
+//            std::vector<Float>(it, it + n_cols), {n_cols});
+//    it += n_cols;
+//
+//    Array<Float,2> h2o_a(
+//            std::vector<Float>(it, it + n_cols * gd.ktot), {n_cols, gd.ktot});
+//    it += n_cols * gd.ktot;
+//
+//    Array<Float,2> rh_a(
+//            std::vector<Float>(it, it + n_cols * gd.ktot), {n_cols, gd.ktot});
+//    it += n_cols * gd.ktot;
+//
+//    Array<Float,2> clwp_a(
+//            std::vector<Float>(it, it + n_cols * gd.ktot), {n_cols, gd.ktot});
+//    it += n_cols * gd.ktot;
+//
+//    Array<Float,2> ciwp_a(
+//            std::vector<Float>(it, it + n_cols * gd.ktot), {n_cols, gd.ktot});
 
     // Output arrays.
     Array<Float,2> flux_up    ({n_cols, gd.ktot+1});
@@ -2216,7 +2288,7 @@ void Radiation_rrtmgp<TF>::exec_individual_column_stats(
     const Float fac = std::exp(std::log(sig_g)*std::log(sig_g)); // no conversion to micron yet.
 
     const Float four_third_pi_Nc0_rho_w = (4./3.)*M_PI*Nc0*Constants::rho_w<Float>;
-    const Float four_third_pi_Ni0_rho_i = (4./3.)*M_PI*Ni0*Constants::rho_i<Float>;
+    const Float four_third_pi_rho_i = (4./3.)*M_PI*Constants::rho_i<Float>;
 
     for (int ilay=1; ilay<=gd.ktot; ++ilay)
     {
@@ -2235,7 +2307,7 @@ void Radiation_rrtmgp<TF>::exec_individual_column_stats(
 
             // Calculate the effective radius of ice from the mass and the number concentration.
             Float dei_value = ciwp_a({icol, ilay}) > Float(0.) ?
-                2 * 1.e6 * std::pow((ciwp_a({icol, ilay})/layer_thickness) / four_third_pi_Ni0_rho_i, (1./3.)) : Float(0.);
+                2 * 1.e6 * std::pow((ciwp_a({icol, ilay})/layer_thickness) / (four_third_pi_rho_i * ni_a({icol, ilay})), (1./3.)) : Float(0.);
 
             // Limit the values between 10. and 180 (limits of cloud optics lookup table).
             dei({icol, ilay}) = std::max(Float(10.), std::min(dei_value, Float(180.)));
@@ -2252,7 +2324,7 @@ void Radiation_rrtmgp<TF>::exec_individual_column_stats(
 
 
     // Set tmp location flag to flux levels.
-    tmp->loc = gd.wloc;
+    // tmp->loc = gd.wloc;
 
     bool compute_clouds = true;
 
@@ -2268,11 +2340,11 @@ void Radiation_rrtmgp<TF>::exec_individual_column_stats(
             for (int k=gd.kstart; k<kend; ++k)
             {
                 const int kk = n + (k-gd.kgc)*n_cols;
-                tmp->fld_mean[k] = array.ptr()[kk];
+                tmp_fields[0]->fld_mean[k] = array.ptr()[kk];
             }
 
             const TF no_offset = 0;
-            column.set_individual_column(name, tmp->fld_mean.data(), no_offset, col_i[n], col_j[n]);
+            column.set_individual_column(name, tmp_fields[0]->fld_mean.data(), no_offset, col_i[n], col_j[n]);
         }
     };
 
@@ -2403,7 +2475,8 @@ void Radiation_rrtmgp<TF>::exec_individual_column_stats(
         #endif
     }
 
-    fields.release_tmp(tmp);
+    for (auto& it : tmp_fields)
+        fields.release_tmp(it);
 }
 #endif
 

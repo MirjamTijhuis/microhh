@@ -321,9 +321,12 @@ class Microphys_sb06 : public Microphys<TF>
         bool has_mask(std::string);
 
         void get_surface_rain_rate(std::vector<TF>&);
+        void get_radiation_fields(Thermo<TF>&, Field3d<TF>&, Field3d<TF>&) const;
+        void get_radiation_columns(Thermo<TF>&, TF*, TF*, std::vector<int>&, std::vector<int>&) const;
 
         TF get_Nc0() { return this->Nc0; }
         TF get_Ni0() { return static_cast<TF>(1e5); }
+        Microphys_type get_swmicro() {return swmicrophys;}
 
         unsigned long get_time_limit(unsigned long, double);
 

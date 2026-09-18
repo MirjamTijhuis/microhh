@@ -64,6 +64,11 @@ class Microphys_disabled : public Microphys<TF>
 
         TF get_Nc0();
         TF get_Ni0();
+        Microphys_type get_swmicro() {return swmicrophys;}
+        void get_radiation_fields(Thermo<TF>&, Field3d<TF>&, Field3d<TF>&) const
+        { throw std::runtime_error("Function get_radiation_fields not implemented"); }
+        void get_radiation_columns(Thermo<TF>&, TF*, TF*, std::vector<int>&, std::vector<int>&) const
+        { throw std::runtime_error("Function get_radiation_columns not implemented"); }
 
         #ifdef USECUDA
         void get_surface_rain_rate_g(TF*);

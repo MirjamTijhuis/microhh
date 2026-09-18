@@ -2878,6 +2878,52 @@ void Microphys_sb06<TF>::get_surface_rain_rate(std::vector<TF>& field)
     }
 }
 
+template<typename TF>
+void Microphys_sb06<TF>::get_radiation_fields(Thermo<TF>& thermo, Field3d<TF> & ciwp, Field3d<TF> & ni) const
+{
+    auto& gd = grid.get_grid_data();
+    const std::vector<TF>& ph = thermo.get_basestate_vector("ph");
+    const std::vector<TF>& rho = fields.rhoref;
+
+    Sb_common::calc_radiation_fields(
+            ciwp.fld.data(),
+            ni.fld.data(),
+            fields.ap.at("qi")->fld.data(),
+            fields.ap.at("ni")->fld.data(),
+            ph.data(),
+            rho.data(),
+            gd.istart, gd.iend,
+            gd.jstart, gd.jend,
+            gd.kstart, gd.kend,
+            gd.igc, gd.jgc, gd.kgc,
+            gd.icells, gd.ijcells,
+            gd.imax, gd.imax*gd.jmax);
+}
+
+template<typename TF>
+void Microphys_sb06<TF>::get_radiation_columns(Thermo<TF>& thermo, TF* ciwp, TF* ni, std::vector<int>& col_i, std::vector<int>& col_j) const
+{
+    auto& gd = grid.get_grid_data();
+    const std::vector<TF>& ph = thermo.get_basestate_vector("ph");
+    const std::vector<TF>& rho = fields.rhoref;
+    const int n_cols = col_i.size();
+
+    Sb_common::calc_radiation_columns(
+            ciwp,
+            ni,
+            fields.ap.at("qi")->fld.data(),
+            fields.ap.at("ni")->fld.data(),
+            ph.data(),
+            rho.data(),
+            col_i.data(), 
+            col_j.data(),
+            n_cols,
+            gd.kgc, gd.kstart, gd.kend,
+            gd.icells, gd.ijcells
+            );
+}
+
+
 #ifdef FLOAT_SINGLE
 template class Microphys_sb06<float>;
 #else
