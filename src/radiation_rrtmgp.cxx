@@ -477,6 +477,8 @@ namespace
 
     void calc_tendency(
             Float* restrict thlt_rad,
+            const Float* restrict T_start, const Float* restrict clwp, const Float* ciwp, const Float* restrict ph,
+            const Float dt,
             const Float* restrict flux_up, const Float* restrict flux_dn,
             const Float* restrict rho, const Float* exner, const Float* dz,
             const int istart, const int iend, const int jstart, const int jend, const int kstart, const int kend,
@@ -487,7 +489,9 @@ namespace
         for (int k=kstart; k<kend; ++k)
         {
             // Conversion from energy to temperature.
-            const Float fac = Float(1.) / (rho[k]*Constants::cp<Float>*exner[k]*dz[k]);
+            // const Float fac = Float(1.) / (rho[k]*Constants::cp<Float>*exner[k]*dz[k]);
+            const Float fac = Float(1.) / (rho[k]*Constants::cp<Float>*dz[k]);
+            const Float dpg = (ph[k] - ph[k+1]) / Constants::grav<Float>;
 
             for (int j=jstart; j<jend; ++j)
                 for (int i=istart; i<iend; ++i)
@@ -495,9 +499,35 @@ namespace
                     const int ijk = i + j*jj + k*kk;
                     const int ijk_nogc = (i-igc) + (j-jgc)*jj_nogc + (k-kgc)*kk_nogc;
 
-                    thlt_rad[ijk] -= fac *
+                    // change in absolute T
+                    const Float Tt_rad = - fac *
                         ( flux_up[ijk_nogc+kk_nogc] - flux_up[ijk_nogc]
                         - flux_dn[ijk_nogc+kk_nogc] + flux_dn[ijk_nogc] );
+
+                    const Float qc = clwp[ijk_nogc] / dpg;
+                    const Float qi = ciwp[ijk_nogc] / dpg;
+                    const Float T_end = T_start[ijk_nogc] + Tt_rad * dt;
+
+                    // liquid ice
+                    // const Float thl_start = T_start[ijk_nogc]/exner[k] - Constants::Lv<Float>*qc/(Constants::cp<Float> * exner[k]) - Constants::Ls<Float>*qi/(Constants::cp<Float> * exner[k]);
+                    // const Float thl_end = T_end/exner[k] - Constants::Lv<Float>*qc/(Constants::cp<Float> * exner[k]) - Constants::Ls<Float>*qi/(Constants::cp<Float> * exner[k]);
+
+                    // liquid ice deep
+                    const Float thl_start = T_start[ijk_nogc] /exner[k] / (1 + Constants::Lv<Float>*qc/(Constants::cp<Float> * T_start[ijk_nogc])
+                                                            + Constants::Ls<Float>*qi/(Constants::cp<Float> * T_start[ijk_nogc]));
+                    const Float thl_end = T_end/exner[k] / (1 + Constants::Lv<Float>*qc/(Constants::cp<Float> * T_end)
+                                                            + Constants::Ls<Float>*qi/(Constants::cp<Float> * T_end));
+
+                    // liquid shallow
+                    // const Float thl_start = T_start[ijk_nogc]/exner[k] - Constants::Lv<Float>*qc/(Constants::cp<Float> * exner[k]);
+                    // const Float thl_end = T_end/exner[k] - Constants::Lv<Float>*qc/(Constants::cp<Float> * exner[k]);
+
+                    // liquid deep
+                    // const Float thl_start = T_start[ijk_nogc] /exner[k] / (1 + Constants::Lv<Float>*qc/(Constants::cp<Float> * T_start[ijk_nogc]));
+                    // const Float thl_end = T_end/exner[k] / (1 + Constants::Lv<Float>*qc/(Constants::cp<Float> * T_end));
+
+                    const Float dthl_from_dT = (thl_end - thl_start)/dt;
+                    thlt_rad[ijk] += dthl_from_dT;
                 }
         }
     }
@@ -1835,6 +1865,8 @@ void Radiation_rrtmgp<TF>::exec(
 
                 calc_tendency(
                         fields.sd.at("thlt_rad")->fld.data(),
+                        t_lay_a.ptr(), clwp_a.ptr(), ciwp_a.ptr(),
+                        thermo.get_basestate_vector("ph").data(), dt_rad,
                         flux_up.ptr(), flux_dn.ptr(),
                         fields.rhoref.data(), thermo.get_basestate_vector("exner").data(),
                         gd.dz.data(),
@@ -1913,6 +1945,8 @@ void Radiation_rrtmgp<TF>::exec(
 
                     calc_tendency(
                             fields.sd.at("thlt_rad")->fld.data(),
+                            t_lay_a.ptr(), clwp_a.ptr(), ciwp_a.ptr(),
+                            thermo.get_basestate_vector("ph").data(), dt_rad,
                             flux_up.ptr(), flux_dn.ptr(),
                             fields.rhoref.data(), thermo.get_basestate_vector("exner").data(),
                             gd.dz.data(),
