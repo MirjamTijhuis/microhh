@@ -600,8 +600,11 @@ namespace
                 // loss from vapor
                 qtt[ijk] -= vapor_to_snow;
                 qst[ijk] += vapor_to_snow;
+                thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * vapor_to_snow;
+
                 qtt[ijk] -= vapor_to_graupel;
                 qgt[ijk] += vapor_to_graupel;
+                thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * vapor_to_graupel;
 
                 // Loss from cloud.
                 qtt[ijk] -= cloud_to_rain;
