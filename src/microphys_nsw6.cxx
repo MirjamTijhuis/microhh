@@ -626,7 +626,7 @@ namespace
                     TF graupel_to_vapor = P_gsub;
 
                     const TF dqv_dt =
-                        - vapor_to_snow - vapor_to_graupel;
+                        - vapor_to_snow - vapor_to_graupel + snow_to_vapor + graupel_to_vapor + rain_to_vapor;
 
                     const TF dql_dt =
                         - cloud_to_rain - cloud_to_graupel - cloud_to_snow;
@@ -640,7 +640,7 @@ namespace
 
                     const TF dqs_dt =
                         + cloud_to_snow + ice_to_snow + vapor_to_snow
-                        - snow_to_graupel - snow_to_vapor - snow_to_rain;
+                        - snow_to_graupel - snow_to_vapor - snow_to_rain + rain_to_snow;
 
                     const TF dqg_dt =
                         + cloud_to_graupel + rain_to_graupel + ice_to_graupel
@@ -688,8 +688,11 @@ namespace
                     // loss from vapor
                     dqv -= vapor_to_snow;
                     qst[ijk] += vapor_to_snow;
+                    // thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * vapor_to_snow;
+
                     dqv -= vapor_to_graupel;
                     qgt[ijk] += vapor_to_graupel;
+                    // thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * vapor_to_graupel;
 
                     // Loss from cloud.
                     dqc -= cloud_to_rain;
@@ -763,7 +766,9 @@ namespace
                                         - Lf<TF> / cp<TF> * snow_to_rain
                                         - Lf<TF> / cp<TF> * graupel_to_rain
                                         + Lf<TF> / cp<TF> * rain_to_snow
-                                        + Lf<TF> / cp<TF> * rain_to_graupel;
+                                        + Lf<TF> / cp<TF> * rain_to_graupel
+                                        + Ls<TF> / cp<TF> * vapor_to_graupel
+                                        + Ls<TF> / cp<TF> * vapor_to_snow;
 
                         TF T_end = T + dT * dt;
 
@@ -786,7 +791,9 @@ namespace
                                         - Lf<TF> / cp<TF> * snow_to_rain
                                         - Lf<TF> / cp<TF> * graupel_to_rain
                                         + Lf<TF> / cp<TF> * rain_to_snow
-                                        + Lf<TF> / cp<TF> * rain_to_graupel;
+                                        + Lf<TF> / cp<TF> * rain_to_graupel
+                                        + Ls<TF> / cp<TF> * vapor_to_graupel
+                                        + Ls<TF> / cp<TF> * vapor_to_snow;
 
                         TF T_end = T + dT * dt;
 

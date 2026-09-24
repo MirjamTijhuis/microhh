@@ -1320,7 +1320,7 @@ void Thermo_moist<TF>::create_basestate(
             gd.kstart,
             gd.kend);
 
-    // MT: assume that the initial base state contains no hydrometeors
+    // MT: assume that the base state contains no hydrometeors
     for (int k=0; k<gd.ktot; ++k)
     {
         bs.qhm0[k]  = TF(0.);
@@ -1473,7 +1473,7 @@ void Thermo_moist<TF>::exec(const double dt, Stats<TF>& stats)
 
     if (bs.swupdatebasestate)
     {
-        field3d_operators.calc_mean_profile(qhm->fld_mean.data(), qhm->fld.data());
+        // field3d_operators.calc_mean_profile(qhm->fld_mean.data(), qhm->fld.data());
         auto calc_base_state_wrapper = [&]<Satadjust_type sw_satadjust>()
         {
             calc_base_state<TF, sw_satadjust>(
@@ -1487,7 +1487,7 @@ void Thermo_moist<TF>::exec(const double dt, Stats<TF>& stats)
                     bs.exnrefh.data(),
                     fields.sp.at("thl")->fld_mean.data(),
                     fields.sp.at("qt")->fld_mean.data(),
-                    qhm->fld_mean.data(),
+                    bs.qhm0.data(),
                     bs.pbot,
                     gd.kstart,
                     gd.kend,
@@ -1666,9 +1666,9 @@ void Thermo_moist<TF>::get_thermo_field(
         base = bs;
 
     // calculate sum of hydrometeors
-    auto qhm = fields.get_tmp();
+     auto qhm = fields.get_tmp();
 
-    if (bs.swupdatebasestate || name == "b" || name == "b_h" || name == "thv")
+    if (name == "b" || name == "b_h" || name == "thv")
     {
         if (fields.sp.find("qh") != fields.sp.end())
         {
@@ -1741,7 +1741,7 @@ void Thermo_moist<TF>::get_thermo_field(
 
         auto calc_base_state_wrapper = [&]<Satadjust_type sw_satadjust>()
         {
-            field3d_operators.calc_mean_profile(qhm->fld_mean.data(), qhm->fld.data());
+            // field3d_operators.calc_mean_profile(qhm->fld_mean.data(), qhm->fld.data());
             calc_base_state<TF, sw_satadjust>(
                     base.pref.data(),
                     base.prefh.data(),
@@ -1753,7 +1753,7 @@ void Thermo_moist<TF>::get_thermo_field(
                     base.exnrefh.data(),
                     fields.sp.at("thl")->fld_mean.data(),
                     fields.sp.at("qt")->fld_mean.data(),
-                    qhm->fld_mean.data(),
+                    base.qhm0.data(),
                     base.pbot,
                     gd.kstart, gd.kend,
                     gd.z.data(), gd.dz.data(), gd.dzh.data());
