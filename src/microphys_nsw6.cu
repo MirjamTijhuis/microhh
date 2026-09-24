@@ -542,7 +542,7 @@ namespace
                 TF graupel_to_vapor = P_gsub;
 
                 const TF dqv_dt =
-                    - vapor_to_snow - vapor_to_graupel;
+                        - vapor_to_snow - vapor_to_graupel + snow_to_vapor + graupel_to_vapor + rain_to_vapor;
 
                 const TF dql_dt =
                     - cloud_to_rain - cloud_to_graupel - cloud_to_snow;
@@ -556,7 +556,7 @@ namespace
 
                 const TF dqs_dt =
                     + cloud_to_snow + ice_to_snow + vapor_to_snow
-                    - snow_to_graupel - snow_to_vapor - snow_to_rain;
+                    - snow_to_graupel - snow_to_vapor - snow_to_rain + rain_to_snow;
 
                 const TF dqg_dt =
                     + cloud_to_graupel + rain_to_graupel + ice_to_graupel
