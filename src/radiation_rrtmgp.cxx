@@ -477,14 +477,15 @@ namespace
 
     void calc_tendency(
             Float* restrict thlt_rad,
-            const Float* restrict T_start, const Float* restrict clwp, const Float* ciwp, const Float* restrict ph,
+            const Float* restrict T_start, const Float* restrict clwp, const Float* ciwp, const Float* h2o,
+            const Float* restrict ph, const Float* restrict p,
             const Float dt,
             const Float* restrict flux_up, const Float* restrict flux_dn,
             const Float* restrict rho, const Float* exner, const Float* dz,
             const int istart, const int iend, const int jstart, const int jend, const int kstart, const int kend,
             const int igc, const int jgc, const int kgc,
             const int jj, const int kk,
-            const int jj_nogc, const int kk_nogc)
+            const int jj_nogc, const int kk_nogc, const Satadjust_type sw_satadjust)
     {
         for (int k=kstart; k<kend; ++k)
         {
@@ -508,23 +509,94 @@ namespace
                     const Float qi = ciwp[ijk_nogc] / dpg;
                     const Float T_end = T_start[ijk_nogc] + Tt_rad * dt;
 
-                    // liquid ice
-                    // const Float thl_start = T_start[ijk_nogc]/exner[k] - Constants::Lv<Float>*qc/(Constants::cp<Float> * exner[k]) - Constants::Ls<Float>*qi/(Constants::cp<Float> * exner[k]);
-                    // const Float thl_end = T_end/exner[k] - Constants::Lv<Float>*qc/(Constants::cp<Float> * exner[k]) - Constants::Ls<Float>*qi/(Constants::cp<Float> * exner[k]);
+                    Float thl_start;
+                    Float thl_end;
+                    if (sw_satadjust == Satadjust_type::Liquid_ice)
+                    {
+                        // thlD
+                        thl_start = T_start[ijk_nogc] / exner[k] -
+                                                Constants::Lv<Float> * qc / (Constants::cp<Float> * exner[k]) -
+                                                Constants::Ls<Float> * qi / (Constants::cp<Float> * exner[k]);
+                        thl_end = T_end / exner[k] - Constants::Lv<Float> * qc / (Constants::cp<Float> * exner[k]) -
+                                Constants::Ls<Float> * qi / (Constants::cp<Float> * exner[k]);
+                    }
+                    else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                    {
+                        // thlE
+                        thl_start = T_start[ijk_nogc] /exner[k] / (1 + Constants::Lv<Float>*qc/(Constants::cp<Float> * T_start[ijk_nogc])
+                                + Constants::Ls<Float>*qi/(Constants::cp<Float> * T_start[ijk_nogc]));
+                        thl_end = T_end/exner[k] / (1 + Constants::Lv<Float>*qc/(Constants::cp<Float> * T_end)
+                                + Constants::Ls<Float>*qi/(Constants::cp<Float> * T_end));
 
-                    // liquid ice deep
-                    const Float thl_start = T_start[ijk_nogc] /exner[k] / (1 + Constants::Lv<Float>*qc/(Constants::cp<Float> * T_start[ijk_nogc])
-                                                            + Constants::Ls<Float>*qi/(Constants::cp<Float> * T_start[ijk_nogc]));
-                    const Float thl_end = T_end/exner[k] / (1 + Constants::Lv<Float>*qc/(Constants::cp<Float> * T_end)
-                                                            + Constants::Ls<Float>*qi/(Constants::cp<Float> * T_end));
+                        // thlF
+                        thl_start = T_start[ijk_nogc]/exner[k] / (1   + Constants::Lv<Float>*qc/(Constants::cp<Float> * std::max(T_start[ijk_nogc], Float(253)))
+                                                    + Constants::Ls<Float>*qi/(Constants::cp<Float> * std::max(T_start[ijk_nogc], Float(253))));
+                        thl_end = T_end/exner[k] / (1   + Constants::Lv<Float>*qc/(Constants::cp<Float> * std::max(T_end, Float(253)))
+                                                         + Constants::Ls<Float>*qi/(Constants::cp<Float> * std::max(T_end, Float(253))));
 
-                    // liquid shallow
-                    // const Float thl_start = T_start[ijk_nogc]/exner[k] - Constants::Lv<Float>*qc/(Constants::cp<Float> * exner[k]);
-                    // const Float thl_end = T_end/exner[k] - Constants::Lv<Float>*qc/(Constants::cp<Float> * exner[k]);
+                        // thlG
+                        const Float qv = h2o[ijk_nogc] * Constants::ep<Float> / (1 + h2o[ijk_nogc] * Constants::ep<Float>);
+                        const Float qt = qv + qc + qi;
+                        const Float chi = (Constants::Rd<Float> + Constants::Rv<Float> * qt) / (Constants::cp<Float> + Constants::cpv<Float> * qt);
+                        const Float gamma = (Constants::Rv<Float> * qt) / (Constants::cp<Float> + Constants::cpv<Float> * qt);
+                        const Float epsilon = Constants::Rd<Float> / Constants::Rv<Float>;
+                        const Float lv1 = Constants::Lv<Float> + (Constants::cl<Float> - Constants::cpv<Float>) * Constants::T0<Float>;
+                        const Float lv2 = Constants::cl<Float> - Constants::cpv<Float>;
+                        const Float ls1 = Constants::Ls<Float> + (Constants::ci<Float> - Constants::cpv<Float>) * Constants::T0<Float>;
+                        const Float ls2 = Constants::ci<Float> - Constants::cpv<Float>;
 
-                    // liquid deep
-                    // const Float thl_start = T_start[ijk_nogc] /exner[k] / (1 + Constants::Lv<Float>*qc/(Constants::cp<Float> * T_start[ijk_nogc]));
-                    // const Float thl_end = T_end/exner[k] / (1 + Constants::Lv<Float>*qc/(Constants::cp<Float> * T_end));
+                        const Float Lv_T_start = lv1 - lv2 * T_start[ijk_nogc];
+                        const Float Ls_T_start = ls1 - ls2 * T_start[ijk_nogc];
+                        thl_start = T_start[ijk_nogc] * pow((Constants::p0<Float>/p[k]), chi)
+                                  * pow((1 - (qc + qi) / (epsilon + qt)), chi)
+                                  * pow((1 - (qc + qi) / qt), -gamma)
+                                  * std::exp((-Lv_T_start * qc - Ls_T_start * qi) / ((Constants::cp<Float> + Constants::cpv<Float> * qt) * T_start[ijk_nogc]));
+                        
+                        const Float Lv_T_end = lv1 - lv2 * T_end;
+                        const Float Ls_T_end = ls1 - ls2 * T_end;
+                        thl_end = T_end * pow((Constants::p0<Float>/p[k]), chi)
+                                        * pow((1 - (qc + qi) / (epsilon + qt)), chi)
+                                        * pow((1 - (qc + qi) / qt), -gamma)
+                                        * std::exp((-Lv_T_end * qc - Ls_T_end * qi) / ((Constants::cp<Float> + Constants::cpv<Float> * qt) * T_end));
+
+                    }
+                    else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                    {
+                        // thlD
+                        thl_start = T_start[ijk_nogc]/exner[k] - Constants::Lv<Float>*qc/(Constants::cp<Float> * exner[k]);
+                        thl_end = T_end/exner[k] - Constants::Lv<Float>*qc/(Constants::cp<Float> * exner[k]);
+                    }
+                    else // sw_satadjust == Satadjust_type::Liquid_deep. with Satadjust_type::disabled you should not be here
+                    {
+                        // thlE
+                        thl_start = T_start[ijk_nogc] /exner[k] / (1 + Constants::Lv<Float>*qc/(Constants::cp<Float> * T_start[ijk_nogc]));
+                        thl_end = T_end/exner[k] / (1 + Constants::Lv<Float>*qc/(Constants::cp<Float> * T_end));
+                        
+                        // thlF
+                        thl_start = T_start[ijk_nogc]/exner[k] / (1   + Constants::Lv<Float>*qc/(Constants::cp<Float> * std::max(T_start[ijk_nogc], Float(253))));
+                        thl_end = T_end/exner[k] / (1   + Constants::Lv<Float>*qc/(Constants::cp<Float> * std::max(T_end, Float(253))));
+
+                        // thlG
+                        const Float qv = h2o[ijk_nogc] * Constants::ep<Float> / (1 + h2o[ijk_nogc] * Constants::ep<Float>);
+                        const Float qt = qv + qc;
+                        const Float chi = (Constants::Rd<Float> + Constants::Rv<Float> * qt) / (Constants::cp<Float> + Constants::cpv<Float> * qt);
+                        const Float gamma = (Constants::Rv<Float> * qt) / (Constants::cp<Float> + Constants::cpv<Float> * qt);
+                        const Float epsilon = Constants::Rd<Float> / Constants::Rv<Float>;
+                        const Float lv1 = Constants::Lv<Float> + (Constants::cl<Float> - Constants::cpv<Float>) * Constants::T0<Float>;
+                        const Float lv2 = Constants::cl<Float> - Constants::cpv<Float>;
+
+                        const Float Lv_T_start = lv1 - lv2 * T_start[ijk_nogc];
+                        thl_start = T_start[ijk_nogc] * pow((Constants::p0<Float>/p[k]), chi)
+                                    * pow((1 - (qc) / (epsilon + qt)), chi)
+                                    * pow((1 - (qc) / qt), -gamma)
+                                    * std::exp((-Lv_T_start * qc) / ((Constants::cp<Float> + Constants::cpv<Float> * qt) * T_start[ijk_nogc]));
+
+                        const Float Lv_T_end = lv1 - lv2 * T_end;
+                        thl_end = T_end * pow((Constants::p0<Float>/p[k]), chi)
+                                  * pow((1 - qc / (epsilon + qt)), chi)
+                                  * pow((1 - qc / qt), -gamma)
+                                  * std::exp((-Lv_T_end * qc) / ((Constants::cp<Float> + Constants::cpv<Float> * qt) * T_end));
+                    }
 
                     const Float dthl_from_dT = (thl_end - thl_start)/dt;
                     thlt_rad[ijk] += dthl_from_dT;
@@ -783,6 +855,25 @@ Radiation_rrtmgp<TF>::Radiation_rrtmgp(
 
     // This is a bit cheeky, should be a getter from `thermo`.
     swtimedep_basestate = inputin.get_item<bool>("thermo", "swupdatebasestate", "", true);
+//    // Option to disable saturation adjustment ql and qi
+//    bool sw_satadjust_ql = inputin.get_item<bool>("thermo", "swsatadjust_ql", "", true);
+//    bool sw_satadjust_qi = inputin.get_item<bool>("thermo", "swsatadjust_qi", "", true);
+//    sw_thl_deep = inputin.get_item<bool>("thermo", "swthldeep", "", false);
+//
+//    // Option to disable saturation adjustment ql and qi (new).
+//    if (sw_satadjust_ql && sw_satadjust_qi)
+//        if (sw_thl_deep)
+//            sw_satadjust = Satadjust_type::Liquid_ice_deep;
+//        else
+//            sw_satadjust = Satadjust_type::Liquid_ice;
+//    else if (sw_satadjust_ql)
+//        if (!sw_thl_deep)
+//            sw_satadjust = Satadjust_type::Liquid_shallow;
+//        else
+//            sw_satadjust = Satadjust_type::Liquid_deep;
+//    else
+//        sw_satadjust = Satadjust_type::Disabled;
+
 
     #ifndef USECUDA
     if (sw_homogenize_sfc_sw || sw_homogenize_sfc_lw || sw_homogenize_hr_sw || sw_homogenize_hr_lw)
@@ -1778,6 +1869,8 @@ void Radiation_rrtmgp<TF>::exec(
         const TF Nc0 = microphys.get_Nc0();
         // const TF Ni0 = microphys.get_Ni0();
 
+        const Satadjust_type sw_satadjust = thermo.get_swsatadjust();
+
         Microphys_type swmicro = microphys.get_swmicro();
         if (swmicro == Microphys_type::SB06)
         {
@@ -1865,15 +1958,15 @@ void Radiation_rrtmgp<TF>::exec(
 
                 calc_tendency(
                         fields.sd.at("thlt_rad")->fld.data(),
-                        t_lay_a.ptr(), clwp_a.ptr(), ciwp_a.ptr(),
-                        thermo.get_basestate_vector("ph").data(), dt_rad,
+                        t_lay_a.ptr(), clwp_a.ptr(), ciwp_a.ptr(), h2o_a.ptr(),
+                        thermo.get_basestate_vector("ph").data(),thermo.get_basestate_vector("p").data(), dt_rad,
                         flux_up.ptr(), flux_dn.ptr(),
                         fields.rhoref.data(), thermo.get_basestate_vector("exner").data(),
                         gd.dz.data(),
                         gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend,
                         gd.igc, gd.jgc, gd.kgc,
                         gd.icells, gd.ijcells,
-                        gd.imax, gd.imax*gd.jmax);
+                        gd.imax, gd.imax*gd.jmax, sw_satadjust);
 
                 store_surface_fluxes(
                         lw_flux_up_sfc.data(), lw_flux_dn_sfc.data(),
@@ -1945,15 +2038,15 @@ void Radiation_rrtmgp<TF>::exec(
 
                     calc_tendency(
                             fields.sd.at("thlt_rad")->fld.data(),
-                            t_lay_a.ptr(), clwp_a.ptr(), ciwp_a.ptr(),
-                            thermo.get_basestate_vector("ph").data(), dt_rad,
+                            t_lay_a.ptr(), clwp_a.ptr(), ciwp_a.ptr(), h2o_a.ptr(),
+                            thermo.get_basestate_vector("ph").data(), thermo.get_basestate_vector("p").data(), dt_rad,
                             flux_up.ptr(), flux_dn.ptr(),
                             fields.rhoref.data(), thermo.get_basestate_vector("exner").data(),
                             gd.dz.data(),
                             gd.istart, gd.iend, gd.jstart, gd.jend, gd.kstart, gd.kend,
                             gd.igc, gd.jgc, gd.kgc,
                             gd.icells, gd.ijcells,
-                            gd.imax, gd.imax*gd.jmax);
+                            gd.imax, gd.imax*gd.jmax, sw_satadjust);
 
                     store_surface_fluxes(
                             sw_flux_up_sfc.data(), sw_flux_dn_sfc.data(),

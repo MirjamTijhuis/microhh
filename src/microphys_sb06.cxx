@@ -159,7 +159,6 @@ Microphys_sb06<TF>::Microphys_sb06(
     // Option to disable saturation adjustment ql and qi
     bool sw_satadjust_ql = inputin.get_item<bool>("thermo", "swsatadjust_ql", "", true);
     bool sw_satadjust_qi = inputin.get_item<bool>("thermo", "swsatadjust_qi", "", true);
-    sw_thl_deep = inputin.get_item<bool>("thermo", "swthldeep", "", false);
 
     std::string swadvec = inputin.get_item<std::string>("advec", "swadvec", "", "2");
     std::vector<std::string> fluxlimit_list = inputin.get_list<std::string>("advec", "fluxlimit_list", "", std::vector<std::string>());
@@ -193,20 +192,6 @@ Microphys_sb06<TF>::Microphys_sb06(
             master.print_warning(warning);
         }
     }
-
-    // Option to disable saturation adjustment ql and qi (new).
-    if (sw_satadjust_ql && sw_satadjust_qi)
-        if (sw_thl_deep)
-            sw_satadjust = Satadjust_type::Liquid_ice_deep;
-        else
-            sw_satadjust = Satadjust_type::Liquid_ice;
-    else if (sw_satadjust_ql)
-        if (!sw_thl_deep)
-            sw_satadjust = Satadjust_type::Liquid_shallow;
-        else
-            sw_satadjust = Satadjust_type::Liquid_deep;
-    else
-        sw_satadjust = Satadjust_type::Disabled;
 
     // Checks.
     if (sw_satadjust_qi)
@@ -1034,6 +1019,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 {
     auto& gd = grid.get_grid_data();
     const double dt = timeloop.get_sub_time_step();
+    const Satadjust_type sw_satadjust = thermo.get_swsatadjust();
 
     timer.start("exec_total");
 

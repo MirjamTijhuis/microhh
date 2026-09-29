@@ -73,6 +73,7 @@ class Thermo_dry : public Thermo<TF>
         bool check_field_exists(std::string name);
         void get_thermo_field(
                 Field3d<TF>&, const std::string&, const bool, const bool);
+        Satadjust_type get_swsatadjust() {throw std::runtime_error("Function get_swsatadjust not implemented"); };
         void get_buoyancy_surf(std::vector<TF>&, std::vector<TF>&, bool);
         void get_buoyancy_surf(std::vector<TF>&, std::vector<TF>&, std::vector<TF>&)
             { throw std::runtime_error("Function get_buoyancy_surf not implemented"); }

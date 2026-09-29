@@ -1083,25 +1083,10 @@ Microphys_nsw6<TF>::Microphys_nsw6(Master& masterin, Grid<TF>& gridin, Fields<TF
     // Option to disable saturation adjustment ql and qi
     bool sw_satadjust_ql = inputin.get_item<bool>("thermo", "swsatadjust_ql", "", true);
     bool sw_satadjust_qi = inputin.get_item<bool>("thermo", "swsatadjust_qi", "", true);
-    sw_thl_deep = inputin.get_item<bool>("thermo", "swthldeep", "", false);
-
-    // Option to disable saturation adjustment ql and qi (new).
-    if (sw_satadjust_ql && sw_satadjust_qi)
-        if (sw_thl_deep)
-            sw_satadjust = Satadjust_type::Liquid_ice_deep;
-        else
-            sw_satadjust = Satadjust_type::Liquid_ice;
-    else if (sw_satadjust_ql)
-        if (!sw_thl_deep)
-            sw_satadjust = Satadjust_type::Liquid_shallow;
-        else
-            sw_satadjust = Satadjust_type::Liquid_deep;
-    else
-        sw_satadjust = Satadjust_type::Disabled;
 
     // Checks.
     if (!sw_satadjust_qi)
-        throw std::runtime_error("NSW6 microphysics riquires ice from saturation adjustment, so swsatadjust_qi=false is not allowed");
+        throw std::runtime_error("NSW6 microphysics requires ice from saturation adjustment, so swsatadjust_qi=false is not allowed");
     if (!sw_satadjust_ql)
         throw std::runtime_error("NSW6 microphysics requires liquid water from saturation adjustment, so swsatadjust_ql=false is not allowed");
 
@@ -1184,6 +1169,7 @@ void Microphys_nsw6<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
     thermo.get_thermo_field(*ql, "ql", false, false);
     thermo.get_thermo_field(*qi, "qi", false, false);
+    const Satadjust_type sw_satadjust = thermo.get_swsatadjust();
 
     const std::vector<TF>& p = thermo.get_basestate_vector("p");
     const std::vector<TF>& exner = thermo.get_basestate_vector("exner");

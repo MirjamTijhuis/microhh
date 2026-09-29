@@ -46,7 +46,6 @@ template<typename> class Timeloop;
  * the acceleration by buoyancy.
  */
 
-enum class Satadjust_type {Disabled, Liquid_ice, Liquid_shallow, Liquid_deep, Liquid_ice_deep};
 enum class Satadjust_field {Liquid, Ice, Liquid_ice, Temperature, Saturation_vapor};
 
 template<typename TF>
@@ -79,6 +78,7 @@ class Thermo_moist : public Thermo<TF>
         void get_radiation_columns(TF*, TF*, TF*, TF*, TF*, TF*, TF*, std::vector<int>&, std::vector<int>&) const;
         void get_land_surface_fields(
             std::vector<TF>&, std::vector<TF>&, std::vector<TF>&, std::vector<TF>&, std::vector<TF>&);
+        Satadjust_type get_swsatadjust() {return this->sw_satadjust;};
         void get_buoyancy_surf(std::vector<TF>&, std::vector<TF>&, bool);
         void get_buoyancy_surf(std::vector<TF>&, std::vector<TF>&, std::vector<TF>&);
         void get_buoyancy_fluxbot(std::vector<TF>&, bool);

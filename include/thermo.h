@@ -38,6 +38,7 @@ template<typename> class Timeloop;
 
 enum class Sim_mode;
 enum class Thermo_type {Buoy, Dry, Moist, Disabled};
+enum class Satadjust_type {Disabled, Liquid_ice, Liquid_shallow, Liquid_deep, Liquid_ice_deep};
 
 /**
  * Base class for the thermo scheme. This class is abstract and only
@@ -87,6 +88,7 @@ class Thermo
         virtual void get_radiation_columns(TF*, TF*, TF*, TF*, TF*, TF*, TF*, std::vector<int>&, std::vector<int>&) const = 0;
         virtual void get_land_surface_fields(
                 std::vector<TF>&, std::vector<TF>&, std::vector<TF>&, std::vector<TF>&, std::vector<TF>&) = 0;
+        virtual Satadjust_type get_swsatadjust() = 0;
 
         virtual const std::vector<TF>& get_basestate_vector(std::string) const = 0;
         virtual TF get_db_ref() const = 0;
