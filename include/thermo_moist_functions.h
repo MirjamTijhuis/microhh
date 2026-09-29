@@ -54,7 +54,6 @@ namespace Thermo_moist_functions
         }
         else if (sw_satadjust == Satadjust_type::Liquid_shallow || sw_satadjust == Satadjust_type::Liquid_deep)
         {
-            // const TF th = thl + Lv<TF>*ql/(cp<TF>*exn);
             const TF th = T / exn;
             return th * (TF(1.) - (TF(1.) - Rv<TF>/Rd<TF>)*qt - Rv<TF>/Rd<TF>*(ql) - qhm);
         }
@@ -111,7 +110,6 @@ namespace Thermo_moist_functions
 
         return TF(611.21)*std::exp(TF(17.502)*x / (TF(240.97)+x));
         //return c00<TF>+x*(c10<TF>+x*(c20<TF>+x*(c30<TF>+x*(c40<TF>+x*(c50<TF>+x*(c60<TF>+x*(c70<TF>+x*(c80<TF>+x*(c90<TF>+x*c100<TF>)))))))));
-	    // return TF(610.78)*std::exp(TF(17.269)*x / (TF(237.29)+x));
     }
 
     template<typename TF>
@@ -873,79 +871,19 @@ namespace Thermo_moist_functions
     }
 
     template<typename TF>
-    void calc_hydrometeors_double_ice(
-            TF* restrict qhm,
-            TF* restrict qi,
-            TF* restrict qs,
-            TF* restrict qh,
-            TF* restrict qr,
-            TF* restrict qg,
-            const int istart, const int iend,
-            const int jstart, const int jend,
-            const int kstart, const int kend,
-            const int jj, const int kk)
+    void add_hydrometeor(TF* restrict qhm_total,
+                         TF* restrict qhm,
+                         const int istart, const int iend,
+                         const int jstart, const int jend,
+                         const int kstart, const int kend,
+                         const int jj, const int kk)
     {
         for (int k = kstart; k < kend; k++)
-            for (int j=jstart; j<jend; j++)
-                for (int i=istart; i<iend; i++)
+            for (int j = jstart; j < jend; j++)
+                for (int i = istart; i < iend; i++)
                 {
-                    const int ijk = i + j*jj + k*kk;
-                    qhm[ijk] = qi[ijk] + qs[ijk] + qh[ijk] + qr[ijk] + qg[ijk];
-                }
-    }
-
-    template<typename TF>
-    void calc_hydrometeors_single(
-            TF* restrict qhm,
-            TF* restrict qs,
-            TF* restrict qr,
-            TF* restrict qg,
-            const int istart, const int iend,
-            const int jstart, const int jend,
-            const int kstart, const int kend,
-            const int jj, const int kk)
-    {
-        for (int k = kstart; k < kend; k++)
-            for (int j=jstart; j<jend; j++)
-                for (int i=istart; i<iend; i++)
-                {
-                    const int ijk = i + j*jj + k*kk;
-                    qhm[ijk] = qs[ijk] + qr[ijk] + qg[ijk];
-                }
-    }
-
-    template<typename TF>
-    void calc_hydrometeors_double_warm(
-            TF* restrict qhm,
-            TF* restrict qr,
-            const int istart, const int iend,
-            const int jstart, const int jend,
-            const int kstart, const int kend,
-            const int jj, const int kk)
-    {
-        for (int k = kstart; k < kend; k++)
-            for (int j=jstart; j<jend; j++)
-                for (int i=istart; i<iend; i++)
-                {
-                    const int ijk = i + j*jj + k*kk;
-                    qhm[ijk] = qr[ijk];
-                }
-    }
-
-    template<typename TF>
-    void calc_hydrometeors_no_micro(
-            TF* restrict qhm,
-            const int istart, const int iend,
-            const int jstart, const int jend,
-            const int kstart, const int kend,
-            const int jj, const int kk)
-    {
-        for (int k = kstart; k < kend; k++)
-            for (int j=jstart; j<jend; j++)
-                for (int i=istart; i<iend; i++)
-                {
-                    const int ijk = i + j*jj + k*kk;
-                    qhm[ijk] = TF(0);
+                    const int ijk = i + j * jj + k * kk;
+                    qhm_total[ijk] += qhm[ijk];
                 }
     }
 }

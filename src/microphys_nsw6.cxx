@@ -114,10 +114,10 @@ namespace
 
     template<typename TF> constexpr TF nu = 1.5e-5; // Kinematic viscosity of air.
 
-    template<typename TF> constexpr TF mi40 = 2.46e-10; // mass of a 40 micron ice crystal [kg]
-    template<typename TF> constexpr TF mi50 = 4.80E-10; // mass of a 50 micron ice crystal [kg]
-    template<typename TF> constexpr TF vti50 = 1.0; // terminal velocity of a 50 micron ice crystal [m/s]
-    template<typename TF> constexpr TF Ri50 = 5.e-5; // radius of a 50 micron ice crystal [m]
+//    template<typename TF> constexpr TF mi40 = 2.46e-10; // mass of a 40 micron ice crystal [kg]
+//    template<typename TF> constexpr TF mi50 = 4.80E-10; // mass of a 50 micron ice crystal [kg]
+//    template<typename TF> constexpr TF vti50 = 1.0; // terminal velocity of a 50 micron ice crystal [m/s]
+//    template<typename TF> constexpr TF Ri50 = 5.e-5; // radius of a 50 micron ice crystal [m]
 }
 
 namespace
@@ -504,25 +504,26 @@ namespace
                         * (std::exp(A_prime * (T0<TF> - T)) - TF(1.)) / pow7(lambda_r);
 
                     // Bergeron process
-                    const bool has_bergeron = (T >= T0<TF> - TF(30.) && T <= T0<TF>);
-
-                    TF a1, a2, ma2;
-                    bergeron_param(a1, a2, ma2, T);
-
+                    // MT: the bergeron process is deactivated as the dt dependency makes the results time step dependent.
+                    // const bool has_bergeron = (T >= T0<TF> - TF(30.) && T <= T0<TF>);
+                    //
+                    // TF a1, a2, ma2;
+                    // bergeron_param(a1, a2, ma2, T);
+                    //
                     // Tomita Eq. 73: time [s] for an ice particle to grow from 40 to 50 micron.
-                    const TF dt1 = (std::pow(mi50<TF>, ma2) - std::pow(mi40<TF>, ma2)) / (a1 * ma2);
-
+                    // const TF dt1 = (std::pow(mi50<TF>, ma2) - std::pow(mi40<TF>, ma2)) / (a1 * ma2);
+                    //
                     // Tomita Eq. 74: number of 50 micron ice particles generated this time step.
-                    const TF Ni50 = qi[ijk] * dt / (mi50<TF> * dt1);
-
+                    // const TF Ni50 = qi[ijk] * dt / (mi50<TF> * dt1);
+                    //
                     // Tomita Eq. 71
-                    TF P_sfw = !(has_bergeron) ? TF(0.) :
-                               Ni50 * ( a1 * std::pow(mi50<TF>, a2)
-                                        + pi<TF> * E_iw<TF> * rho[k] * ql[ijk] * Ri50<TF>*Ri50<TF> * vti50<TF> );
-
+                    // TF P_sfw = !(has_bergeron) ? TF(0.) :
+                    //            Ni50 * ( a1 * std::pow(mi50<TF>, a2)
+                    //                    + pi<TF> * E_iw<TF> * rho[k] * ql[ijk] * Ri50<TF>*Ri50<TF> * vti50<TF> );
+                    //
                     // Tomita Eq. 72
-                    TF P_sfi = !(has_bergeron) ? TF(0.) :
-                               qi[ijk] / dt1;
+                    // TF P_sfi = !(has_bergeron) ? TF(0.) :
+                    //           qi[ijk] / dt1;
 
                     // COMPUTE THE TENDENCIES.
                     // Limit the production terms to avoid instability.
@@ -571,8 +572,8 @@ namespace
                     limit_tend(P_gfrz, dqr_dt_max);
 
                     // limit bergeron
-                    limit_tend(P_sfw  , dql_dt_max);
-                    limit_tend(P_sfi  , dqi_dt_max);
+                    // limit_tend(P_sfw  , dql_dt_max);
+                    // limit_tend(P_sfi  , dqi_dt_max);
 
                     // P_iacr_s = 0;
                     // P_iacr_g = 0;
@@ -609,13 +610,13 @@ namespace
 
                     TF cloud_to_rain = P_racw + P_sacw * T_pos + P_raut + P_gacw * T_pos;
                     TF cloud_to_graupel = P_gacw * T_neg;
-                    TF cloud_to_snow = P_sacw * T_neg + P_sfw;
+                    TF cloud_to_snow = P_sacw * T_neg;
 
                     TF rain_to_vapor = P_revp;
                     TF rain_to_graupel = P_gacr * T_neg + P_iacr_g + P_sacr_g * T_neg + P_gfrz * T_neg;
                     TF rain_to_snow = P_sacr_s * T_neg + P_iacr_s;
 
-                    TF ice_to_snow = P_raci_s + P_saci + P_saut + P_sfi;
+                    TF ice_to_snow = P_raci_s + P_saci + P_saut;
                     TF ice_to_graupel = P_raci_g + P_gaci;
 
                     TF snow_to_graupel = P_gacs + P_racs * T_neg + P_gaut * T_neg;
@@ -688,46 +689,36 @@ namespace
                     // loss from vapor
                     dqv -= vapor_to_snow;
                     qst[ijk] += vapor_to_snow;
-                    // thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * vapor_to_snow;
 
                     dqv -= vapor_to_graupel;
                     qgt[ijk] += vapor_to_graupel;
-                    // thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * vapor_to_graupel;
 
                     // Loss from cloud.
                     dqc -= cloud_to_rain;
                     qrt[ijk] += cloud_to_rain;
-                    // thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * cloud_to_rain;
 
                     dqc -= cloud_to_graupel;
                     qgt[ijk] += cloud_to_graupel;
-                    // thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * cloud_to_graupel;
 
                     dqc -= cloud_to_snow;
                     qst[ijk] += cloud_to_snow;
-                    // thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * cloud_to_snow;
 
                     // Loss from rain.
                     qrt[ijk] -= rain_to_vapor;
                     dqv += rain_to_vapor;
-                    // thlt[ijk] -= Lv<TF> / (cp<TF> * exner[k]) * rain_to_vapor;
 
                     qrt[ijk] -= rain_to_graupel;
                     qgt[ijk] += rain_to_graupel;
-                    // thlt[ijk] += Lf<TF> / (cp<TF> * exner[k]) * rain_to_graupel;
 
                     qrt[ijk] -= rain_to_snow;
                     qst[ijk] += rain_to_snow;
-                    // thlt[ijk] += Lf<TF> / (cp<TF> * exner[k]) * rain_to_snow;
 
                     // Loss from ice.
                     dqi -= ice_to_snow;
                     qst[ijk] += ice_to_snow;
-                    // thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * ice_to_snow;
 
                     dqi -= ice_to_graupel;
                     qgt[ijk] += ice_to_graupel;
-                    // thlt[ijk] += Ls<TF> / (cp<TF> * exner[k]) * ice_to_graupel;
 
                     // Loss from snow.
                     qst[ijk] -= snow_to_graupel;
@@ -735,20 +726,16 @@ namespace
 
                     qst[ijk] -= snow_to_vapor;
                     dqv += snow_to_vapor;
-                    // thlt[ijk] -= Ls<TF> / (cp<TF> * exner[k]) * snow_to_vapor;
 
                     qst[ijk] -= snow_to_rain;
                     qrt[ijk] += snow_to_rain;
-                    // thlt[ijk] -= Lf<TF> / (cp<TF> * exner[k]) * snow_to_rain;
 
                     // Loss from graupel.
                     qgt[ijk] -= graupel_to_rain;
                     qrt[ijk] += graupel_to_rain;
-                    // thlt[ijk] -= Lf<TF> / (cp<TF> * exner[k]) * graupel_to_rain;
 
                     qgt[ijk] -= graupel_to_vapor;
                     dqv += graupel_to_vapor;
-                    // thlt[ijk] -= Ls<TF> / (cp<TF> * exner[k]) * graupel_to_vapor;
 
                     TF qc_end = ql[ijk] + dqc * dt;
                     TF qi_end = qi[ijk] + dqi * dt;
@@ -860,39 +847,6 @@ namespace
 
                 }
         }
-    }
-
-    // Bergeron.
-    template<typename TF>
-    void bergeron(
-            TF* const restrict qst,
-            TF* const restrict qtt, TF* const restrict thlt,
-            const TF* const restrict ql, const TF* const restrict qi,
-            const TF* const restrict rho, const TF* const restrict exner,
-            const TF delta_t,
-            const int istart, const int jstart, const int kstart,
-            const int iend, const int jend, const int kend,
-            const int jj, const int kk)
-    {
-        constexpr TF m_i40 = TF(2.46e-10);
-        constexpr TF m_i50 = TF(4.8e-10);
-        constexpr TF R_i50 = TF(5.e-5);
-
-        // constexpr TF a1 = 
-        // constexpr TF a2 = 
-
-        // constexpr TF delta_t1 =
-        //     ( std::pow(m_i50, TF(1.) - a_2) - std::pow(m_i40, TF(1.) - a_2) )
-        //     / (a_1 * (TF(1.) - a_2));
-
-        for (int k=kstart; k<kend; k++)
-            for (int j=jstart; j<jend; j++)
-                #pragma ivdep
-                for (int i=istart; i<iend; i++)
-                {
-                    const int ijk = i + j*jj + k*kk;
-                    // To be filled in.
-                }
     }
 
     // Sedimentation based on Stevens and Seifert (2008)

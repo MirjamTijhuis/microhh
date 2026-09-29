@@ -1412,63 +1412,22 @@ void Thermo_moist<TF>::exec(const double dt, Stats<TF>& stats)
 
     // calculate sum of hydrometeors
     auto qhm = fields.get_tmp();
+    std::fill(qhm->fld.begin(), qhm->fld.end(), TF(0));
 
-    if (fields.sp.find("qh") != fields.sp.end())
+    for (const std::string qhm_name : {"qh", "qi", "qs", "qg", "qr"})
     {
-        std::string error = "qh exists, hence double moment micro with ice";
-        // std::cout<<error<<std::endl;
-        calc_hydrometeors_double_ice(
-                qhm->fld.data(),
-                fields.sp.at("qi")->fld.data(),
-                fields.sp.at("qs")->fld.data(),
-                fields.sp.at("qh")->fld.data(),
-                fields.sp.at("qr")->fld.data(),
-                fields.sp.at("qg")->fld.data(),
-                gd.istart, gd.iend,
-                gd.jstart, gd.jend,
-                gd.kstart, gd.kend,
-                gd.icells, gd.ijcells
-        );
-    }
-    else if (fields.sp.find("qs") != fields.sp.end())
-    {
-        std::string error = "qh does not exist, but qs does, hence single moment micro";
-        // std::cout<<error<<std::endl;
-        calc_hydrometeors_single(
-                qhm->fld.data(),
-                fields.sp.at("qs")->fld.data(),
-                fields.sp.at("qr")->fld.data(),
-                fields.sp.at("qg")->fld.data(),
-                gd.istart, gd.iend,
-                gd.jstart, gd.jend,
-                gd.kstart, gd.kend,
-                gd.icells, gd.ijcells
-        );
-    }
-    else if (fields.sp.find("qr") != fields.sp.end())
-    {
-        std::string error = "qh and qs do not exist, but qr does, hence double moment micro without ice / 2mom warm";
-        // std::cout<<error<<std::endl;
-        calc_hydrometeors_double_warm(
-                qhm->fld.data(),
-                fields.sp.at("qr")->fld.data(),
-                gd.istart, gd.iend,
-                gd.jstart, gd.jend,
-                gd.kstart, gd.kend,
-                gd.icells, gd.ijcells
-        );
-    }
-    else
-    {
-        std::string error = "no prognostic hydrometeors";
-        // std::cout<<error<<std::endl;
-        calc_hydrometeors_no_micro(
-                qhm->fld.data(),
-                gd.istart, gd.iend,
-                gd.jstart, gd.jend,
-                gd.kstart, gd.kend,
-                gd.icells, gd.ijcells
-        );
+        auto it = fields.sp.find(qhm_name);
+        if (it != fields.sp.end())
+        {
+            add_hydrometeor(
+                    qhm->fld.data(),
+                    it->second->fld.data(),
+                    gd.istart, gd.iend,
+                    gd.jstart, gd.jend,
+                    gd.kstart, gd.kend,
+                    gd.icells, gd.ijcells
+            );
+        }
     }
 
     if (bs.swupdatebasestate)
@@ -1666,66 +1625,25 @@ void Thermo_moist<TF>::get_thermo_field(
         base = bs;
 
     // calculate sum of hydrometeors
-     auto qhm = fields.get_tmp();
+    auto qhm = fields.get_tmp();
+    std::fill(qhm->fld.begin(), qhm->fld.end(), TF(0));
 
     if (name == "b" || name == "b_h" || name == "thv")
     {
-        if (fields.sp.find("qh") != fields.sp.end())
+        for (const std::string qhm_name : {"qh", "qi", "qs", "qg", "qr"})
         {
-            std::string error = "qh exists, hence double moment micro with ice";
-            // std::cout<<error<<std::endl;
-            calc_hydrometeors_double_ice(
-                    qhm->fld.data(),
-                    fields.sp.at("qi")->fld.data(),
-                    fields.sp.at("qs")->fld.data(),
-                    fields.sp.at("qh")->fld.data(),
-                    fields.sp.at("qr")->fld.data(),
-                    fields.sp.at("qg")->fld.data(),
-                    gd.istart, gd.iend,
-                    gd.jstart, gd.jend,
-                    gd.kstart, gd.kend,
-                    gd.icells, gd.ijcells
-            );
-        }
-        else if (fields.sp.find("qs") != fields.sp.end())
-        {
-            std::string error = "qh does not exist, but qs does, hence single moment micro";
-            // std::cout<<error<<std::endl;
-            calc_hydrometeors_single(
-                    qhm->fld.data(),
-                    fields.sp.at("qs")->fld.data(),
-                    fields.sp.at("qr")->fld.data(),
-                    fields.sp.at("qg")->fld.data(),
-                    gd.istart, gd.iend,
-                    gd.jstart, gd.jend,
-                    gd.kstart, gd.kend,
-                    gd.icells, gd.ijcells
-            );
-        }
-        else if (fields.sp.find("qr") != fields.sp.end())
-        {
-            std::string error = "qh and qs do not exist, but qr does, hence double moment micro without ice / 2mom warm";
-            // std::cout<<error<<std::endl;
-            calc_hydrometeors_double_warm(
-                    qhm->fld.data(),
-                    fields.sp.at("qr")->fld.data(),
-                    gd.istart, gd.iend,
-                    gd.jstart, gd.jend,
-                    gd.kstart, gd.kend,
-                    gd.icells, gd.ijcells
-            );
-        }
-        else
-        {
-            std::string error = "no prognostic hydrometeors";
-            // std::cout<<error<<std::endl;
-            calc_hydrometeors_no_micro(
-                    qhm->fld.data(),
-                    gd.istart, gd.iend,
-                    gd.jstart, gd.jend,
-                    gd.kstart, gd.kend,
-                    gd.icells, gd.ijcells
-            );
+            auto it = fields.sp.find(qhm_name);
+            if (it != fields.sp.end())
+            {
+                add_hydrometeor(
+                        qhm->fld.data(),
+                        it->second->fld.data(),
+                        gd.istart, gd.iend,
+                        gd.jstart, gd.jend,
+                        gd.kstart, gd.kend,
+                        gd.icells, gd.ijcells
+                );
+            }
         }
     }
 

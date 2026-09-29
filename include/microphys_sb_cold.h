@@ -477,6 +477,26 @@ namespace Sb_cold
     }
 
     template<typename TF>
+    void relax_ina(
+            TF* const restrict ina,
+            const TF* const restrict qi,
+            const TF dt,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int jstride)
+    {
+        const TF tau_inact = 600;
+
+        for (int j=jstart; j<jend; ++j)
+            for (int i=istart; i<iend; ++i)
+            {
+                const int ij = i + j * jstride;
+                if (qi[ij] < q_crit_ii<TF>)   // qi == 0 in ICON, but applied after clipping
+                    ina[ij] -= ina[ij]*(1/tau_inact)*dt;
+            }
+    }
+
+    template<typename TF>
     void sedi_vel_rain(
             TF* const restrict vq,
             TF* const restrict vn,

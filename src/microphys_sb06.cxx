@@ -161,6 +161,39 @@ Microphys_sb06<TF>::Microphys_sb06(
     bool sw_satadjust_qi = inputin.get_item<bool>("thermo", "swsatadjust_qi", "", true);
     sw_thl_deep = inputin.get_item<bool>("thermo", "swthldeep", "", false);
 
+    std::string swadvec = inputin.get_item<std::string>("advec", "swadvec", "", "2");
+    std::vector<std::string> fluxlimit_list = inputin.get_list<std::string>("advec", "fluxlimit_list", "", std::vector<std::string>());
+    std::vector<std::string> limit_list = inputin.get_list<std::string>("limiter", "limitlist", "", std::vector<std::string>());
+    std::vector<std::string> clip_list = inputin.get_list<std::string>("limiter", "cliplist", "", std::vector<std::string>());
+
+    std::vector<std::string> species;
+    if (sw_ice)
+        species = {"qr", "nr", "qi", "ni", "qs", "ns", "qh", "nh", "qg", "ng", "ina"};
+    else
+        species = {"qr", "nr"};
+
+    for (auto& name : species)
+    {
+        if (swadvec == "2i5" || swadvec == "2i62")
+            if (std::find(fluxlimit_list.begin(), fluxlimit_list.end(), name) == fluxlimit_list.end())
+            {
+                std::string warning = "WARNING: variable: " + name + " not in fluxlimiter.";
+                master.print_warning(warning);
+            }
+
+        if (std::find(limit_list.begin(), limit_list.end(), name) == limit_list.end())
+        {
+            std::string warning = "WARNING: variable: " + name + " not in limiter.";
+            master.print_warning(warning);
+        }
+
+        if (std::find(clip_list.begin(), clip_list.end(), name) == clip_list.end())
+        {
+            std::string warning = "WARNING: variable: " + name + " not in clipper.";
+            master.print_warning(warning);
+        }
+    }
+
     // Option to disable saturation adjustment ql and qi (new).
     if (sw_satadjust_ql && sw_satadjust_qi)
         if (sw_thl_deep)
@@ -1068,6 +1101,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
     // More tmp slices :-)
     auto tmpxy1 = fields.get_tmp_xy();
     auto tmpxy2 = fields.get_tmp_xy();
+    auto ina_slice = fields.get_tmp_xy();
 
     // Deposition rate ice/snow; shared between kernels.
     auto dep_rate_ice  = fields.get_tmp_xy();
@@ -1394,6 +1428,22 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 it.second.conversion_tend[n] = TF(0);
         }
 
+        zero_tmp_xy(ina_slice);
+        Sb_common::copy_slice_and_integrate(
+                (*ina_slice).data(),
+                fields.sp.at("ina")->fld.data(),
+                fields.st.at("ina")->fld.data(),
+                rho.data(),
+                TF(dt),
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.icells, gd.ijcells, k);
+
+        Sb_common::limit_slice((*ina_slice).data(),
+                               gd.istart, gd.iend,
+                               gd.jstart, gd.jend,
+                               gd.icells);
+
         // fill slice of qv_old
         for (int j = gd.jstart; j < gd.jend; j++)
         #pragma ivdep
@@ -1666,7 +1716,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     (*qv_new).data(),
                     hydro_types.at("qi").slice,
                     hydro_types.at("ni").slice,
-                    &fields.st.at("ina")->fld.data()[k*gd.ijcells],
+                    (*ina_slice).data(),
                     (*ql_new).data(),
                     (*T_slice).data(),
                     (*w_slice).data(),
@@ -2505,6 +2555,24 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     k);
         }
 
+        // relaxation of activated IN number density to zero
+        Sb_cold::relax_ina(
+                (*ina_slice).data(),
+                hydro_types.at("qi").slice,
+                TF(dt),
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.icells);
+
+        Sb_common::diagnose_tendency(
+                fields.st.at("ina")->fld.data(),
+                fields.sp.at("ina")->fld.data(),
+                (*ina_slice).data(),
+                rho.data(),
+                TF(dt),
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.icells, gd.ijcells, k);
 
         // Calculate thermodynamic tendencies `thl` and `qt`,
         // from microphysics tendencies excluding sedimentation as in ICON.
@@ -2604,6 +2672,7 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
 
     fields.release_tmp_xy(tmpxy1);
     fields.release_tmp_xy(tmpxy2);
+    fields.release_tmp_xy(ina_slice);
 
     fields.release_tmp_xy(dep_rate_ice);
     fields.release_tmp_xy(dep_rate_snow);
