@@ -528,36 +528,36 @@ namespace
                         thl_end = T_end/exner[k] / (1 + Constants::Lv<Float>*qc/(Constants::cp<Float> * T_end)
                                 + Constants::Ls<Float>*qi/(Constants::cp<Float> * T_end));
 
-                        // thlF
-                        thl_start = T_start[ijk_nogc]/exner[k] / (1   + Constants::Lv<Float>*qc/(Constants::cp<Float> * std::max(T_start[ijk_nogc], Float(253)))
-                                                    + Constants::Ls<Float>*qi/(Constants::cp<Float> * std::max(T_start[ijk_nogc], Float(253))));
-                        thl_end = T_end/exner[k] / (1   + Constants::Lv<Float>*qc/(Constants::cp<Float> * std::max(T_end, Float(253)))
-                                                         + Constants::Ls<Float>*qi/(Constants::cp<Float> * std::max(T_end, Float(253))));
-
-                        // thlG
-                        const Float qv = h2o[ijk_nogc] * Constants::ep<Float> / (1 + h2o[ijk_nogc] * Constants::ep<Float>);
-                        const Float qt = qv + qc + qi;
-                        const Float chi = (Constants::Rd<Float> + Constants::Rv<Float> * qt) / (Constants::cp<Float> + Constants::cpv<Float> * qt);
-                        const Float gamma = (Constants::Rv<Float> * qt) / (Constants::cp<Float> + Constants::cpv<Float> * qt);
-                        const Float epsilon = Constants::Rd<Float> / Constants::Rv<Float>;
-                        const Float lv1 = Constants::Lv<Float> + (Constants::cl<Float> - Constants::cpv<Float>) * Constants::T0<Float>;
-                        const Float lv2 = Constants::cl<Float> - Constants::cpv<Float>;
-                        const Float ls1 = Constants::Ls<Float> + (Constants::ci<Float> - Constants::cpv<Float>) * Constants::T0<Float>;
-                        const Float ls2 = Constants::ci<Float> - Constants::cpv<Float>;
-
-                        const Float Lv_T_start = lv1 - lv2 * T_start[ijk_nogc];
-                        const Float Ls_T_start = ls1 - ls2 * T_start[ijk_nogc];
-                        thl_start = T_start[ijk_nogc] * pow((Constants::p0<Float>/p[k]), chi)
-                                  * pow((1 - (qc + qi) / (epsilon + qt)), chi)
-                                  * pow((1 - (qc + qi) / qt), -gamma)
-                                  * std::exp((-Lv_T_start * qc - Ls_T_start * qi) / ((Constants::cp<Float> + Constants::cpv<Float> * qt) * T_start[ijk_nogc]));
-                        
-                        const Float Lv_T_end = lv1 - lv2 * T_end;
-                        const Float Ls_T_end = ls1 - ls2 * T_end;
-                        thl_end = T_end * pow((Constants::p0<Float>/p[k]), chi)
-                                        * pow((1 - (qc + qi) / (epsilon + qt)), chi)
-                                        * pow((1 - (qc + qi) / qt), -gamma)
-                                        * std::exp((-Lv_T_end * qc - Ls_T_end * qi) / ((Constants::cp<Float> + Constants::cpv<Float> * qt) * T_end));
+//                        // thlF
+//                        thl_start = T_start[ijk_nogc]/exner[k] / (1   + Constants::Lv<Float>*qc/(Constants::cp<Float> * std::max(T_start[ijk_nogc], Float(253)))
+//                                                    + Constants::Ls<Float>*qi/(Constants::cp<Float> * std::max(T_start[ijk_nogc], Float(253))));
+//                        thl_end = T_end/exner[k] / (1   + Constants::Lv<Float>*qc/(Constants::cp<Float> * std::max(T_end, Float(253)))
+//                                                         + Constants::Ls<Float>*qi/(Constants::cp<Float> * std::max(T_end, Float(253))));
+//
+//                        // thlG
+//                        const Float qv = h2o[ijk_nogc] * Constants::ep<Float> / (1 + h2o[ijk_nogc] * Constants::ep<Float>);
+//                        const Float qt = qv + qc + qi;
+//                        const Float chi = (Constants::Rd<Float> + Constants::Rv<Float> * qt) / (Constants::cp<Float> + Constants::cpv<Float> * qt);
+//                        const Float gamma = (Constants::Rv<Float> * qt) / (Constants::cp<Float> + Constants::cpv<Float> * qt);
+//                        const Float epsilon = Constants::Rd<Float> / Constants::Rv<Float>;
+//                        const Float lv1 = Constants::Lv<Float> + (Constants::cl<Float> - Constants::cpv<Float>) * Constants::T0<Float>;
+//                        const Float lv2 = Constants::cl<Float> - Constants::cpv<Float>;
+//                        const Float ls1 = Constants::Ls<Float> + (Constants::ci<Float> - Constants::cpv<Float>) * Constants::T0<Float>;
+//                        const Float ls2 = Constants::ci<Float> - Constants::cpv<Float>;
+//
+//                        const Float Lv_T_start = lv1 - lv2 * T_start[ijk_nogc];
+//                        const Float Ls_T_start = ls1 - ls2 * T_start[ijk_nogc];
+//                        thl_start = T_start[ijk_nogc] * pow((Constants::p0<Float>/p[k]), chi)
+//                                  * pow((1 - (qc + qi) / (epsilon + qt)), chi)
+//                                  * pow((1 - (qc + qi) / qt), -gamma)
+//                                  * std::exp((-Lv_T_start * qc - Ls_T_start * qi) / ((Constants::cp<Float> + Constants::cpv<Float> * qt) * T_start[ijk_nogc]));
+//
+//                        const Float Lv_T_end = lv1 - lv2 * T_end;
+//                        const Float Ls_T_end = ls1 - ls2 * T_end;
+//                        thl_end = T_end * pow((Constants::p0<Float>/p[k]), chi)
+//                                        * pow((1 - (qc + qi) / (epsilon + qt)), chi)
+//                                        * pow((1 - (qc + qi) / qt), -gamma)
+//                                        * std::exp((-Lv_T_end * qc - Ls_T_end * qi) / ((Constants::cp<Float> + Constants::cpv<Float> * qt) * T_end));
 
                     }
                     else if (sw_satadjust == Satadjust_type::Liquid_shallow)
@@ -572,30 +572,30 @@ namespace
                         thl_start = T_start[ijk_nogc] /exner[k] / (1 + Constants::Lv<Float>*qc/(Constants::cp<Float> * T_start[ijk_nogc]));
                         thl_end = T_end/exner[k] / (1 + Constants::Lv<Float>*qc/(Constants::cp<Float> * T_end));
                         
-                        // thlF
-                        thl_start = T_start[ijk_nogc]/exner[k] / (1   + Constants::Lv<Float>*qc/(Constants::cp<Float> * std::max(T_start[ijk_nogc], Float(253))));
-                        thl_end = T_end/exner[k] / (1   + Constants::Lv<Float>*qc/(Constants::cp<Float> * std::max(T_end, Float(253))));
-
-                        // thlG
-                        const Float qv = h2o[ijk_nogc] * Constants::ep<Float> / (1 + h2o[ijk_nogc] * Constants::ep<Float>);
-                        const Float qt = qv + qc;
-                        const Float chi = (Constants::Rd<Float> + Constants::Rv<Float> * qt) / (Constants::cp<Float> + Constants::cpv<Float> * qt);
-                        const Float gamma = (Constants::Rv<Float> * qt) / (Constants::cp<Float> + Constants::cpv<Float> * qt);
-                        const Float epsilon = Constants::Rd<Float> / Constants::Rv<Float>;
-                        const Float lv1 = Constants::Lv<Float> + (Constants::cl<Float> - Constants::cpv<Float>) * Constants::T0<Float>;
-                        const Float lv2 = Constants::cl<Float> - Constants::cpv<Float>;
-
-                        const Float Lv_T_start = lv1 - lv2 * T_start[ijk_nogc];
-                        thl_start = T_start[ijk_nogc] * pow((Constants::p0<Float>/p[k]), chi)
-                                    * pow((1 - (qc) / (epsilon + qt)), chi)
-                                    * pow((1 - (qc) / qt), -gamma)
-                                    * std::exp((-Lv_T_start * qc) / ((Constants::cp<Float> + Constants::cpv<Float> * qt) * T_start[ijk_nogc]));
-
-                        const Float Lv_T_end = lv1 - lv2 * T_end;
-                        thl_end = T_end * pow((Constants::p0<Float>/p[k]), chi)
-                                  * pow((1 - qc / (epsilon + qt)), chi)
-                                  * pow((1 - qc / qt), -gamma)
-                                  * std::exp((-Lv_T_end * qc) / ((Constants::cp<Float> + Constants::cpv<Float> * qt) * T_end));
+//                        // thlF
+//                        thl_start = T_start[ijk_nogc]/exner[k] / (1   + Constants::Lv<Float>*qc/(Constants::cp<Float> * std::max(T_start[ijk_nogc], Float(253))));
+//                        thl_end = T_end/exner[k] / (1   + Constants::Lv<Float>*qc/(Constants::cp<Float> * std::max(T_end, Float(253))));
+//
+//                        // thlG
+//                        const Float qv = h2o[ijk_nogc] * Constants::ep<Float> / (1 + h2o[ijk_nogc] * Constants::ep<Float>);
+//                        const Float qt = qv + qc;
+//                        const Float chi = (Constants::Rd<Float> + Constants::Rv<Float> * qt) / (Constants::cp<Float> + Constants::cpv<Float> * qt);
+//                        const Float gamma = (Constants::Rv<Float> * qt) / (Constants::cp<Float> + Constants::cpv<Float> * qt);
+//                        const Float epsilon = Constants::Rd<Float> / Constants::Rv<Float>;
+//                        const Float lv1 = Constants::Lv<Float> + (Constants::cl<Float> - Constants::cpv<Float>) * Constants::T0<Float>;
+//                        const Float lv2 = Constants::cl<Float> - Constants::cpv<Float>;
+//
+//                        const Float Lv_T_start = lv1 - lv2 * T_start[ijk_nogc];
+//                        thl_start = T_start[ijk_nogc] * pow((Constants::p0<Float>/p[k]), chi)
+//                                    * pow((1 - (qc) / (epsilon + qt)), chi)
+//                                    * pow((1 - (qc) / qt), -gamma)
+//                                    * std::exp((-Lv_T_start * qc) / ((Constants::cp<Float> + Constants::cpv<Float> * qt) * T_start[ijk_nogc]));
+//
+//                        const Float Lv_T_end = lv1 - lv2 * T_end;
+//                        thl_end = T_end * pow((Constants::p0<Float>/p[k]), chi)
+//                                  * pow((1 - qc / (epsilon + qt)), chi)
+//                                  * pow((1 - qc / qt), -gamma)
+//                                  * std::exp((-Lv_T_end * qc) / ((Constants::cp<Float> + Constants::cpv<Float> * qt) * T_end));
                     }
 
                     const Float dthl_from_dT = (thl_end - thl_start)/dt;
