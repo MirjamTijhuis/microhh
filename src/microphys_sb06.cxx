@@ -159,6 +159,7 @@ Microphys_sb06<TF>::Microphys_sb06(
     // Option to disable saturation adjustment ql and qi
     bool sw_satadjust_ql = inputin.get_item<bool>("thermo", "swsatadjust_ql", "", true);
     bool sw_satadjust_qi = inputin.get_item<bool>("thermo", "swsatadjust_qi", "", true);
+    sw_thl_deep = inputin.get_item<bool>("thermo", "swthldeep", "", false);
 
     std::string swadvec = inputin.get_item<std::string>("advec", "swadvec", "", "2");
     std::vector<std::string> fluxlimit_list = inputin.get_list<std::string>("advec", "fluxlimit_list", "", std::vector<std::string>());
