@@ -621,6 +621,37 @@ namespace Sb_common
     }
 
     template<typename TF>
+    void calc_radiation_fields_warm(
+            TF* restrict ciwp,
+            TF* restrict ni_rad,
+            const TF* const restrict ph,
+            const TF* const restrict rho,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int igc, const int jgc, const int kgc,
+            const int jj, const int kk,
+            const int jj_nogc, const int kk_nogc)
+    {
+        // This routine strips off the ghost cells, because of the data handling in radiation.
+#pragma omp parallel for
+        for (int k=kstart; k<kend; ++k)
+        {
+            const TF dpg = (ph[k] - ph[k+1]) / Constants::grav<TF>;
+            for (int j=jstart; j<jend; ++j)
+#pragma ivdep
+                    for (int i=istart; i<iend; ++i)
+                    {
+                        const int ijk = i + j*jj + k*kk;
+                        const int ijk_nogc = (i-igc) + (j-jgc)*jj_nogc + (k-kgc)*kk_nogc;
+
+                        ciwp[ijk_nogc] = TF(0.);
+                        ni_rad[ijk_nogc] = TF(0.);       // conversion from kg-1 to m-3
+                    }
+        }
+    }
+
+    template<typename TF>
     void calc_radiation_columns(
             TF* const restrict ciwp,
             TF* const restrict ni_rad,

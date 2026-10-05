@@ -1415,21 +1415,25 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                 it.second.conversion_tend[n] = TF(0);
         }
 
-        zero_tmp_xy(ina_slice);
-        Sb_common::copy_slice_and_integrate(
-                (*ina_slice).data(),
-                fields.sp.at("ina")->fld.data(),
-                fields.st.at("ina")->fld.data(),
-                rho.data(),
-                TF(dt),
-                gd.istart, gd.iend,
-                gd.jstart, gd.jend,
-                gd.icells, gd.ijcells, k);
+        if (sw_ice)
+        {
+            zero_tmp_xy(ina_slice);
+            Sb_common::copy_slice_and_integrate(
+                    (*ina_slice).data(),
+                    fields.sp.at("ina")->fld.data(),
+                    fields.st.at("ina")->fld.data(),
+                    rho.data(),
+                    TF(dt),
+                    gd.istart, gd.iend,
+                    gd.jstart, gd.jend,
+                    gd.icells, gd.ijcells, k);
 
-        Sb_common::limit_slice((*ina_slice).data(),
-                               gd.istart, gd.iend,
-                               gd.jstart, gd.jend,
-                               gd.icells);
+            Sb_common::limit_slice((*ina_slice).data(),
+                                   gd.istart, gd.iend,
+                                   gd.jstart, gd.jend,
+                                   gd.icells);
+        }
+
 
         // fill slice of qv_old
         for (int j = gd.jstart; j < gd.jend; j++)
@@ -2542,24 +2546,27 @@ void Microphys_sb06<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<
                     k);
         }
 
-        // relaxation of activated IN number density to zero
-        Sb_cold::relax_ina(
-                (*ina_slice).data(),
-                hydro_types.at("qi").slice,
-                TF(dt),
-                gd.istart, gd.iend,
-                gd.jstart, gd.jend,
-                gd.icells);
+        if (sw_ice)
+        {
+            // relaxation of activated IN number density to zero
+            Sb_cold::relax_ina(
+                    (*ina_slice).data(),
+                    hydro_types.at("qi").slice,
+                    TF(dt),
+                    gd.istart, gd.iend,
+                    gd.jstart, gd.jend,
+                    gd.icells);
 
-        Sb_common::diagnose_tendency(
-                fields.st.at("ina")->fld.data(),
-                fields.sp.at("ina")->fld.data(),
-                (*ina_slice).data(),
-                rho.data(),
-                TF(dt),
-                gd.istart, gd.iend,
-                gd.jstart, gd.jend,
-                gd.icells, gd.ijcells, k);
+            Sb_common::diagnose_tendency(
+                    fields.st.at("ina")->fld.data(),
+                    fields.sp.at("ina")->fld.data(),
+                    (*ina_slice).data(),
+                    rho.data(),
+                    TF(dt),
+                    gd.istart, gd.iend,
+                    gd.jstart, gd.jend,
+                    gd.icells, gd.ijcells, k);
+        }
 
         // Calculate thermodynamic tendencies `thl` and `qt`,
         // from microphysics tendencies excluding sedimentation as in ICON.
@@ -2941,19 +2948,32 @@ void Microphys_sb06<TF>::get_radiation_fields(Thermo<TF>& thermo, Field3d<TF> & 
     const std::vector<TF>& ph = thermo.get_basestate_vector("ph");
     const std::vector<TF>& rho = fields.rhoref;
 
-    Sb_common::calc_radiation_fields(
-            ciwp.fld.data(),
-            ni.fld.data(),
-            fields.ap.at("qi")->fld.data(),
-            fields.ap.at("ni")->fld.data(),
-            ph.data(),
-            rho.data(),
-            gd.istart, gd.iend,
-            gd.jstart, gd.jend,
-            gd.kstart, gd.kend,
-            gd.igc, gd.jgc, gd.kgc,
-            gd.icells, gd.ijcells,
-            gd.imax, gd.imax*gd.jmax);
+    if (sw_ice)
+        Sb_common::calc_radiation_fields(
+                ciwp.fld.data(),
+                ni.fld.data(),
+                fields.ap.at("qi")->fld.data(),
+                fields.ap.at("ni")->fld.data(),
+                ph.data(),
+                rho.data(),
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.kstart, gd.kend,
+                gd.igc, gd.jgc, gd.kgc,
+                gd.icells, gd.ijcells,
+                gd.imax, gd.imax*gd.jmax);
+    else
+        Sb_common::calc_radiation_fields_warm(
+                ciwp.fld.data(),
+                ni.fld.data(),
+                ph.data(),
+                rho.data(),
+                gd.istart, gd.iend,
+                gd.jstart, gd.jend,
+                gd.kstart, gd.kend,
+                gd.igc, gd.jgc, gd.kgc,
+                gd.icells, gd.ijcells,
+                gd.imax, gd.imax*gd.jmax);
 }
 
 template<typename TF>
