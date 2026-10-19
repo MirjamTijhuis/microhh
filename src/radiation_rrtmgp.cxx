@@ -2414,7 +2414,7 @@ void Radiation_rrtmgp<TF>::exec_longwave(
 
                     // Calculate the effective radius of ice from the mass and the number concentration.
                     Float dei_value = ciwp_subset({icol, ilay}) > Float(0.) ?
-                        2 * 1.e6 * std::pow((ciwp_subset({icol, ilay})/layer_thickness) / four_third_pi_Ni0_rho_i, (1./3.)) : Float(0.);
+                        2 * 1.e6 * fac * std::pow((ciwp_subset({icol, ilay})/layer_thickness) / four_third_pi_Ni0_rho_i, (1./3.)) : Float(0.);
 
                     // Limit the values between 10. and 180 (limits of cloud optics lookup table).
                     dei({icol, ilay}) = std::max(Float(10.), std::min(dei_value, Float(180.)));
@@ -2636,7 +2636,7 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
 
                     // Calculate the effective radius of ice from the mass and the number concentration.
                     Float dei_value = ciwp_subset({icol, ilay}) > Float(0.) ?
-                        2* 1.e6 * std::pow((ciwp_subset({icol, ilay})/layer_thickness) / four_third_pi_Ni0_rho_i, (1./3.)) : Float(0.);
+                        2* 1.e6 * fac * std::pow((ciwp_subset({icol, ilay})/layer_thickness) / four_third_pi_Ni0_rho_i, (1./3.)) : Float(0.);
 
                     // Limit the values between 10. and 180 (limits of cloud optics lookup table).
                     dei({icol, ilay}) = std::max(Float(10.), std::min(dei_value, Float(180.)));
