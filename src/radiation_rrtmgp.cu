@@ -141,7 +141,7 @@ namespace
 
     __global__
     void effective_radius_and_ciwp_to_gm2(
-            Float* __restrict__ rel, Float* __restrict__ rei,
+            Float* __restrict__ rel, Float* __restrict__ dei,
             Float* __restrict__ clwp, Float* __restrict__ ciwp,
             const Float* __restrict__ dz,
             const int ncol, const int nlay, const int kstart,
@@ -157,10 +157,10 @@ namespace
             const int idx = icol + ilay*ncol;
             const int idx_z = ilay + kstart;
             const Float rel_local = clwp[idx] > Float(0.) ? Float(1.e6) * sig_g_fac * pow(clwp[idx] / dz[idx_z] / four_third_pi_N0_rho_w, Float(1.)/Float(3.)) : Float(0.);
-            const Float rei_local = ciwp[idx] > Float(0.) ? Float(1.e6) * sig_g_fac * pow(ciwp[idx] / dz[idx_z] / four_third_pi_N0_rho_i, Float(1.)/Float(3.)) : Float(0.);
+            const Float dei_local = ciwp[idx] > Float(0.) ? Float(2.) * Float(1.e6) * sig_g_fac * pow(ciwp[idx] / dz[idx_z] / four_third_pi_N0_rho_i, Float(1.)/Float(3.)) : Float(0.);
 
             rel[idx] = max(Float(2.5), min(rel_local, Float(21.5)));
-            rei[idx] = max(Float(10.), min(rei_local, Float(180.)));
+            dei[idx] = max(Float(10.), min(dei_local, Float(180.)));
 
             clwp[idx] *= Float(1.e3);
             ciwp[idx] *= Float(1.e3);
@@ -493,9 +493,9 @@ namespace
         Float radliq_upr = coef_nc.get_variable<Float>("radliq_upr");
         Float radliq_fac = coef_nc.get_variable<Float>("radliq_fac");
 
-        Float radice_lwr = coef_nc.get_variable<Float>("radice_lwr");
-        Float radice_upr = coef_nc.get_variable<Float>("radice_upr");
-        Float radice_fac = coef_nc.get_variable<Float>("radice_fac");
+        Float diamice_lwr = coef_nc.get_variable<Float>("diamice_lwr");
+        Float diamice_upr = coef_nc.get_variable<Float>("diamice_upr");
+        Float diamice_fac = coef_nc.get_variable<Float>("diamice_fac");
 
         Array<Float,2> lut_extliq(
                 coef_nc.get_variable<Float>("lut_extliq", {n_band, n_size_liq}), {n_size_liq, n_band});
@@ -514,7 +514,7 @@ namespace
         return Cloud_optics_gpu(
                 band_lims_wvn,
                 radliq_lwr, radliq_upr, radliq_fac,
-                radice_lwr, radice_upr, radice_fac,
+                diamice_lwr, diamice_upr, diamice_fac,
                 lut_extliq, lut_ssaliq, lut_asyliq,
                 lut_extice, lut_ssaice, lut_asyice);
     }
@@ -777,10 +777,10 @@ void Radiation_rrtmgp<TF>::exec_longwave(
             auto clwp_subset = clwp.subset({{ {col_s_in, col_e_in}, {1, n_lay} }});
             auto ciwp_subset = ciwp.subset({{ {col_s_in, col_e_in}, {1, n_lay} }});
             Array_gpu<Float,2> rel({n_col_in, n_lay});
-            Array_gpu<Float,2> rei({n_col_in, n_lay});
+            Array_gpu<Float,2> dei({n_col_in, n_lay});
 
             effective_radius_and_ciwp_to_gm2<<<gridGPU_re, blockGPU_re>>>(
-                    rel.ptr(), rei.ptr(),
+                    rel.ptr(), dei.ptr(),
                     clwp_subset.ptr(), ciwp_subset.ptr(),
                     gd.dz_g,
                     n_col_in, n_lay, gd.kstart,
@@ -790,7 +790,7 @@ void Radiation_rrtmgp<TF>::exec_longwave(
                     clwp_subset,
                     ciwp_subset,
                     rel,
-                    rei,
+                    dei,
                     *cloud_optical_props_subset_in);
 
             // Add the cloud optical props to the gas optical properties.
@@ -986,10 +986,10 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
             auto clwp_subset = clwp.subset({{ {col_s_in, col_e_in}, {1, n_lay} }});
             auto ciwp_subset = ciwp.subset({{ {col_s_in, col_e_in}, {1, n_lay} }});
             Array_gpu<Float,2> rel({n_col_in, n_lay});
-            Array_gpu<Float,2> rei({n_col_in, n_lay});
+            Array_gpu<Float,2> dei({n_col_in, n_lay});
 
             effective_radius_and_ciwp_to_gm2<<<gridGPU_re, blockGPU_re>>>(
-                    rel.ptr(), rei.ptr(),
+                    rel.ptr(), dei.ptr(),
                     clwp_subset.ptr(), ciwp_subset.ptr(),
                     gd.dz_g,
                     n_col_in, n_lay, gd.kstart,
@@ -999,7 +999,7 @@ void Radiation_rrtmgp<TF>::exec_shortwave(
                     clwp_subset,
                     ciwp_subset,
                     rel,
-                    rei,
+                    dei,
                     *cloud_optical_props_subset_in);
 
             if (sw_delta_cloud)
