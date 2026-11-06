@@ -143,11 +143,15 @@ namespace
                 {
                     const int ijk = i + j*jj + k*kk;
                     const int ij  = i + j*jj;
-                    Struct_sat_adjust<TF> ssa =
-                            sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh_loc);
 
                     if constexpr (swphydro_3d)
+                    {
+                        ph_loc = ph[ijk];
                         exnh_loc = exner(ph[ijk]);
+                    }
+
+                    Struct_sat_adjust<TF> ssa =
+                            sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph_loc, exnh_loc);
 
                     wt[ijk] += buoyancy<TF, sw_satadjust>(exnh_loc, thlh[ij], qth[ij], ql[ij], qi[ij], thvrefh[k], ssa.t, qhmh[ij]);
                 }
@@ -322,8 +326,14 @@ namespace
                     for (int i=istart; i<iend; i++)
                     {
                         const int ijk = i + j*jj + k*kk;
+                        if constexpr (swphydro_3d)
+                        {
+                            p_loc = p[ijk];
+                            exn_loc = exner(p[ijk]);
+                        }
+
                         Struct_sat_adjust<TF> ssa =
-                                sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], exn_loc);
+                                sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p_loc, exn_loc);
                         b[ijk] = buoyancy<TF, sw_satadjust>(exn_loc, thl[ijk], qt[ijk], ql[ijk], qi[ijk], thvref[k], ssa.t, qhm[ijk]);
                     }
             }
@@ -420,8 +430,14 @@ namespace
                         const int ijk = i + j*jj + k*kk;
                         const int ij  = i + j*jj;
 
+                        if constexpr (swphydro_3d)
+                        {
+                            ph_loc = ph[ijk];
+                            exnh_loc = exner(ph[ijk]);
+                        }
+
                         Struct_sat_adjust<TF> ssa =
-                                sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh_loc);
+                                sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph_loc, exnh_loc);
 
                         bh[ijk] = buoyancy<TF, sw_satadjust>(exnh_loc, thlh[ij], qth[ij], ql[ij], qi[ij], thvrefh[k], ssa.t, qhmh[ij]);
                     }
@@ -665,7 +681,7 @@ namespace
                         exn_loc = exner(p[ijk]);
                     }
 
-                    Struct_sat_adjust<TF> ssa = sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], exn_loc);
+                    Struct_sat_adjust<TF> ssa = sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p_loc, exn_loc);
                     thv[ijk] = virtual_temperature<TF, sw_satadjust>(exn_loc, thl[ijk], qt[ijk], ssa.ql, ssa.qi, ssa.t, qhm[ijk]);
                 }
         }
@@ -695,7 +711,7 @@ namespace
                 const int ij = i + j*jj;
                 const int ijk = i + j*jj + kstart*kk;
 
-                if constexpr (!swphydro_3d)
+                if constexpr (swphydro_3d)
                     exnh = exner(ph[ijk]);
 
                 T_bot[ij] = exnh * threfh[kstart] + (interp2(th[ijk-kk], th[ijk]) - threfh[kstart]);
@@ -1406,7 +1422,6 @@ void Thermo_moist<TF>::init()
 
     bs.thl0.resize(gd.kcells);
     bs.qt0.resize(gd.kcells);
-    bs.qhm0.resize(gd.kcells);
     bs.thvref.resize(gd.kcells);
     bs.thvrefh.resize(gd.kcells);
     bs.exnref.resize(gd.kcells);
@@ -1455,7 +1470,6 @@ void Thermo_moist<TF>::save(const int iotime)
 
         fwrite(&bs.thl0 [gd.kstart], sizeof(TF), gd.ktot, pFile);
         fwrite(&bs.qt0  [gd.kstart], sizeof(TF), gd.ktot, pFile);
-        fwrite(&bs.qhm0  [gd.kstart], sizeof(TF), gd.ktot, pFile);
 
         fwrite(&bs.thvref [gd.kstart], sizeof(TF), gd.ktot  , pFile);
         fwrite(&bs.thvrefh[gd.kstart], sizeof(TF), gd.ktot+1, pFile);
@@ -1541,7 +1555,6 @@ void Thermo_moist<TF>::load(const int iotime)
 
             read(bs.thl0, gd.ktot);
             read(bs.qt0, gd.ktot);
-            read(bs.qhm0, gd.ktot);
 
             read(bs.thvref, gd.ktot);
             read(bs.thvrefh, gd.ktot+1);
@@ -1596,7 +1609,6 @@ void Thermo_moist<TF>::load(const int iotime)
     // Broadcast to other MPI tasks.
     master.broadcast(bs.thl0.data(), gd.kcells);
     master.broadcast(bs.qt0.data(), gd.kcells);
-    master.broadcast(bs.qhm0.data(), gd.kcells);
 
     master.broadcast(bs.thvref.data(), gd.kcells);
     master.broadcast(bs.thvrefh.data(), gd.kcells);
@@ -1645,12 +1657,6 @@ void Thermo_moist<TF>::create_basestate(
             gd.dzhi.data(),
             gd.kstart,
             gd.kend);
-
-    // MT: assume that the base state contains no hydrometeors
-    for (int k=0; k<gd.ktot; ++k)
-    {
-        bs.qhm0[k]  = TF(0.);
-    }
 
     // 4. Calculate the initial/reference base state
     auto calc_base_state_wrapper = [&]<Satadjust_type sw_satadjust>()
@@ -2241,15 +2247,15 @@ void Thermo_moist<TF>::get_thermo_field(
         }
         else {
             if (sw_satadjust == Satadjust_type::Liquid_ice)
-                calc_buoyancy_h_wrapper.template operator()<false, Satadjust_type::Liquid_ice>(base.pref);
+                calc_buoyancy_h_wrapper.template operator()<false, Satadjust_type::Liquid_ice>(base.prefh);
             else if (sw_satadjust == Satadjust_type::Liquid_shallow)
-                calc_buoyancy_h_wrapper.template operator()<false, Satadjust_type::Liquid_shallow>(base.pref);
+                calc_buoyancy_h_wrapper.template operator()<false, Satadjust_type::Liquid_shallow>(base.prefh);
             else if (sw_satadjust == Satadjust_type::Liquid_deep)
-                calc_buoyancy_h_wrapper.template operator()<false, Satadjust_type::Liquid_deep>(base.pref);
+                calc_buoyancy_h_wrapper.template operator()<false, Satadjust_type::Liquid_deep>(base.prefh);
             else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
-                calc_buoyancy_h_wrapper.template operator()<false, Satadjust_type::Liquid_ice_deep>(base.pref);
+                calc_buoyancy_h_wrapper.template operator()<false, Satadjust_type::Liquid_ice_deep>(base.prefh);
             else
-                calc_buoyancy_h_wrapper.template operator()<false, Satadjust_type::Disabled>(base.pref);
+                calc_buoyancy_h_wrapper.template operator()<false, Satadjust_type::Disabled>(base.prefh);
         }
 
         fields.release_tmp(tmp);
@@ -2295,7 +2301,7 @@ void Thermo_moist<TF>::get_thermo_field(
                     fld.fld.data(),
                     fields.sp.at("thl")->fld.data(),
                     fields.sp.at("qt")->fld.data(),
-                    base.prefh.data(),
+                    p.data(),
                     &tmp->fld[0*gd.ijcells],
                     &tmp->fld[1*gd.ijcells],
                     gd.istart, gd.iend,
@@ -3016,19 +3022,16 @@ void Thermo_moist<TF>::create_phydro_3d(Timeloop<TF>& timeloop)
                     gd.icells, gd.ijcells);
         };
 
-        if (swphydro_3d && swtimedep_phydro_3d)
-        {
-            if (sw_satadjust == Satadjust_type::Liquid_ice)
-                calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_ice>();
-            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
-                calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
-            else if (sw_satadjust == Satadjust_type::Liquid_deep)
-                calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_deep>();
-            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
-                calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_ice_deep>();
-            else
-                calc_phydro_3d_wrapper.template operator()<Satadjust_type::Disabled>();
-        }
+        if (sw_satadjust == Satadjust_type::Liquid_ice)
+            calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_ice>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_deep>();
+        else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+            calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_ice_deep>();
+        else
+            calc_phydro_3d_wrapper.template operator()<Satadjust_type::Disabled>();
     }
 
     if (nerror > 0)
