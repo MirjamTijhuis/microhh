@@ -646,7 +646,7 @@ namespace
                 const int ij = i + j*jj;
                 const int ijk = i + j*jj + kstart*kk;
 
-                if constexpr (!swphydro_3d)
+                if constexpr (swphydro_3d)
                     exnh = exner(ph[ijk]);
 
                 T_bot[ij] = exnh * threfh[kstart] + (interp2(th[ijk-kk], th[ijk]) - threfh[kstart]);
@@ -3110,7 +3110,7 @@ void Thermo_moist<TF>::exec_cross(Cross<TF>& cross, unsigned long iotime)
         if (swphydro_3d)
             cape_wrapper.template operator()<true>(fields.sd.at("phydro_3d")->fld);
         else
-            cape_wrapper.template operator()<false>(bs.prefh);
+            cape_wrapper.template operator()<false>(bs.pref);
 
         for (auto& it : crosslist)
         {
