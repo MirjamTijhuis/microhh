@@ -154,13 +154,15 @@ class Microphys_2mom_warm : public Microphys<TF>
         virtual ~Microphys_2mom_warm();
 
         void init(Thermo<TF>&);
-        void create(Input&, Netcdf_handle&, Stats<TF>&, Cross<TF>&, Dump<TF>&, Column<TF>&);
-        void exec(Thermo<TF>&, const double, Stats<TF>&);
+        void create(
+                Input&, Netcdf_handle&, Timeloop<TF>&, Stats<TF>&,
+                Cross<TF>&, Dump<TF>&, Column<TF>&, const std::string&);
+        void exec(Thermo<TF>&, Timeloop<TF>&, Stats<TF>&);
 
         void exec_stats(Stats<TF>&, Thermo<TF>&, const double);
-        void exec_column(Column<TF>&);
+        void exec_column(Column<TF>&, Thermo<TF>&);
         void exec_dump(Dump<TF>&, unsigned long) {};
-        void exec_cross(Cross<TF>&, unsigned long);
+        void exec_cross(Cross<TF>&, Thermo<TF>&, unsigned long);
 
         void get_mask(Stats<TF>&, std::string);
         bool has_mask(std::string);
@@ -169,6 +171,11 @@ class Microphys_2mom_warm : public Microphys<TF>
 
         TF get_Nc0() { return this->Nc0; }
         TF get_Ni0() { return static_cast<TF>(1e5); } // CvH: this is a temporary fix with previous default value, Ni0 is 3D in tomita!
+        Microphys_type get_swmicro() {return swmicrophys;}
+        void get_radiation_fields(Thermo<TF>&, Field3d<TF>&, Field3d<TF>&) const
+        { throw std::runtime_error("Function get_radiation_fields not implemented"); }
+        void get_radiation_columns(Thermo<TF>&, TF*, TF*, std::vector<int>&, std::vector<int>&) const
+        { throw std::runtime_error("Function get_radiation_columns not implemented"); }
 
         unsigned long get_time_limit(unsigned long, double);
 
@@ -188,11 +195,10 @@ class Microphys_2mom_warm : public Microphys<TF>
 
         bool swmicrobudget;     // Output full microphysics budget terms
         TF cflmax;              // Max CFL number in microphysics sedimentation
+        TF Nc0;                 // Fixed cloud droplet number
 
         std::vector<std::string> crosslist;                  // Cross-sections handled by this class
         std::vector<std::string> available_masks = {"qr"};   // Vector with the masks that fields can provide
-
-        TF Nc0; // Cloud droplet number concentration.
 
         // Surface precipitation statistics
         std::vector<TF> rr_bot;   // 2D surface sedimentation flux (kg m-2 s-1 == mm s-1)

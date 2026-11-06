@@ -47,12 +47,14 @@ class Microphys_disabled : public Microphys<TF>
         virtual ~Microphys_disabled();
 
         void init(Thermo<TF>&) {};
-        void create(Input&, Netcdf_handle&, Stats<TF>&, Cross<TF>&, Dump<TF>&, Column<TF>&) {};
-        void exec(Thermo<TF>&, const double, Stats<TF>&) {};
+        void create(
+                Input&, Netcdf_handle&, Timeloop<TF>&, Stats<TF>&,
+                Cross<TF>&, Dump<TF>&, Column<TF>&, const std::string&) {};
+        void exec(Thermo<TF>&, Timeloop<TF>&, Stats<TF>&) {};
         void exec_stats(Stats<TF>&, Thermo<TF>&, const double) {};
-        void exec_column(Column<TF>&) {};
+        void exec_column(Column<TF>&, Thermo<TF>&) {};
         void exec_dump(Dump<TF>&, unsigned long) {};
-        void exec_cross(Cross<TF>&, unsigned long) {};
+        void exec_cross(Cross<TF>&, Thermo<TF>&, unsigned long) {};
         void get_mask(Stats<TF>&, std::string) {};
         bool has_mask(std::string) {return false;};
 
@@ -62,6 +64,11 @@ class Microphys_disabled : public Microphys<TF>
 
         TF get_Nc0();
         TF get_Ni0();
+        Microphys_type get_swmicro() {return swmicrophys;}
+        void get_radiation_fields(Thermo<TF>&, Field3d<TF>&, Field3d<TF>&) const
+        { throw std::runtime_error("Function get_radiation_fields not implemented"); }
+        void get_radiation_columns(Thermo<TF>&, TF*, TF*, std::vector<int>&, std::vector<int>&) const
+        { throw std::runtime_error("Function get_radiation_columns not implemented"); }
 
         #ifdef USECUDA
         void get_surface_rain_rate_g(TF*);

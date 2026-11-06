@@ -1,23 +1,22 @@
 [master]
-npx=1
-npy=1
+npx=64
+npy=8
 
 [grid]
-itot=768
-jtot=768
-ktot=192
+itot=5184
+jtot=128
+ktot=None
 
-xsize=76800.
-ysize=76800.
-zsize=19200.
-
-utrans=12.5
+xsize=2592000.
+ysize=64000.
+zsize=None
 
 swspatialorder=2
 
 [advec]
-swadvec=2i62
+swadvec=None
 cflmax=1.2
+fluxlimit_list=None
 
 [diff]
 swdiff=smag2
@@ -26,23 +25,15 @@ dnmax=0.3
 [thermo]
 swbasestate=anelastic
 swthermo=moist
-pbot=95533.21858012446
+pbot=None
 thvref0=300
-swupdatebasestate=1
+swupdatebasestate=0
 
 [micro]
-swmicro=nsw6
-# swmicro=sb06
-# swmicrobudget=1
+swmicro=None
 cflmax=1.2
-Nc0=250e6
-
-# [force]
-# swlspres=geo
-# fc=4.481e-5
-# swls=1
-# lslist=thl,qt
-# swwls=1
+Nc0=200e6
+Ni0=1e5
 
 [boundary]
 mbcbot=noslip
@@ -71,37 +62,35 @@ rndexp=2.
 
 [buffer]
 swbuffer=1
-zstart=15000
-sigma=0.00223
+zstart=None
+sigma=0.01675
 beta=2.
 
 [time]
 starttime=0
-endtime=10800
+endtime=14400
 dt=6.
 dtmax=30
-savetime=3600
+savetime=360
 outputiter=10
 adaptivestep=true
 rkorder=4
 
 [stats]
-swstats=0
+swstats=1
 sampletime=60
-# masklist=ql,qlcore
 
 [cross]
 swcross=1
-sampletime=60
-# crosslist=thl,ql_path,ql,qi,qr,qr_path,qt,u,v,w
-crosslist=thl,qlqi_path,qlqi,qr,qr_path,u,v,w
-xy=2000,5000,8000
-xz=38400
+sampletime=360
+crosslist=None
+xy=0
 
 [dump]
 swdump=1
-sampletime=100
-dumplist=qlqi
+sampletime=360
+dumplist=None
 
 [limiter]
-limitlist=qt,qr
+limitlist=None
+cliplist=None

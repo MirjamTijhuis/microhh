@@ -55,10 +55,13 @@ namespace
     template<> float  netcdf_fp_fillvalue<float>()  { return NC_FILL_FLOAT; }
 
     template<typename TF>
-    void calc_top_and_bot(TF* restrict thl0, TF* restrict qt0,
-                          const TF* const z, const TF* const zh,
-                          const TF* const dzhi,
-                          const int kstart, const int kend)
+    void calc_top_and_bot(
+            TF* restrict thl0,
+            TF* restrict qt0,
+            const TF* const z,
+            const TF* const zh,
+            const TF* const dzhi,
+            const int kstart, const int kend)
     {
         // Calculate surface and model top values thl and qt
         TF thl0s, qt0s, thl0t, qt0t;
@@ -74,7 +77,7 @@ namespace
         qt0[kend]       = TF(2.)*qt0t  - qt0[kend-1];
     }
 
-    template<typename TF, bool swphydro_3d>
+    template<typename TF, bool swphydro_3d, Satadjust_type sw_satadjust>
     void calc_buoyancy_tend_2nd(
             TF* restrict wt,
             const TF* restrict thl,
@@ -128,7 +131,7 @@ namespace
                         exnh_loc = exner(ph[ijk]);
                     }
 
-                    Struct_sat_adjust<TF> ssa = sat_adjust(thlh[ij], qth[ij], ph_loc, exnh_loc);
+                    Struct_sat_adjust<TF> ssa = sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph_loc, exnh_loc);
 
                     ql[ij] = ssa.ql;
                     qi[ij] = ssa.qi;
@@ -140,17 +143,19 @@ namespace
                 {
                     const int ijk = i + j*jj + k*kk;
                     const int ij  = i + j*jj;
+                    Struct_sat_adjust<TF> ssa =
+                            sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh_loc);
 
                     if constexpr (swphydro_3d)
                         exnh_loc = exner(ph[ijk]);
 
-                    wt[ijk] += buoyancy(exnh_loc, thlh[ij], qth[ij], ql[ij], qi[ij], thvrefh[k], qhmh[ij]);
+                    wt[ijk] += buoyancy<TF, sw_satadjust>(exnh_loc, thlh[ij], qth[ij], ql[ij], qi[ij], thvrefh[k], ssa.t, qhmh[ij]);
                 }
         }
     }
 
 
-    template<typename TF, Satadjust_field satadjust_fld, bool swphydro_3d>
+    template<typename TF, Satadjust_field satadjust_fld, bool swphydro_3d, Satadjust_type sw_satadjust>
     void calc_satadjust_fld(
             TF* restrict fld,
             const TF* restrict thl,
@@ -185,7 +190,7 @@ namespace
                         exn_loc = exner(p[ijk]);
                     }
 
-                    Struct_sat_adjust<TF> ssa = sat_adjust(thl[ijk], qt[ijk], p_loc, exn_loc);
+                    Struct_sat_adjust<TF> ssa = sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p_loc, exn_loc);
 
                     if (satadjust_fld == Satadjust_field::ql)
                         fld[ijk] = ssa.ql;
@@ -204,7 +209,7 @@ namespace
     }
 
 
-    template<typename TF, bool swphydro_3d>
+    template<typename TF, bool swphydro_3d, Satadjust_type sw_satadjust>
     void calc_ql_h(
             TF* restrict qlh,
             const TF* restrict thl,
@@ -253,7 +258,7 @@ namespace
                         exnh_loc = exner(ph[ijk]);
                     }
 
-                    qlh[ijk] = sat_adjust(thlh[ij], qth[ij], ph_loc, exnh_loc).ql;
+                    qlh[ijk] = sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph_loc, exnh_loc).ql;
                 }
         }
 
@@ -267,7 +272,7 @@ namespace
     }
 
 
-    template<typename TF, bool swphydro_3d>
+    template<typename TF, bool swphydro_3d, Satadjust_type sw_satadjust>
     void calc_buoyancy(
             TF* restrict b,
             TF* restrict thl,
@@ -307,9 +312,19 @@ namespace
                             exn_loc = exner(p[ijk]);
                         }
 
-                        Struct_sat_adjust<TF> ssa = sat_adjust(thl[ijk], qt[ijk], p_loc, exn_loc);
+                        Struct_sat_adjust<TF> ssa = sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p_loc, exn_loc);
                         ql[ijk] = ssa.ql;
                         qi[ijk] = ssa.qi;
+                    }
+
+                for (int j=jstart; j<jend; j++)
+                #pragma ivdep
+                    for (int i=istart; i<iend; i++)
+                    {
+                        const int ijk = i + j*jj + k*kk;
+                        Struct_sat_adjust<TF> ssa =
+                                sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], exn_loc);
+                        b[ijk] = buoyancy<TF, sw_satadjust>(exn_loc, thl[ijk], qt[ijk], ql[ijk], qi[ijk], thvref[k], ssa.t, qhm[ijk]);
                     }
             }
             else
@@ -324,24 +339,19 @@ namespace
                         qhm[ijk] = 0.;
                     }
 
-            }
-
-            for (int j=jstart; j<jend; j++)
+                for (int j=jstart; j<jend; j++)
                 #pragma ivdep
-                for (int i=istart; i<iend; i++)
-                {
-                    const int ijk = i + j*jj + k*kk;
-
-                    if constexpr (swphydro_3d)
-                        exn_loc = exner(p[ijk]);
-
-                    b[ijk] = buoyancy(exn_loc, thl[ijk], qt[ijk], ql[ijk], qi[ijk], thvref[k], qhm[ijk]);
-                }
+                        for (int i=istart; i<iend; i++)
+                        {
+                            const int ijk = i + j*jj + k*kk;
+                            b[ijk] = buoyancy_no_ql(thl[ijk], qt[ijk], thvref[k]);
+                        }
+            }
         }
     }
 
 
-    template<typename TF, bool swphydro_3d>
+    template<typename TF, bool swphydro_3d, Satadjust_type sw_satadjust>
     void calc_buoyancy_h(
             TF* restrict bh,
             const TF* restrict thl,
@@ -398,9 +408,22 @@ namespace
                             exnh_loc = exner(ph[ijk]);
                         }
 
-                        Struct_sat_adjust<TF> ssa = sat_adjust(thlh[ij], qth[ij], ph_loc, exnh_loc);
+                        Struct_sat_adjust<TF> ssa = sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph_loc, exnh_loc);
                         ql[ij] = ssa.ql;
                         qi[ij] = ssa.qi;
+                    }
+
+                for (int j=jstart; j<jend; j++)
+                #pragma ivdep
+                    for (int i=istart; i<iend; i++)
+                    {
+                        const int ijk = i + j*jj + k*kk;
+                        const int ij  = i + j*jj;
+
+                        Struct_sat_adjust<TF> ssa =
+                                sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph[k], exnh_loc);
+
+                        bh[ijk] = buoyancy<TF, sw_satadjust>(exnh_loc, thlh[ij], qth[ij], ql[ij], qi[ij], thvrefh[k], ssa.t, qhmh[ij]);
                     }
             }
             else
@@ -414,113 +437,41 @@ namespace
                         qi[ij] = 0.;
                         qhmh[ij] = 0.;
                     }
-            }
-            for (int j=jstart; j<jend; j++)
+
+                for (int j=jstart; j<jend; j++)
                 #pragma ivdep
-                for (int i=istart; i<iend; i++)
-                {
-                    const int ijk = i + j*jj + k*kk;
-                    const int ij  = i + j*jj;
-
-                    if constexpr (swphydro_3d)
-                        exnh_loc = exner(ph[ijk]);
-
-                    bh[ijk] = buoyancy(exnh_loc, thlh[ij], qth[ij], ql[ij], qi[ij], thvrefh[k], qhmh[ij]);
-                }
-        }
-    }
-
-
-    template<typename TF, bool swphydro_3d>
-    void calc_thv(
-            TF* const restrict thv,
-            const TF* const restrict thl,
-            const TF* const restrict qhm,
-            const TF* const restrict qt,
-            const TF* const restrict p,
-            const int istart, const int iend,
-            const int jstart, const int jend,
-            const int kstart_minus_one, const int kend_plus_one,
-            const int jj, const int kk)
-    {
-        // Note: this function is only called from statistics,
-        // using `kstart-1` and `kend+1` as bounds, since the ghost
-        // cells are needed to calculate the surface gradients.
-        // Make sure that we don't `sat_adjust()` the ghost cells...
-
-        TF p_loc, exn_loc;
-
-        // Calculate the thv field: ghost cells
-        #pragma omp parallel for
-        for (int j=jstart; j<jend; j++)
-            #pragma ivdep
-            for (int i=istart; i<iend; i++)
-            {
-                const int ijk = i + j*jj + kstart_minus_one*kk;
-                thv[ijk] = virtual_temperature_no_ql(thl[ijk], qt[ijk]);
-            }
-
-        #pragma omp parallel for
-        for (int j=jstart; j<jend; j++)
-            #pragma ivdep
-            for (int i=istart; i<iend; i++)
-            {
-                const int ijk = i + j*jj + (kend_plus_one-1)*kk;
-                thv[ijk] = virtual_temperature_no_ql(thl[ijk], qt[ijk]);
-            }
-
-        // Calculate the thv field: interior
-        #pragma omp parallel for
-        for (int k=kstart_minus_one+1; k<kend_plus_one-1; k++)
-        {
-            if constexpr (!swphydro_3d)
-            {
-                p_loc = p[k];
-                exn_loc = exner(p[k]);
-            }
-
-            for (int j=jstart; j<jend; j++)
-                #pragma ivdep
-                for (int i=istart; i<iend; i++)
-                {
-                    const int ijk = i + j*jj + k*kk;
-
-                    if constexpr (swphydro_3d)
+                    for (int i=istart; i<iend; i++)
                     {
-                        p_loc = p[ijk];
-                        exn_loc = exner(p[ijk]);
-                    }
+                        const int ijk = i + j*jj + k*kk;
+                        const int ij  = i + j*jj;
 
-                    Struct_sat_adjust<TF> ssa = sat_adjust(thl[ijk], qt[ijk], p_loc, exn_loc);
-                    thv[ijk] = virtual_temperature(exn_loc, thl[ijk], qt[ijk], ssa.ql, ssa.qi, qhm[ijk]);
-                }
+                        bh[ijk] = buoyancy_no_ql(thlh[ij], qth[ij], thvrefh[k]);
+                    }
+            }
         }
     }
-
 
     template<typename TF>
-    void calc_N2(
-            TF* restrict N2,
-            const TF* const restrict thl,
-            const TF* const restrict dzi,
-            const TF* restrict thvref,
-            const int istart, const int iend,
-            const int jstart, const int jend,
-            const int kstart, const int kend,
-            const int jj, const int kk)
+    void calc_liquid_water(TF* restrict ql, TF* restrict thl, TF* restrict qt, TF* restrict p,
+                           const int istart, const int iend,
+                           const int jstart, const int jend,
+                           const int kstart, const int kend,
+                           const int jj, const int kk)
     {
+        // Calculate the ql field
         #pragma omp parallel for
-        for (int k=kstart; k<kend; ++k)
-            for (int j=jstart; j<jend; ++j)
+        for (int k=kstart; k<kend; k++)
+        {
+            const TF ex = exner(p[k]);
+            for (int j=jstart; j<jend; j++)
                 #pragma ivdep
-                for (int i=istart; i<iend; ++i)
+                for (int i=istart; i<iend; i++)
                 {
                     const int ijk = i + j*jj + k*kk;
-
-                    N2[ijk] = grav<TF> / thvref[k] * TF(0.5) * (thl[ijk+kk] - thl[ijk-kk]) * dzi[k];
+                    ql[ijk] = sat_adjust(thl[ijk], qt[ijk], p[k], ex).ql;
                 }
+        }
     }
-
 
     template<typename TF>
     void calc_w500hpa(
@@ -595,6 +546,27 @@ namespace
             }
     }
 
+    template<typename TF>
+    void calc_N2(
+            TF* restrict N2,
+            const TF* const restrict thl,
+            const TF* const restrict dzi,
+            TF* restrict thvref,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart, const int kend,
+            const int jj, const int kk)
+    {
+        #pragma omp parallel for
+        for (int k=kstart; k<kend; ++k)
+            for (int j=jstart; j<jend; ++j)
+                #pragma ivdep
+                for (int i=istart; i<iend; ++i)
+                {
+                    const int ijk = i + j*jj + k*kk;
+                    N2[ijk] = grav<TF>/thvref[k]*TF(0.5)*(thl[ijk+kk] - thl[ijk-kk])*dzi[k];
+                }
+    }
 
     template<typename TF>
     void calc_path(
@@ -631,6 +603,73 @@ namespace
         }
     }
 
+    template<typename TF, bool swphydro_3d, Satadjust_type sw_satadjust>
+    void calc_thv(
+            TF* const restrict thv,
+            const TF* const restrict thl,
+            const TF* const restrict qt,
+            const TF* const restrict qhm,
+            const TF* const restrict p,
+            const int istart, const int iend,
+            const int jstart, const int jend,
+            const int kstart_minus_one,
+            const int kend_plus_one,
+            const int jj,
+            const int kk)
+    {
+        // Note: this function is only called from statistics,
+        // using `kstart-1` and `kend+1` as bounds, since the ghost
+        // cells are needed to calculate the surface gradients.
+        // Make sure that we don't `sat_adjust()` the ghost cells...
+
+        TF p_loc, exn_loc;
+
+        // Calculate the thv field: ghost cells
+        #pragma omp parallel for
+        for (int j=jstart; j<jend; j++)
+            #pragma ivdep
+            for (int i=istart; i<iend; i++)
+            {
+                const int ijk = i + j*jj + kstart_minus_one*kk;
+                thv[ijk] = virtual_temperature_no_ql(thl[ijk], qt[ijk]);
+            }
+
+        #pragma omp parallel for
+        for (int j=jstart; j<jend; j++)
+            #pragma ivdep
+            for (int i=istart; i<iend; i++)
+            {
+                const int ijk = i + j*jj + (kend_plus_one-1)*kk;
+                thv[ijk] = virtual_temperature_no_ql(thl[ijk], qt[ijk]);
+            }
+
+        // Calculate the thv field: interior
+        #pragma omp parallel for
+        for (int k=kstart_minus_one+1; k<kend_plus_one-1; k++)
+        {
+            if constexpr (!swphydro_3d)
+            {
+                p_loc = p[k];
+                exn_loc = exner(p[k]);
+            }
+
+            for (int j=jstart; j<jend; j++)
+                #pragma ivdep
+                for (int i=istart; i<iend; i++)
+                {
+                    const int ijk = i + j*jj + k*kk;
+
+                    if constexpr (swphydro_3d)
+                    {
+                        p_loc = p[ijk];
+                        exn_loc = exner(p[ijk]);
+                    }
+
+                    Struct_sat_adjust<TF> ssa = sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p[k], exn_loc);
+                    thv[ijk] = virtual_temperature<TF, sw_satadjust>(exn_loc, thl[ijk], qt[ijk], ssa.ql, ssa.qi, ssa.t, qhm[ijk]);
+                }
+        }
+    }
 
     template<typename TF, bool swphydro_3d>
     void calc_T_bot(
@@ -786,131 +825,8 @@ namespace
     }
 
 
-    template<typename TF, bool swphydro_3d>
-    void calc_radiation_fields(
-            TF* restrict T,
-            TF* restrict T_h,
-            TF* restrict vmr_h2o,
-            TF* restrict clwp,
-            TF* restrict ciwp,
-            TF* restrict T_sfc,
-            TF* restrict thlh,
-            TF* restrict qth,
-            const TF* restrict thl,
-            const TF* restrict qt,
-            const TF* restrict thl_bot,
-            const TF* restrict p,
-            const TF* restrict ph,
-            const int istart, const int iend,
-            const int jstart, const int jend,
-            const int kstart, const int kend,
-            const int igc, const int jgc, const int kgc,
-            const int jj, const int kk,
-            const int jj_nogc, const int kk_nogc)
-    {
-        // This routine strips off the ghost cells, because of the data handling in radiation.
-        using Finite_difference::O2::interp2;
 
-        TF exn_loc, p_loc, dpg_loc;
-        TF exnh_loc, ph_loc;
-
-        #pragma omp parallel for
-        for (int k=kstart; k<kend; ++k)
-        {
-            if constexpr (!swphydro_3d)
-            {
-                p_loc = p[k];
-                exn_loc = exner(p[k]);
-                dpg_loc = (ph[k] - ph[k+1]) / Constants::grav<TF>;
-            }
-
-            for (int j=jstart; j<jend; ++j)
-                #pragma ivdep
-                for (int i=istart; i<iend; ++i)
-                {
-                    const int ijk = i + j*jj + k*kk;
-                    const int ijk_nogc = (i-igc) + (j-jgc)*jj_nogc + (k-kgc)*kk_nogc;
-
-                    if constexpr (swphydro_3d)
-                    {
-                        p_loc = p[ijk];
-                        exn_loc = exner(p[ijk]);
-                        dpg_loc = (ph[ijk] - ph[ijk+kk]) / Constants::grav<TF>;
-                    }
-
-                    const Struct_sat_adjust<TF> ssa = sat_adjust(thl[ijk], qt[ijk], p_loc, exn_loc);
-
-                    clwp[ijk_nogc] = ssa.ql * dpg_loc;
-                    ciwp[ijk_nogc] = ssa.qi * dpg_loc;
-
-                    const TF qv = qt[ijk] - ssa.ql - ssa.qi;
-                    vmr_h2o[ijk_nogc] = qv / (ep<TF> - ep<TF>*qv);
-
-                    T[ijk_nogc] = ssa.t;
-                }
-        }
-
-        // Exclude surface, is calculated below without saturation adjustment.
-        for (int k=kstart+1; k<kend+1; ++k)
-        {
-            if constexpr (!swphydro_3d)
-            {
-                ph_loc = ph[k];
-                exnh_loc = exner(ph[k]);
-            }
-
-            for (int j=jstart; j<jend; ++j)
-                #pragma ivdep
-                for (int i=istart; i<iend; ++i)
-                {
-                    const int ij  = i + j*jj;
-                    const int ijk = ij + k*kk;
-
-                    thlh[ij] = interp2(thl[ijk-kk], thl[ijk]);
-                    qth [ij] = interp2(qt [ijk-kk], qt [ijk]);
-                }
-
-            for (int j=jstart; j<jend; ++j)
-                #pragma ivdep
-                for (int i=istart; i<iend; ++i)
-                {
-                    const int ij = i + j*jj;
-                    const int ijk = ij + k*kk;
-                    const int ijk_nogc = (i-igc) + (j-jgc)*jj_nogc + (k-kgc)*kk_nogc;
-
-                    if constexpr (swphydro_3d)
-                    {
-                        ph_loc = ph[ijk];
-                        exnh_loc = exner(ph[ijk]);
-                    }
-
-                    T_h[ijk_nogc] = sat_adjust(thlh[ij], qth[ij], ph_loc, exnh_loc).t;
-                }
-        }
-
-        // Calculate surface temperature (assuming no liquid water).
-        TF exn_bot;
-        if constexpr (!swphydro_3d)
-            exn_bot = exner(ph[kstart]);
-
-        for (int j=jstart; j<jend; ++j)
-            #pragma ivdep
-            for (int i=istart; i<iend; ++i)
-            {
-                const int ij = i + j*jj;
-                const int ijk = ij + kstart*kk;
-                const int ij_nogc = (i-igc) + (j-jgc)*jj_nogc;
-                const int ijk_nogc = (i-igc) + (j-jgc)*jj_nogc + (kstart-kgc)*kk_nogc;
-
-                if constexpr (swphydro_3d)
-                    exn_bot = exner(ph[ijk]);
-
-                T_sfc[ij_nogc] = thl_bot[ij] * exn_bot;
-                T_h[ijk_nogc] = T_sfc[ij_nogc];
-            }
-    }
-
-    template<typename TF, bool swphydro_3d>
+    template<typename TF, bool swphydro_3d, Satadjust_type sw_satadjust>
     void calc_radiation_fields(
             TF* restrict T,
             TF* restrict T_h,
@@ -963,7 +879,7 @@ namespace
                         dpg_loc = (ph[ijk] - ph[ijk+kk]) / Constants::grav<TF>;
                     }
 
-                    const Struct_sat_adjust<TF> ssa = sat_adjust(thl[ijk], qt[ijk], p_loc, exn_loc);
+                    const Struct_sat_adjust<TF> ssa = sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p_loc, exn_loc);
 
                     clwp[ijk_nogc] = ssa.ql * dpg_loc;
                     ciwp[ijk_nogc] = ssa.qi * dpg_loc;
@@ -1009,7 +925,7 @@ namespace
                         exnh_loc = exner(ph[ijk]);
                     }
 
-                    T_h[ijk_nogc] = sat_adjust(thlh[ij], qth[ij], ph_loc, exnh_loc).t;
+                    T_h[ijk_nogc] = sat_adjust<TF, sw_satadjust>(thlh[ij], qth[ij], ph_loc, exnh_loc).t;
                 }
         }
 
@@ -1035,7 +951,7 @@ namespace
             }
     }
 
-    template<typename TF, bool swphydro_3d>
+    template<typename TF, bool swphydro_3d, Satadjust_type sw_satadjust>
     void calc_radiation_columns(
             TF* const restrict T,
             TF* const restrict T_h,
@@ -1089,7 +1005,7 @@ namespace
                     dpg_loc = (ph[ijk] - ph[ijk+ijcells]) / Constants::grav<TF>;
                 }
 
-                const Struct_sat_adjust<TF> ssa = sat_adjust(thl[ijk], qt[ijk], p_loc, exn_loc);
+                const Struct_sat_adjust<TF> ssa = sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p_loc, exn_loc);
 
                 clwp[ijk_out] = ssa.ql * dpg_loc;
                 ciwp[ijk_out] = ssa.qi * dpg_loc;
@@ -1128,7 +1044,7 @@ namespace
                     exnh_loc = exner(ph[ijk]);
                 }
 
-                T_h[ijk_out] = sat_adjust(thlh, qth, ph_loc, exnh_loc).t;
+                T_h[ijk_out] = sat_adjust<TF, sw_satadjust>(thlh, qth, ph_loc, exnh_loc).t;
             }
         }
 
@@ -1156,7 +1072,7 @@ namespace
         }
     }
 
-    template<typename TF, bool swphydro_3d>
+    template<typename TF, bool swphydro_3d, Satadjust_type sw_satadjust>
     void calc_land_surface_fields(
             TF* const restrict T_bot,
             TF* const restrict T_a,
@@ -1202,15 +1118,15 @@ namespace
                 }
 
                 // Saturation adjustment for first model level
-                Struct_sat_adjust<TF> sa = sat_adjust(
+                Struct_sat_adjust<TF> ssa = sat_adjust<TF, sw_satadjust>(
                         thl[ijk], qt[ijk], p_loc, exn_loc);
 
                 T_bot[ij] = exnh_loc * thl_bot[ij];   // Assuming no ql
-                T_a[ij]   = sa.t;
+                T_a[ij]   = ssa.t;
 
                 // Vapor pressure deficit first model level
-                const TF es = esat(sa.t);
-                const TF e = qt[ijk]/sa.qs * es;
+                const TF es = esat(ssa.t);
+                const TF e = qt[ijk]/ssa.qs * es;
                 vpd[ij] = es-e;
 
                 // qsat(T_bot) + dqsatdT(T_bot)
@@ -1220,7 +1136,7 @@ namespace
     }
 
 
-    template<typename TF>
+    template<typename TF, Satadjust_type sw_satadjust>
     void calc_phydro_3d(
         TF* const restrict phydro,
         TF* const restrict phydroh,
@@ -1256,8 +1172,8 @@ namespace
                 const TF qhmh  = TF(0.5) * (qhm [ijk-kk] + qhm [ijk]);
 
                 const TF exh = exner(phydroh[ijk]);
-                Struct_sat_adjust<TF> ssa = sat_adjust(thlh, qth, phydroh[ijk], exh);
-                const TF thvh = virtual_temperature(exh, thlh, qth, ssa.ql, ssa.qi, qhmh);
+                Struct_sat_adjust<TF> ssa = sat_adjust<TF, sw_satadjust>(thlh, qth, phydroh[ijk], exh);
+                const TF thvh = virtual_temperature<TF, sw_satadjust>(exh, thlh, qth, ssa.ql, ssa.qi, ssa.t, qhmh);
 
                 // Advance pressure from half (TOD) to full level.
                 phydro[ijk-kk] = phydroh[ijk] * std::exp(grav<TF> * TF(0.5) * dzh[kend] / (Rd<TF> * exh * thvh));
@@ -1273,8 +1189,8 @@ namespace
 
                     // Calculate full level virtual potential temperature.
                     const TF ex = exner(phydro[ijk]);
-                    Struct_sat_adjust<TF> ssaf = sat_adjust(thl[ijk], qt[ijk], phydro[ijk], ex);
-                    const TF thv = virtual_temperature(ex, thl[ijk], qt[ijk], ssaf.ql, ssaf.qi, qhm[ijk]);
+                    Struct_sat_adjust<TF> ssaf = sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], phydro[ijk], ex);
+                    const TF thv = virtual_temperature<TF, sw_satadjust>(ex, thl[ijk], qt[ijk], ssaf.ql, ssaf.qi, ssaf.t, qhm[ijk]);
 
                     // Advance half level pressure.
                     phydroh[ijk] = phydroh[ijk+kk] * std::exp(grav<TF> * dz[k] / (Rd<TF> * ex * thv));
@@ -1286,8 +1202,8 @@ namespace
                     const TF qth  = TF(0.5) * (qt [ijk-kk] + qt [ijk]);
                     const TF qhmh  = TF(0.5) * (qhm [ijk-kk] + qhm [ijk]);
 
-                    Struct_sat_adjust<TF> ssah = sat_adjust(thlh, qth, phydroh[ijk], exh);
-                    const TF thvh = virtual_temperature(exh, thlh, qth, ssah.ql, ssah.qi, qhmh);
+                    Struct_sat_adjust<TF> ssah = sat_adjust<TF, sw_satadjust>(thlh, qth, phydroh[ijk], exh);
+                    const TF thvh = virtual_temperature<TF, sw_satadjust>(exh, thlh, qth, ssah.ql, ssah.qi, ssah.t, qhmh);
 
                     // Advance full level pressure.
                     phydro[ijk-kk] = phydro[ijk] * std::exp(grav<TF> * dzh[k] / (Rd<TF> * exh * thvh));
@@ -1307,7 +1223,7 @@ namespace
     }
 
 
-    template<typename TF, bool swphydro_3d>
+    template<typename TF, bool swphydro_3d, Satadjust_type sw_satadjust>
     void calc_cape(
             TF* const restrict cape,
             TF* const restrict zi,
@@ -1353,11 +1269,11 @@ namespace
                     const TF p_loc = swphydro_3d ? p[ijk] : p[k];
                     const TF exn_loc = exner(p_loc);
 
-                    Struct_sat_adjust<TF> ssa_e = sat_adjust(thl[ijk], qt[ijk], p_loc, exn_loc);
-                    Struct_sat_adjust<TF> ssa_p = sat_adjust(thl[ijk0], qt[ijk0], p_loc, exn_loc);
+                    Struct_sat_adjust<TF> ssa_e = sat_adjust<TF, sw_satadjust>(thl[ijk], qt[ijk], p_loc, exn_loc);
+                    Struct_sat_adjust<TF> ssa_p = sat_adjust<TF, sw_satadjust>(thl[ijk0], qt[ijk0], p_loc, exn_loc);
 
-                    const TF thv_e = virtual_temperature(exn_loc, thl[ijk],  qt[ijk],  ssa_e.ql, ssa_e.qi, qhm[ijk]);
-                    const TF thv_p = virtual_temperature(exn_loc, thl[ijk0], qt[ijk0], ssa_p.ql, ssa_p.qi, qhm[ijk]);
+                    const TF thv_e = virtual_temperature<TF, sw_satadjust>(exn_loc, thl[ijk],  qt[ijk],  ssa_e.ql, ssa_e.qi, ssa_e.t, qhm[ijk]);
+                    const TF thv_p = virtual_temperature<TF, sw_satadjust>(exn_loc, thl[ijk0], qt[ijk0], ssa_p.ql, ssa_p.qi, ssa_p.t, qhm[ijk]);
 
                     const TF b_p = Constants::grav<TF> * (thv_p - thv_e) / thv_e;
 
@@ -1449,6 +1365,25 @@ Thermo_moist<TF>::Thermo_moist(
     if (swphydro_3d && !bs.swupdatebasestate)
         throw std::runtime_error("3D phydro currently only works with swupdatebasestate=true!");
 
+    // Option to disable saturation adjustment ql and qi
+    bool sw_satadjust_ql = inputin.get_item<bool>("thermo", "swsatadjust_ql", "", true);
+    bool sw_satadjust_qi = inputin.get_item<bool>("thermo", "swsatadjust_qi", "", true);
+    bool sw_thl_deep = inputin.get_item<bool>("thermo", "swthldeep", "", false);
+
+    // Option to disable saturation adjustment ql and qi (new).
+    if (sw_satadjust_ql && sw_satadjust_qi)
+        if (sw_thl_deep)
+            sw_satadjust = Satadjust_type::Liquid_ice_deep;
+        else
+            sw_satadjust = Satadjust_type::Liquid_ice;
+    else if (sw_satadjust_ql)
+        if (!sw_thl_deep)
+            sw_satadjust = Satadjust_type::Liquid_shallow;
+        else
+            sw_satadjust = Satadjust_type::Liquid_deep;
+    else
+        sw_satadjust = Satadjust_type::Disabled;
+
     // Time variable surface pressure
     tdep_pbot = std::make_unique<Timedep<TF>>(master, grid, "p_sbot", inputin.get_item<bool>("thermo", "swtimedep_pbot", "", false));
 
@@ -1471,6 +1406,7 @@ void Thermo_moist<TF>::init()
 
     bs.thl0.resize(gd.kcells);
     bs.qt0.resize(gd.kcells);
+    bs.qhm0.resize(gd.kcells);
     bs.thvref.resize(gd.kcells);
     bs.thvrefh.resize(gd.kcells);
     bs.exnref.resize(gd.kcells);
@@ -1519,6 +1455,7 @@ void Thermo_moist<TF>::save(const int iotime)
 
         fwrite(&bs.thl0 [gd.kstart], sizeof(TF), gd.ktot, pFile);
         fwrite(&bs.qt0  [gd.kstart], sizeof(TF), gd.ktot, pFile);
+        fwrite(&bs.qhm0  [gd.kstart], sizeof(TF), gd.ktot, pFile);
 
         fwrite(&bs.thvref [gd.kstart], sizeof(TF), gd.ktot  , pFile);
         fwrite(&bs.thvrefh[gd.kstart], sizeof(TF), gd.ktot+1, pFile);
@@ -1604,6 +1541,7 @@ void Thermo_moist<TF>::load(const int iotime)
 
             read(bs.thl0, gd.ktot);
             read(bs.qt0, gd.ktot);
+            read(bs.qhm0, gd.ktot);
 
             read(bs.thvref, gd.ktot);
             read(bs.thvrefh, gd.ktot+1);
@@ -1658,6 +1596,7 @@ void Thermo_moist<TF>::load(const int iotime)
     // Broadcast to other MPI tasks.
     master.broadcast(bs.thl0.data(), gd.kcells);
     master.broadcast(bs.qt0.data(), gd.kcells);
+    master.broadcast(bs.qhm0.data(), gd.kcells);
 
     master.broadcast(bs.thvref.data(), gd.kcells);
     master.broadcast(bs.thvrefh.data(), gd.kcells);
@@ -1699,13 +1638,51 @@ void Thermo_moist<TF>::create_basestate(
     std::rotate(bs.qt0.rbegin(), bs.qt0.rbegin() + gd.kstart, bs.qt0.rend());
 
     calc_top_and_bot(
-            bs.thl0.data(), bs.qt0.data(), gd.z.data(), gd.zh.data(), gd.dzhi.data(), gd.kstart, gd.kend);
+            bs.thl0.data(),
+            bs.qt0.data(),
+            gd.z.data(),
+            gd.zh.data(),
+            gd.dzhi.data(),
+            gd.kstart,
+            gd.kend);
+
+    // MT: assume that the base state contains no hydrometeors
+    for (int k=0; k<gd.ktot; ++k)
+    {
+        bs.qhm0[k]  = TF(0.);
+    }
 
     // 4. Calculate the initial/reference base state
-    calc_base_state(
-            bs.pref.data(), bs.prefh.data(), bs.rhoref.data(), bs.rhorefh.data(), bs.thvref.data(),
-            bs.thvrefh.data(), bs.exnref.data(), bs.exnrefh.data(), bs.thl0.data(), bs.qt0.data(), bs.pbot,
-            gd.kstart, gd.kend, gd.z.data(), gd.dz.data(), gd.dzh.data());
+    auto calc_base_state_wrapper = [&]<Satadjust_type sw_satadjust>()
+    {
+        calc_base_state<TF, sw_satadjust>(
+            bs.pref.data(),
+            bs.prefh.data(),
+            bs.rhoref.data(),
+            bs.rhorefh.data(),
+            bs.thvref.data(),
+            bs.thvrefh.data(),
+            bs.exnref.data(),
+            bs.exnrefh.data(),
+            bs.thl0.data(),
+            bs.qt0.data(),
+            bs.pbot,
+            gd.kstart, gd.kend,
+            gd.z.data(),
+            gd.dz.data(),
+            gd.dzh.data());
+    };
+
+    if (sw_satadjust == Satadjust_type::Liquid_ice)
+        calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_ice>();
+    else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+        calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+    else if (sw_satadjust == Satadjust_type::Liquid_deep)
+        calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_deep>();
+    else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+        calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_ice_deep>();
+    else
+        calc_base_state_wrapper.template operator()<Satadjust_type::Disabled>();
 
     // 5. In Boussinesq mode, overwrite reference temperature and density
     if (bs.swbasestate == Basestate_type::boussinesq)
@@ -1760,7 +1737,7 @@ void Thermo_moist<TF>::exec(const double dt, Stats<TF>& stats)
 {
     auto& gd = grid.get_grid_data();
 
-    // Re-calculate hydrostatic pressure and exner, pass dummy as thvref to prevent overwriting base state
+    // Re-calculate base state.
     auto tmp = fields.get_tmp();
 
 
@@ -1782,22 +1759,47 @@ void Thermo_moist<TF>::exec(const double dt, Stats<TF>& stats)
     }
 
     if (bs.swupdatebasestate)
-        calc_base_state(
-                bs.pref.data(), bs.prefh.data(),
-                bs.rhoref.data(), bs.rhorefh.data(),
-                bs.thvref.data(), bs.thvrefh.data(),
-                bs.exnref.data(), bs.exnrefh.data(),
-                fields.sp.at("thl")->fld_mean.data(),
-                fields.sp.at("qt")->fld_mean.data(),
-                bs.pbot, gd.kstart, gd.kend,
-                gd.z.data(), gd.dz.data(), gd.dzh.data());
+    {
+        // field3d_operators.calc_mean_profile(qhm->fld_mean.data(), qhm->fld.data());
+        auto calc_base_state_wrapper = [&]<Satadjust_type sw_satadjust>()
+        {
+            calc_base_state<TF, sw_satadjust>(
+                    bs.pref.data(),
+                    bs.prefh.data(),
+                    bs.rhoref.data(),
+                    bs.rhorefh.data(),
+                    bs.thvref.data(),
+                    bs.thvrefh.data(),
+                    bs.exnref.data(),
+                    bs.exnrefh.data(),
+                    fields.sp.at("thl")->fld_mean.data(),
+                    fields.sp.at("qt")->fld_mean.data(),
+                    bs.pbot,
+                    gd.kstart,
+                    gd.kend,
+                    gd.z.data(),
+                    gd.dz.data(),
+                    gd.dzh.data());
+        };
+
+        if (sw_satadjust == Satadjust_type::Liquid_ice)
+            calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_ice>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_deep>();
+        else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+            calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_ice_deep>();
+        else
+            calc_base_state_wrapper.template operator()<Satadjust_type::Disabled>();
+    }
 
     // DEBUG/HACK/TESTING/...
     //std::fill(phydro_tod.begin(), phydro_tod.end(), bs.prefh[gd.kend]);
 
-    if (swphydro_3d && swtimedep_phydro_3d)
+    auto calc_phydro_3d_wrapper = [&]<Satadjust_type sw_satadjust>()
     {
-        calc_phydro_3d(
+        calc_phydro_3d<TF, sw_satadjust>(
                 fields.sd.at("phydro_3d")->fld.data(),
                 fields.sd.at("phydroh_3d")->fld.data(),
                 phydro_tod.data(),
@@ -1815,11 +1817,25 @@ void Thermo_moist<TF>::exec(const double dt, Stats<TF>& stats)
         field3d_operators.calc_mean_profile(bs.pref.data(), fields.sd.at("phydro_3d")->fld.data());
         field3d_operators.calc_mean_profile(bs.prefh.data(), fields.sd.at("phydroh_3d")->fld.data());
         bs.pbot = bs.prefh[gd.kstart];
+    };
+
+    if (swphydro_3d && swtimedep_phydro_3d)
+    {
+        if (sw_satadjust == Satadjust_type::Liquid_ice)
+            calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_ice>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_deep>();
+        else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+            calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_ice_deep>();
+        else
+            calc_phydro_3d_wrapper.template operator()<Satadjust_type::Disabled>();
     }
 
-    auto buoyancy_tend_wrapper = [&]<bool swphydro_3d>(std::vector<TF>& ph)
+    auto calc_buoyancy_tend_2nd_wrapper = [&]<bool swphydro_3d, Satadjust_type sw_satadjust>(std::vector<TF>& ph)
     {
-        calc_buoyancy_tend_2nd<TF, swphydro_3d>(
+        calc_buoyancy_tend_2nd<TF, swphydro_3d, sw_satadjust>(
                 fields.mt.at("w")->fld.data(),
                 fields.sp.at("thl")->fld.data(),
                 fields.sp.at("qt")->fld.data(),
@@ -1838,9 +1854,31 @@ void Thermo_moist<TF>::exec(const double dt, Stats<TF>& stats)
     };
 
     if (swphydro_3d)
-        buoyancy_tend_wrapper.template operator()<true>(fields.sd.at("phydroh_3d")->fld);
+    {
+        if (sw_satadjust == Satadjust_type::Liquid_ice)
+            calc_buoyancy_tend_2nd_wrapper.template operator()<true, Satadjust_type::Liquid_ice>(fields.sd.at("phydroh_3d")->fld);
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_buoyancy_tend_2nd_wrapper.template operator()<true, Satadjust_type::Liquid_shallow>(fields.sd.at("phydroh_3d")->fld);
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_buoyancy_tend_2nd_wrapper.template operator()<true, Satadjust_type::Liquid_deep>(fields.sd.at("phydroh_3d")->fld);
+        else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+            calc_buoyancy_tend_2nd_wrapper.template operator()<true, Satadjust_type::Liquid_ice_deep>(fields.sd.at("phydroh_3d")->fld);
+        else
+            calc_buoyancy_tend_2nd_wrapper.template operator()<true, Satadjust_type::Disabled>(fields.sd.at("phydroh_3d")->fld);
+    }
     else
-        buoyancy_tend_wrapper.template operator()<false>(bs.prefh);
+    {
+        if (sw_satadjust == Satadjust_type::Liquid_ice)
+            calc_buoyancy_tend_2nd_wrapper.template operator()<false, Satadjust_type::Liquid_ice>(bs.prefh);
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_buoyancy_tend_2nd_wrapper.template operator()<false, Satadjust_type::Liquid_shallow>(bs.prefh);
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_buoyancy_tend_2nd_wrapper.template operator()<false, Satadjust_type::Liquid_deep>(bs.prefh);
+        else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+            calc_buoyancy_tend_2nd_wrapper.template operator()<false, Satadjust_type::Liquid_ice_deep>(bs.prefh);
+        else
+            calc_buoyancy_tend_2nd_wrapper.template operator()<false, Satadjust_type::Disabled>(bs.prefh);
+    }
 
     fields.release_tmp(tmp);
     fields.release_tmp(qhm);
@@ -2056,35 +2094,51 @@ void Thermo_moist<TF>::get_thermo_field(
     // Pass dummy as rhoref,bs.thvref to prevent overwriting base state
     if (bs.swupdatebasestate)
     {
+        // BvS: get_thermo_field() is called from subgrid-model, before thermo(),
+        // so re-calculate the hydrostatic pressure.
+        // Pass dummy as rhoref, thvref et al. to prevent overwriting base state.
+
         auto tmp = fields.get_tmp();
 
-        calc_base_state(
-                base.pref.data(),
-                base.prefh.data(),
-                &tmp->fld[0*gd.kcells],
-                &tmp->fld[1*gd.kcells],
-                &tmp->fld[2*gd.kcells],
-                &tmp->fld[3*gd.kcells],
-                base.exnref.data(),
-                base.exnrefh.data(),
-                fields.sp.at("thl")->fld_mean.data(),
-                fields.sp.at("qt")->fld_mean.data(),
-                base.pbot,
-                gd.kstart,
-                gd.kend,
-                gd.z.data(),
-                gd.dz.data(),
-                gd.dzh.data());
+        auto calc_base_state_wrapper = [&]<Satadjust_type sw_satadjust>()
+        {
+            // field3d_operators.calc_mean_profile(qhm->fld_mean.data(), qhm->fld.data());
+            calc_base_state<TF, sw_satadjust>(
+                    base.pref.data(),
+                    base.prefh.data(),
+                    &tmp->fld[0*gd.kcells],
+                    &tmp->fld[1*gd.kcells],
+                    &tmp->fld[2*gd.kcells],
+                    &tmp->fld[3*gd.kcells],
+                    base.exnref.data(),
+                    base.exnrefh.data(),
+                    fields.sp.at("thl")->fld_mean.data(),
+                    fields.sp.at("qt")->fld_mean.data(),
+                    base.pbot,
+                    gd.kstart, gd.kend,
+                    gd.z.data(), gd.dz.data(), gd.dzh.data());
+        };
+
+        if (sw_satadjust == Satadjust_type::Liquid_ice)
+            calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_ice>();
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_deep>();
+        else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+            calc_base_state_wrapper.template operator()<Satadjust_type::Liquid_ice_deep>();
+        else
+            calc_base_state_wrapper.template operator()<Satadjust_type::Disabled>();
 
         fields.release_tmp(tmp);
     }
 
     // Wrapper for all fields calculated from the saturation adjustment procedure,
     // plus some derived properties like relative humidity, ...
-    auto calc_satadjust_fld_wrapper = [&]<Satadjust_field satadjust_field, bool swphydro_3d>(
+    auto calc_satadjust_fld_wrapper = [&]<Satadjust_field satadjust_field, bool swphydro_3d, Satadjust_type sw_satadjust>(
             std::vector<TF>& p)
     {
-        calc_satadjust_fld<TF, satadjust_field, swphydro_3d>(
+        calc_satadjust_fld<TF, satadjust_field, swphydro_3d, sw_satadjust>(
                 fld.fld.data(),
                 fields.sp.at("thl")->fld.data(),
                 fields.sp.at("qt")->fld.data(),
@@ -2100,10 +2154,9 @@ void Thermo_moist<TF>::get_thermo_field(
         auto tmp  = fields.get_tmp();
         auto tmp2 = fields.get_tmp();
 
-        auto calc_buoyancy_wrapper = [&]<bool swphydro_3d>(
-                std::vector<TF>& p)
+        auto calc_buoyancy_wrapper = [&]<bool swphydro_3d, Satadjust_type sw_satadjust>(std::vector<TF>& p)
         {
-            calc_buoyancy<TF, swphydro_3d>(
+            calc_buoyancy<TF, swphydro_3d, sw_satadjust>(
                     fld.fld.data(),
                     fields.sp.at("thl")->fld.data(),
                     fields.sp.at("qt")->fld.data(),
@@ -2115,25 +2168,47 @@ void Thermo_moist<TF>::get_thermo_field(
                     gd.istart, gd.iend,
                     gd.jstart, gd.jend,
                     gd.kstart, gd.kend,
-                    gd.kcells, gd.icells, gd.ijcells);
+                    gd.kcells,
+                    gd.icells, gd.ijcells);
         };
 
         if (swphydro_3d)
-            calc_buoyancy_wrapper.template operator()<true>(fields.sd.at("phydro_3d")->fld);
-        else
-            calc_buoyancy_wrapper.template operator()<false>(base.pref);
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_buoyancy_wrapper.template operator()<true, Satadjust_type::Liquid_ice>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_buoyancy_wrapper.template operator()<true, Satadjust_type::Liquid_shallow>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_buoyancy_wrapper.template operator()<true, Satadjust_type::Liquid_deep>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_buoyancy_wrapper.template operator()<true, Satadjust_type::Liquid_ice_deep>(fields.sd.at("phydro_3d")->fld);
+            else
+                calc_buoyancy_wrapper.template operator()<true, Satadjust_type::Disabled>(fields.sd.at("phydro_3d")->fld);
+        }
+        else {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_buoyancy_wrapper.template operator()<false, Satadjust_type::Liquid_ice>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_buoyancy_wrapper.template operator()<false, Satadjust_type::Liquid_shallow>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_buoyancy_wrapper.template operator()<false, Satadjust_type::Liquid_deep>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_buoyancy_wrapper.template operator()<false, Satadjust_type::Liquid_ice_deep>(base.pref);
+            else
+                calc_buoyancy_wrapper.template operator()<false, Satadjust_type::Disabled>(base.pref);
+        }
 
-        fields.release_tmp(tmp);
+        fields.release_tmp(tmp );
         fields.release_tmp(tmp2);
     }
     else if (name == "b_h")
     {
         auto tmp = fields.get_tmp();
 
-        auto calc_buoyancy_h_wrapper = [&]<bool swphydro_3d>(
+        auto calc_buoyancy_h_wrapper = [&]<bool swphydro_3d, Satadjust_type sw_satadjust>(
                 std::vector<TF>& ph)
         {
-            calc_buoyancy_h<TF, swphydro_3d>(
+            calc_buoyancy_h<TF, swphydro_3d, sw_satadjust>(
                     fld.fld.data(),
                     fields.sp.at("thl")->fld.data(),
                     fields.sp.at("qt")->fld.data(),
@@ -2152,65 +2227,75 @@ void Thermo_moist<TF>::get_thermo_field(
         };
 
         if (swphydro_3d)
-            calc_buoyancy_h_wrapper.template operator()<true>(fields.sd.at("phydroh_3d")->fld);
-        else
-            calc_buoyancy_h_wrapper.template operator()<false>(base.prefh);
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_buoyancy_h_wrapper.template operator()<true, Satadjust_type::Liquid_ice>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_buoyancy_h_wrapper.template operator()<true, Satadjust_type::Liquid_shallow>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_buoyancy_h_wrapper.template operator()<true, Satadjust_type::Liquid_deep>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_buoyancy_h_wrapper.template operator()<true, Satadjust_type::Liquid_ice_deep>(fields.sd.at("phydro_3d")->fld);
+            else
+                calc_buoyancy_h_wrapper.template operator()<true, Satadjust_type::Disabled>(fields.sd.at("phydro_3d")->fld);
+        }
+        else {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_buoyancy_h_wrapper.template operator()<false, Satadjust_type::Liquid_ice>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_buoyancy_h_wrapper.template operator()<false, Satadjust_type::Liquid_shallow>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_buoyancy_h_wrapper.template operator()<false, Satadjust_type::Liquid_deep>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_buoyancy_h_wrapper.template operator()<false, Satadjust_type::Liquid_ice_deep>(base.pref);
+            else
+                calc_buoyancy_h_wrapper.template operator()<false, Satadjust_type::Disabled>(base.pref);
+        }
 
         fields.release_tmp(tmp);
     }
     else if (name == "ql")
     {
+        const Satadjust_field satadjust_field = Satadjust_field::ql;
+
         if (swphydro_3d)
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_field::ql, true>(fields.sd.at("phydro_3d")->fld);
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_ice>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_shallow>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_deep>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_ice_deep>(fields.sd.at("phydro_3d")->fld);
+            else
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Disabled>(fields.sd.at("phydro_3d")->fld);
+        }
         else
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_field::ql, false>(base.pref);
-    }
-    else if (name == "qi")
-    {
-        if (swphydro_3d)
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_field::qi, true>(fields.sd.at("phydro_3d")->fld);
-        else
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_field::qi, false>(base.pref);
-    }
-    else if (name == "qlqi")
-    {
-        if (swphydro_3d)
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_field::qlqi, true>(fields.sd.at("phydro_3d")->fld);
-        else
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_field::qlqi, false>(base.pref);
-    }
-    else if (name == "qsat")
-    {
-        if (swphydro_3d)
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_field::qsat, true>(fields.sd.at("phydro_3d")->fld);
-        else
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_field::qsat, false>(base.pref);
-    }
-    else if (name == "rh")
-    {
-        if (swphydro_3d)
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_field::RH, true>(fields.sd.at("phydro_3d")->fld);
-        else
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_field::RH, false>(base.pref);
-    }
-    else if (name == "T")
-    {
-        if (swphydro_3d)
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_field::T, true>(fields.sd.at("phydro_3d")->fld);
-        else
-            calc_satadjust_fld_wrapper.template operator()<Satadjust_field::T, false>(base.pref);
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_ice>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_shallow>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_deep>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_ice_deep>(base.pref);
+            else
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Disabled>(base.pref);
+        }
     }
     else if (name == "ql_h")
     {
         auto tmp = fields.get_tmp();
 
-        auto calc_qlh_wrapper = [&]<bool swphydro_3d>(std::vector<TF>& p)
+        auto calc_qlh_wrapper = [&]<bool swphydro_3d, Satadjust_type sw_satadjust>(std::vector<TF>& p)
         {
-            calc_ql_h<TF, swphydro_3d>(
+            calc_ql_h<TF, swphydro_3d, sw_satadjust>(
                     fld.fld.data(),
                     fields.sp.at("thl")->fld.data(),
                     fields.sp.at("qt")->fld.data(),
-                    p.data(),
+                    base.prefh.data(),
                     &tmp->fld[0*gd.ijcells],
                     &tmp->fld[1*gd.ijcells],
                     gd.istart, gd.iend,
@@ -2219,19 +2304,200 @@ void Thermo_moist<TF>::get_thermo_field(
                     gd.icells, gd.ijcells);
         };
 
-        if (swphydro_3d)
-            calc_qlh_wrapper.template operator()<true>(fields.sd.at("phydroh_3d")->fld);
+        if (swphydro_3d) {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_qlh_wrapper.template operator()<true, Satadjust_type::Liquid_ice>(fields.sd.at("phydroh_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_qlh_wrapper.template operator()<true, Satadjust_type::Liquid_shallow>(
+                        fields.sd.at("phydroh_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_qlh_wrapper.template operator()<true, Satadjust_type::Liquid_deep>(
+                        fields.sd.at("phydroh_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_qlh_wrapper.template operator()<true, Satadjust_type::Liquid_ice_deep>(
+                        fields.sd.at("phydroh_3d")->fld);
+            else
+                calc_qlh_wrapper.template operator()<true, Satadjust_type::Disabled>(fields.sd.at("phydroh_3d")->fld);
+        }
         else
-            calc_qlh_wrapper.template operator()<false>(base.prefh);
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_qlh_wrapper.template operator()<false, Satadjust_type::Liquid_ice>(base.prefh);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_qlh_wrapper.template operator()<false, Satadjust_type::Liquid_shallow>(
+                        base.prefh);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_qlh_wrapper.template operator()<false, Satadjust_type::Liquid_deep>(
+                        base.prefh);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_qlh_wrapper.template operator()<false, Satadjust_type::Liquid_ice_deep>(
+                        base.prefh);
+            else
+                calc_qlh_wrapper.template operator()<false, Satadjust_type::Disabled>(base.prefh);
+        }
 
         fields.release_tmp(tmp);
     }
+    else if (name == "qi")
+    {
+        const Satadjust_field satadjust_field = Satadjust_field::qi;
+
+        if (swphydro_3d)
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_ice>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_shallow>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_deep>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_ice_deep>(fields.sd.at("phydro_3d")->fld);
+            else
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Disabled>(fields.sd.at("phydro_3d")->fld);
+        }
+        else
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_ice>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_shallow>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_deep>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_ice_deep>(base.pref);
+            else
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Disabled>(base.pref);
+        }
+    }
+    else if (name == "qlqi")
+    {
+        const Satadjust_field satadjust_field = Satadjust_field::qlqi;
+
+        if (swphydro_3d)
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_ice>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_shallow>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_deep>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_ice_deep>(fields.sd.at("phydro_3d")->fld);
+            else
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Disabled>(fields.sd.at("phydro_3d")->fld);
+        }
+        else
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_ice>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_shallow>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_deep>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_ice_deep>(base.pref);
+            else
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Disabled>(base.pref);
+        }    }
+    else if (name == "qsat")
+    {
+        const Satadjust_field satadjust_field = Satadjust_field::qsat;
+
+        if (swphydro_3d)
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_ice>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_shallow>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_deep>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_ice_deep>(fields.sd.at("phydro_3d")->fld);
+            else
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Disabled>(fields.sd.at("phydro_3d")->fld);
+        }
+        else
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_ice>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_shallow>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_deep>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_ice_deep>(base.pref);
+            else
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Disabled>(base.pref);
+        }
+    }
+    else if (name == "rh")
+    {
+        const Satadjust_field satadjust_field = Satadjust_field::RH;
+
+        if (swphydro_3d)
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_ice>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_shallow>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_deep>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_ice_deep>(fields.sd.at("phydro_3d")->fld);
+            else
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Disabled>(fields.sd.at("phydro_3d")->fld);
+        }
+        else
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_ice>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_shallow>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_deep>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_ice_deep>(base.pref);
+            else
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Disabled>(base.pref);
+        }
+    }
+    else if (name == "T")
+    {
+        const Satadjust_field satadjust_field = Satadjust_field::T;
+
+        if (swphydro_3d)
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_ice>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_shallow>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_deep>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Liquid_ice_deep>(fields.sd.at("phydro_3d")->fld);
+            else
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, true, Satadjust_type::Disabled>(fields.sd.at("phydro_3d")->fld);
+        }
+        else
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_ice>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_shallow>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_deep>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Liquid_ice_deep>(base.pref);
+            else
+                calc_satadjust_fld_wrapper.template operator()<satadjust_field, false, Satadjust_type::Disabled>(base.pref);
+        }
+    }
     else if (name == "thv")
     {
-        auto calc_thv_wrapper = [&]<bool swphydro_3d>(std::vector<TF>& p)
+        auto calc_thv_wrapper = [&]<bool swphydro_3d, Satadjust_type sw_satadjust>(std::vector<TF>& p)
         {
             // Calculate thv including one ghost cell, for the calculation of gradients in the statistics
-            calc_thv<TF, swphydro_3d>(
+            calc_thv<TF, swphydro_3d, sw_satadjust>(
                     fld.fld.data(),
                     fields.sp.at("thl")->fld.data(),
                     fields.sp.at("qt")->fld.data(),
@@ -2244,9 +2510,32 @@ void Thermo_moist<TF>::get_thermo_field(
         };
 
         if (swphydro_3d)
-            calc_thv_wrapper.template operator()<true>(fields.sd.at("phydro_3d")->fld);
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_thv_wrapper.template operator()<true, Satadjust_type::Liquid_ice>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_thv_wrapper.template operator()<true, Satadjust_type::Liquid_shallow>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_thv_wrapper.template operator()<true, Satadjust_type::Liquid_deep>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_thv_wrapper.template operator()<true, Satadjust_type::Liquid_ice_deep>(fields.sd.at("phydro_3d")->fld);
+            else
+                calc_thv_wrapper.template operator()<true, Satadjust_type::Disabled>(fields.sd.at("phydro_3d")->fld);
+        }
         else
-            calc_thv_wrapper.template operator()<false>(base.pref);
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_thv_wrapper.template operator()<false, Satadjust_type::Liquid_ice>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_thv_wrapper.template operator()<false, Satadjust_type::Liquid_shallow>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_thv_wrapper.template operator()<false, Satadjust_type::Liquid_deep>(base.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_thv_wrapper.template operator()<false, Satadjust_type::Liquid_ice_deep>(base.pref);
+            else
+                calc_thv_wrapper.template operator()<false, Satadjust_type::Disabled>(base.pref);
+        }
+
     }
     else if (name == "N2")
     {
@@ -2286,55 +2575,14 @@ void Thermo_moist<TF>::get_thermo_field(
 
 template<typename TF>
 void Thermo_moist<TF>::get_radiation_fields(
-        Field3d<TF>& T, Field3d<TF>& T_h, Field3d<TF>& qv, Field3d<TF>& clwp, Field3d<TF>& ciwp) const
-{
-    auto& gd = grid.get_grid_data();
-
-    auto calc_rad_field_wrapper = [&]<bool swphydro_3d>(
-            const std::vector<TF>& p, const std::vector<TF>& ph)
-    {
-        calc_radiation_fields<TF, swphydro_3d>(
-                T.fld.data(),
-                T_h.fld.data(),
-                qv.fld.data(),
-                clwp.fld.data(),
-                ciwp.fld.data(),
-                T_h.fld_bot.data(),
-                T.fld_bot.data(),  // These 2d fields are used as tmp arrays.
-                T.fld_top.data(),  // These 2d fields are used as tmp arrays.
-                fields.sp.at("thl")->fld.data(),
-                fields.sp.at("qt")->fld.data(),
-                fields.sp.at("thl")->fld_bot.data(),
-                p.data(),
-                ph.data(),
-                gd.istart, gd.iend,
-                gd.jstart, gd.jend,
-                gd.kstart, gd.kend,
-                gd.igc, gd.jgc, gd.kgc,
-                gd.icells, gd.ijcells,
-                gd.imax, gd.imax * gd.jmax);
-    };
-
-    if (swphydro_3d)
-        calc_rad_field_wrapper.template operator()<true>(
-                fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
-    else
-        calc_rad_field_wrapper.template operator()<false>(
-                bs.pref, bs.prefh);
-
-    std::cout << "boe" << std::endl;
-}
-
-template<typename TF>
-void Thermo_moist<TF>::get_radiation_fields(
         Field3d<TF>& T, Field3d<TF>& T_h, Field3d<TF>& qv, Field3d<TF>& rh, Field3d<TF>& clwp, Field3d<TF>& ciwp) const
 {
     auto& gd = grid.get_grid_data();
 
-    auto calc_rad_field_wrapper = [&]<bool swphydro_3d>(
+    auto calc_radiation_fields_wrapper = [&]<bool swphydro_3d, Satadjust_type sw_satadjust>(
             const std::vector<TF>& p, const std::vector<TF>& ph)
     {
-        calc_radiation_fields<TF, swphydro_3d>(
+        calc_radiation_fields<TF, swphydro_3d, sw_satadjust>(
                 T.fld.data(),
                 T_h.fld.data(),
                 qv.fld.data(),
@@ -2342,12 +2590,13 @@ void Thermo_moist<TF>::get_radiation_fields(
                 clwp.fld.data(),
                 ciwp.fld.data(),
                 T_h.fld_bot.data(),
-                T.fld_bot.data(),  // These 2d fields are used as tmp arrays.
+                T.fld_bot.data(),
                 T.fld_top.data(),  // These 2d fields are used as tmp arrays.
                 fields.sp.at("thl")->fld.data(),
                 fields.sp.at("qt")->fld.data(),
                 fields.sp.at("thl")->fld_bot.data(),
-                p.data(), ph.data(),
+                p.data(),
+                ph.data(),
                 gd.istart, gd.iend,
                 gd.jstart, gd.jend,
                 gd.kstart, gd.kend,
@@ -2356,54 +2605,113 @@ void Thermo_moist<TF>::get_radiation_fields(
                 gd.imax, gd.imax*gd.jmax);
     };
 
-    if (swphydro_3d)
-        calc_rad_field_wrapper.template operator()<true>(
-                fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+    if (swphydro_3d) {
+        if (sw_satadjust == Satadjust_type::Liquid_ice)
+            calc_radiation_fields_wrapper.template operator()<true, Satadjust_type::Liquid_ice>(
+                    fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_radiation_fields_wrapper.template operator()<true, Satadjust_type::Liquid_shallow>(
+                    fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_radiation_fields_wrapper.template operator()<true, Satadjust_type::Liquid_deep>(
+                    fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+        else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+            calc_radiation_fields_wrapper.template operator()<true, Satadjust_type::Liquid_ice_deep>(
+                    fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+        else
+            calc_radiation_fields_wrapper.template operator()<true, Satadjust_type::Disabled>(
+                    fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+    }
     else
-        calc_rad_field_wrapper.template operator()<false>(
-                bs.pref, bs.prefh);
+    {
+        if (sw_satadjust == Satadjust_type::Liquid_ice)
+            calc_radiation_fields_wrapper.template operator()<false, Satadjust_type::Liquid_ice>(
+                    bs.pref, bs.prefh);
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_radiation_fields_wrapper.template operator()<false, Satadjust_type::Liquid_shallow>(
+                    bs.pref, bs.prefh);
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_radiation_fields_wrapper.template operator()<false, Satadjust_type::Liquid_deep>(
+                    bs.pref, bs.prefh);
+        else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+            calc_radiation_fields_wrapper.template operator()<false, Satadjust_type::Liquid_ice_deep>(
+                    bs.pref, bs.prefh);
+        else
+            calc_radiation_fields_wrapper.template operator()<false, Satadjust_type::Disabled>(
+                    bs.pref, bs.prefh);
+    }
 }
 
 template<typename TF>
 void Thermo_moist<TF>::get_radiation_columns(
-    Field3d<TF>& tmp, std::vector<int>& col_i, std::vector<int>& col_j) const
+        TF* t_lay_a, TF* t_lev_a, TF* t_sfc_a,
+        TF* h2o_a, TF* rh_a,
+        TF* clwp_a, TF* ciwp_a,
+        std::vector<int>& col_i, std::vector<int>& col_j) const
 {
     auto& gd = grid.get_grid_data();
-
-    // Get slices from tmp field.
     const int n_cols = col_i.size();
-    int offset = 0;
-    TF* t_lay_a = &tmp.fld.data()[offset]; offset += n_cols * gd.ktot;
-    TF* t_lev_a = &tmp.fld.data()[offset]; offset += n_cols * (gd.ktot+1);
-    TF* t_sfc_a = &tmp.fld.data()[offset]; offset += n_cols;
-    TF* h2o_a   = &tmp.fld.data()[offset]; offset += n_cols * (gd.ktot);
-    TF* rh_a    = &tmp.fld.data()[offset]; offset += n_cols * (gd.ktot);
-    TF* clwp_a  = &tmp.fld.data()[offset]; offset += n_cols * (gd.ktot);
-    TF* ciwp_a  = &tmp.fld.data()[offset];
 
-    auto calc_rad_columns_wrapper = [&]<bool swphydro_3d>(
-            const std::vector<TF>& p, const std::vector<TF>& ph)
+//    int offset = 0;
+//    TF* t_lay_a = &tmp.fld.data()[offset]; offset += n_cols * gd.ktot;
+//    TF* t_lev_a = &tmp.fld.data()[offset]; offset += n_cols * (gd.ktot+1);
+//    TF* t_sfc_a = &tmp.fld.data()[offset]; offset += n_cols;
+//    TF* h2o_a   = &tmp.fld.data()[offset]; offset += n_cols * (gd.ktot);
+//    TF* rh_a    = &tmp.fld.data()[offset]; offset += n_cols * (gd.ktot);
+//    TF* clwp_a  = &tmp.fld.data()[offset]; offset += n_cols * (gd.ktot);
+//    TF* ciwp_a  = &tmp.fld.data()[offset];
+
+    auto calc_radiation_columns_wrapper = [&]<bool swphydro_3d, Satadjust_type sw_satadjust>(const std::vector<TF>& p, const std::vector<TF>& ph)
     {
-        calc_radiation_columns<TF, swphydro_3d>(
-                t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a, t_sfc_a,
-                fields.sp.at("thl")->fld.data(),
-                fields.sp.at("qt")->fld.data(),
-                fields.sp.at("thl")->fld_bot.data(),
-                p.data(),
-                ph.data(),
-                col_i.data(),
-                col_j.data(),
-                n_cols,
-                gd.kgc, gd.kstart, gd.kend,
-                gd.icells, gd.ijcells);
+        calc_radiation_columns<TF, swphydro_3d, sw_satadjust>(
+                    t_lay_a, t_lev_a, h2o_a, rh_a, clwp_a, ciwp_a, t_sfc_a,
+                    fields.sp.at("thl")->fld.data(),
+                    fields.sp.at("qt")->fld.data(),
+                    fields.sp.at("thl")->fld_bot.data(),
+                    p.data(),
+                    ph.data(),
+                    col_i.data(),
+                    col_j.data(),
+                    n_cols,
+                    gd.kgc, gd.kstart, gd.kend,
+                    gd.icells, gd.ijcells);
     };
 
-    if (swphydro_3d)
-        calc_rad_columns_wrapper.template operator()<true>(
-                fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+    if (swphydro_3d) {
+        if (sw_satadjust == Satadjust_type::Liquid_ice)
+            calc_radiation_columns_wrapper.template operator()<true, Satadjust_type::Liquid_ice>(
+                    fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_radiation_columns_wrapper.template operator()<true, Satadjust_type::Liquid_shallow>(
+                    fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_radiation_columns_wrapper.template operator()<true, Satadjust_type::Liquid_deep>(
+                    fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+        else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+            calc_radiation_columns_wrapper.template operator()<true, Satadjust_type::Liquid_ice_deep>(
+                    fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+        else
+            calc_radiation_columns_wrapper.template operator()<true, Satadjust_type::Disabled>(
+                    fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+    }
     else
-        calc_rad_columns_wrapper.template operator()<false>(
-                bs.pref, bs.prefh);
+    {
+        if (sw_satadjust == Satadjust_type::Liquid_ice)
+            calc_radiation_columns_wrapper.template operator()<false, Satadjust_type::Liquid_ice>(
+                    bs.pref, bs.prefh);
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_radiation_columns_wrapper.template operator()<false, Satadjust_type::Liquid_shallow>(
+                    bs.pref, bs.prefh);
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_radiation_columns_wrapper.template operator()<false, Satadjust_type::Liquid_deep>(
+                    bs.pref, bs.prefh);
+        else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+            calc_radiation_columns_wrapper.template operator()<false, Satadjust_type::Liquid_ice_deep>(
+                    bs.pref, bs.prefh);
+        else
+            calc_radiation_columns_wrapper.template operator()<false, Satadjust_type::Disabled>(
+                    bs.pref, bs.prefh);
+    }
 }
 
 template<typename TF>
@@ -2418,10 +2726,10 @@ void Thermo_moist<TF>::get_land_surface_fields(
        2D slices in the 3D tmp field */
     auto& gd = grid.get_grid_data();
 
-    auto calc_lsm_fields_wrapper = [&]<bool swphydro_3d>(
+    auto calc_lsm_fields_wrapper = [&]<bool swphydro_3d, Satadjust_type sw_satadjust>(
             const std::vector<TF>& p, const std::vector<TF>& ph)
     {
-        calc_land_surface_fields<TF, swphydro_3d>(
+        calc_land_surface_fields<TF, swphydro_3d, sw_satadjust>(
                 T_bot.data(),
                 T_a.data(),
                 vpd.data(),
@@ -2438,12 +2746,41 @@ void Thermo_moist<TF>::get_land_surface_fields(
                 gd.icells, gd.ijcells);
     };
 
-    if (swphydro_3d)
-        calc_lsm_fields_wrapper.template operator()<true>(
-                fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+    if (swphydro_3d) {
+        if (sw_satadjust == Satadjust_type::Liquid_ice)
+            calc_lsm_fields_wrapper.template operator()<true, Satadjust_type::Liquid_ice>(
+                    fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_lsm_fields_wrapper.template operator()<true, Satadjust_type::Liquid_shallow>(
+                    fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_lsm_fields_wrapper.template operator()<true, Satadjust_type::Liquid_deep>(
+                    fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+        else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+            calc_lsm_fields_wrapper.template operator()<true, Satadjust_type::Liquid_ice_deep>(
+                    fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+        else
+            calc_lsm_fields_wrapper.template operator()<true, Satadjust_type::Disabled>(
+                    fields.sd.at("phydro_3d")->fld, fields.sd.at("phydroh_3d")->fld);
+    }
     else
-        calc_lsm_fields_wrapper.template operator()<false>(
-                bs.pref, bs.prefh);
+    {
+        if (sw_satadjust == Satadjust_type::Liquid_ice)
+            calc_lsm_fields_wrapper.template operator()<false, Satadjust_type::Liquid_ice>(
+                    bs.pref, bs.prefh);
+        else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+            calc_lsm_fields_wrapper.template operator()<false, Satadjust_type::Liquid_shallow>(
+                    bs.pref, bs.prefh);
+        else if (sw_satadjust == Satadjust_type::Liquid_deep)
+            calc_lsm_fields_wrapper.template operator()<false, Satadjust_type::Liquid_deep>(
+                    bs.pref, bs.prefh);
+        else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+            calc_lsm_fields_wrapper.template operator()<false, Satadjust_type::Liquid_ice_deep>(
+                    bs.pref, bs.prefh);
+        else
+            calc_lsm_fields_wrapper.template operator()<false, Satadjust_type::Disabled>(
+                    bs.pref, bs.prefh);
+    }
 }
 
 template<typename TF>
@@ -2661,19 +2998,37 @@ void Thermo_moist<TF>::create_phydro_3d(Timeloop<TF>& timeloop)
         auto qhm = fields.get_tmp();
         std::fill(qhm->fld.begin(), qhm->fld.end(), TF(0));
 
-        calc_phydro_3d(
-                fields.sd.at("phydro_3d")->fld.data(),
-                fields.sd.at("phydroh_3d")->fld.data(),
-                phydro_tod.data(),
-                fields.sp.at("thl")->fld.data(),
-                fields.sp.at("qt")->fld.data(),
-                qhm->fld.data(),
-                gd.dz.data(),
-                gd.dzh.data(),
-                gd.istart, gd.iend,
-                gd.jstart, gd.jend,
-                gd.kstart, gd.kend,
-                gd.icells, gd.ijcells);
+
+        auto calc_phydro_3d_wrapper = [&]<Satadjust_type sw_satadjust>()
+        {
+            calc_phydro_3d<TF, sw_satadjust>(
+                    fields.sd.at("phydro_3d")->fld.data(),
+                    fields.sd.at("phydroh_3d")->fld.data(),
+                    phydro_tod.data(),
+                    fields.sp.at("thl")->fld.data(),
+                    fields.sp.at("qt")->fld.data(),
+                    qhm->fld.data(),
+                    gd.dz.data(),
+                    gd.dzh.data(),
+                    gd.istart, gd.iend,
+                    gd.jstart, gd.jend,
+                    gd.kstart, gd.kend,
+                    gd.icells, gd.ijcells);
+        };
+
+        if (swphydro_3d && swtimedep_phydro_3d)
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_ice>();
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_shallow>();
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_deep>();
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_ice_deep>();
+            else
+                calc_phydro_3d_wrapper.template operator()<Satadjust_type::Disabled>();
+        }
     }
 
     if (nerror > 0)
@@ -2732,19 +3087,22 @@ void Thermo_moist<TF>::create_stats(Stats<TF>& stats)
         stats.add_profs(*ql, "z", {"mean", "frac", "path", "cover", "w", "grad", "diff", "flux"}, group_name);
         fields.release_tmp(ql);
 
-        auto qi = fields.get_tmp();
-        qi->name = "qi";
-        qi->longname = "Ice";
-        qi->unit = "kg kg-1";
-        stats.add_profs(*qi, "z", {"mean", "frac", "path", "cover"}, group_name);
-        fields.release_tmp(qi);
+        if (sw_satadjust == Satadjust_type::Liquid_ice || sw_satadjust == Satadjust_type::Liquid_ice_deep)
+        {
+            auto qi = fields.get_tmp();
+            qi->name = "qi";
+            qi->longname = "Ice";
+            qi->unit = "kg kg-1";
+            stats.add_profs(*qi, "z", {"mean", "frac", "path", "cover"}, group_name);
+            fields.release_tmp(qi);
 
-        auto qlqi = fields.get_tmp();
-        qlqi->name = "qlqi";
-        qlqi->longname = "Liquid water and ice";
-        qlqi->unit = "kg kg-1";
-        stats.add_profs(*qlqi, "z", {"mean", "frac", "path", "cover"}, group_name);
-        fields.release_tmp(qlqi);
+            auto qlqi = fields.get_tmp();
+            qlqi->name = "qlqi";
+            qlqi->longname = "Liquid water and ice";
+            qlqi->unit = "kg kg-1";
+            stats.add_profs(*qlqi, "z", {"mean", "frac", "path", "cover"}, group_name);
+            fields.release_tmp(qlqi);
+        }
 
         auto qsat = fields.get_tmp();
         qsat->name = "qsat";
@@ -2761,6 +3119,7 @@ void Thermo_moist<TF>::create_stats(Stats<TF>& stats)
         fields.release_tmp(rh);
 
         stats.add_time_series("zi", "Boundary Layer Depth", "m", group_name);
+
         stats.add_tendency(*fields.mt.at("w"), "zh", tend_name, tend_longname, group_name);
 
         if (swphydro_3d)
@@ -2781,13 +3140,16 @@ void Thermo_moist<TF>::create_column(Column<TF>& column)
         column.add_prof("T", "Absolute temperature", "K", "z");
         column.add_prof("thv", "Virtual potential temperature", "K", "z");
         column.add_prof("ql", "Liquid water mixing ratio", "kg kg-1", "z");
-        column.add_prof("qi", "Ice mixing ratio", "kg kg-1", "z");
-
         column.add_time_series("ql_path", "Liquid water path", "kg m-2");
-        column.add_time_series("qi_path", "Ice path", "kg m-2");
 
         column.add_prof("phydro", "Full level hydrostatic pressure", "Pa", "z");
         column.add_prof("phydroh", "Half level hydrostatic pressure", "Pa", "zh");
+
+        if (sw_satadjust == Satadjust_type::Liquid_ice || sw_satadjust == Satadjust_type::Liquid_ice_deep)
+        {
+            column.add_prof("qi", "Ice mixing ratio", "kg kg-1", "z");
+            column.add_time_series("qi_path", "Ice path", "kg m-2");
+        }
     }
 }
 
@@ -2818,9 +3180,9 @@ void Thermo_moist<TF>::create_cross(Cross<TF>& cross)
         std::vector<std::string> qlvars = cross.get_enabled_variables(allowed_crossvars_ql);
         std::vector<std::string> qivars = cross.get_enabled_variables(allowed_crossvars_qi);
         std::vector<std::string> qlqivars = cross.get_enabled_variables(allowed_crossvars_qlqi);
+        std::vector<std::string> qlqithvvars = cross.get_enabled_variables(allowed_crossvars_qlqithv);
         std::vector<std::string> qsatvars = cross.get_enabled_variables(allowed_crossvars_qsat);
         std::vector<std::string> miscvars = cross.get_enabled_variables(allowed_crossvars_misc);
-        std::vector<std::string> qlqithvvars = cross.get_enabled_variables(allowed_crossvars_qlqithv);
         std::vector<std::string> capevars = cross.get_enabled_variables(allowed_crossvars_cape);
 
         if (bvars.size() > 0)
@@ -2829,17 +3191,21 @@ void Thermo_moist<TF>::create_cross(Cross<TF>& cross)
         if (qlvars.size() > 0)
             swcross_ql = true;
 
-        if (qivars.size() > 0)
-            swcross_qi = true;
+        if (sw_satadjust == Satadjust_type::Liquid_ice || sw_satadjust == Satadjust_type::Liquid_ice_deep)
+        {
+            if (qivars.size() > 0)
+                swcross_qi = true;
 
-        if (qlqivars.size() > 0)
-            swcross_qlqi = true;
+            if (qlqivars.size() > 0)
+                swcross_qlqi = true;
+
+            if (qlqithvvars.size() > 0)
+                swcross_qlqithv = true;
+        }
 
         if (qsatvars.size() > 0)
             swcross_qsat = true;
 
-        if (qlqithvvars.size() > 0)
-            swcross_qlqithv = true;
 
         if (capevars.size() > 0)
             swcross_cape = true;
@@ -2847,8 +3213,14 @@ void Thermo_moist<TF>::create_cross(Cross<TF>& cross)
         // Merge into one vector
         crosslist = bvars;
         crosslist.insert(crosslist.end(), qlvars.begin(), qlvars.end());
-        crosslist.insert(crosslist.end(), qivars.begin(), qivars.end());
-        crosslist.insert(crosslist.end(), qlqivars.begin(), qlqivars.end());
+
+        if (sw_satadjust == Satadjust_type::Liquid_ice || sw_satadjust == Satadjust_type::Liquid_ice_deep)
+        {
+            crosslist.insert(crosslist.end(), qivars.begin(), qivars.end());
+            crosslist.insert(crosslist.end(), qlqivars.begin(), qlqivars.end());
+            crosslist.insert(crosslist.end(), qlqithvvars.begin(), qlqithvvars.end());
+        }
+
         crosslist.insert(crosslist.end(), qsatvars.begin(), qsatvars.end());
         crosslist.insert(crosslist.end(), miscvars.begin(), miscvars.end());
         crosslist.insert(crosslist.end(), qlqithvvars.begin(), qlqithvvars.end());
@@ -2953,23 +3325,26 @@ void Thermo_moist<TF>::exec_stats(Stats<TF>& stats)
 
     fields.release_tmp(ql);
 
-    // Calculate the ice stats
-    auto qi = fields.get_tmp();
-    qi->loc = gd.sloc;
+    if (sw_satadjust == Satadjust_type::Liquid_ice || sw_satadjust == Satadjust_type::Liquid_ice_deep)
+    {
+        // Calculate the ice stats
+        auto qi = fields.get_tmp();
+        qi->loc = gd.sloc;
 
-    get_thermo_field(*qi, "qi", true, true);
-    stats.calc_stats("qi", *qi, no_offset, no_threshold);
+        get_thermo_field(*qi, "qi", true, true);
+        stats.calc_stats("qi", *qi, no_offset, no_threshold);
 
-    fields.release_tmp(qi);
+        fields.release_tmp(qi);
 
-    // Calculate the combined liquid water and ice stats
-    auto qlqi = fields.get_tmp();
-    qlqi->loc = gd.sloc;
+        // Calculate the combined liquid water and ice stats
+        auto qlqi = fields.get_tmp();
+        qlqi->loc = gd.sloc;
 
-    get_thermo_field(*qlqi, "qlqi", true, true);
-    stats.calc_stats("qlqi", *qlqi, no_offset, no_threshold);
+        get_thermo_field(*qlqi, "qlqi", true, true);
+        stats.calc_stats("qlqi", *qlqi, no_offset, no_threshold);
 
-    fields.release_tmp(qlqi);
+        fields.release_tmp(qlqi);
+    }
 
     // Calculate the saturated water vapor stats
     auto qsat = fields.get_tmp();
@@ -2987,9 +3362,9 @@ void Thermo_moist<TF>::exec_stats(Stats<TF>& stats)
     get_thermo_field(*rh, "rh", true, true);
     stats.calc_stats("rh", *rh, no_offset, no_threshold);
 
-    // // Surface values
-    // stats.calc_stats_2d("thl_bot", fields.ap.at("thl")->fld_bot, no_offset);
-    // stats.calc_stats_2d("qt_bot", fields.ap.at("qt")->fld_bot, no_offset);
+    // Surface values
+    stats.calc_stats_2d("thl_bot", fields.ap.at("thl")->fld_bot, no_offset);
+    stats.calc_stats_2d("qt_bot", fields.ap.at("qt")->fld_bot, no_offset);
 
     fields.release_tmp(rh);
 
@@ -3045,20 +3420,23 @@ void Thermo_moist<TF>::exec_column(Column<TF>& column)
     column.calc_column("ql", output->fld.data(), no_offset);
     column.calc_time_series("ql_path", output->fld_bot.data(), no_offset);
 
-    get_thermo_field(*output, "qi", false, true);
+    if (sw_satadjust == Satadjust_type::Liquid_ice || sw_satadjust == Satadjust_type::Liquid_ice_deep)
+    {
+        get_thermo_field(*output, "qi", false, true);
 
-    calc_path(
-        output->fld_bot.data(),
-        output->fld.data(),
-        bs_stats.rhoref.data(),
-        gd.dz.data(),
-        gd.istart, gd.iend,
-        gd.jstart, gd.jend,
-        gd.kstart, gd.kend,
-        gd.icells, gd.ijcells);
+        calc_path(
+            output->fld_bot.data(),
+            output->fld.data(),
+            bs_stats.rhoref.data(),
+            gd.dz.data(),
+            gd.istart, gd.iend,
+            gd.jstart, gd.jend,
+            gd.kstart, gd.kend,
+            gd.icells, gd.ijcells);
 
-    column.calc_column("qi", output->fld.data(), no_offset);
-    column.calc_time_series("qi_path", output->fld_bot.data(), no_offset);
+        column.calc_column("qi", output->fld.data(), no_offset);
+        column.calc_time_series("qi_path", output->fld_bot.data(), no_offset);
+    }
 
     if (swphydro_3d)
     {
@@ -3174,9 +3552,9 @@ void Thermo_moist<TF>::exec_cross(Cross<TF>& cross, unsigned long iotime)
             );
         }
 
-        auto cape_wrapper = [&]<bool swphydro_3d>(std::vector<TF>& p)
+        auto cape_wrapper = [&]<bool swphydro_3d, Satadjust_type sw_satadjust>(std::vector<TF>& p)
         {
-            calc_cape<TF, swphydro_3d>(
+            calc_cape<TF, swphydro_3d, sw_satadjust>(
                 output->fld_bot.data(),     // CAPE.
                 output->fld_top.data(),     // mixed-layer depth.
                 fields.ap.at("thl")->fld.data(),
@@ -3191,10 +3569,33 @@ void Thermo_moist<TF>::exec_cross(Cross<TF>& cross, unsigned long iotime)
                 gd.jstride, gd.kstride);
         };
 
-        if (swphydro_3d)
-            cape_wrapper.template operator()<true>(fields.sd.at("phydro_3d")->fld);
+        if (swphydro_3d) {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                cape_wrapper.template operator()<true, Satadjust_type::Liquid_ice>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                cape_wrapper.template operator()<true, Satadjust_type::Liquid_shallow>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                cape_wrapper.template operator()<true, Satadjust_type::Liquid_deep>(fields.sd.at("phydro_3d")->fld);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                cape_wrapper.template operator()<true, Satadjust_type::Liquid_ice_deep>(fields.sd.at("phydro_3d")->fld);
+            else
+                cape_wrapper.template operator()<true, Satadjust_type::Disabled>(fields.sd.at("phydro_3d")->fld);
+        }
         else
-            cape_wrapper.template operator()<false>(bs.prefh);
+        {
+            if (sw_satadjust == Satadjust_type::Liquid_ice)
+                cape_wrapper.template operator()<false, Satadjust_type::Liquid_ice>(bs.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_shallow)
+                cape_wrapper.template operator()<false, Satadjust_type::Liquid_shallow>(bs.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_deep)
+                cape_wrapper.template operator()<false, Satadjust_type::Liquid_deep>(bs.pref);
+            else if (sw_satadjust == Satadjust_type::Liquid_ice_deep)
+                cape_wrapper.template operator()<false, Satadjust_type::Liquid_ice_deep>(bs.pref);
+            else
+                cape_wrapper.template operator()<false, Satadjust_type::Disabled>(bs.pref);
+        }
+
+
 
         for (auto& it : crosslist)
         {

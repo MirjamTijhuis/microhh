@@ -23,6 +23,8 @@
 #ifndef MICROPHYS_H
 #define MICROPHYS_H
 
+#include "timer.h"
+
 class Master;
 class Input;
 class Netcdf_handle;
@@ -34,8 +36,9 @@ template<typename> class Dump;
 template<typename> class Cross;
 template<typename> class Thermo;
 template<typename> class Field3d;
+template<typename> class Timeloop;
 
-enum class Microphys_type {Disabled, Warm_2mom, Nsw6};
+enum class Microphys_type {Disabled, Warm_2mom, Nsw6, SB06};
 
 /**
  * Base class for the microphysics scheme. This class is abstract and only
@@ -54,15 +57,17 @@ class Microphys
 
         // Below are the functions that the derived class has to implement.
         virtual void init(Thermo<TF>&) = 0;
-        virtual void create(Input&, Netcdf_handle&, Stats<TF>&, Cross<TF>&, Dump<TF>&, Column<TF>&) = 0;
+        virtual void create(
+                Input&, Netcdf_handle&, Timeloop<TF>&, Stats<TF>&,
+                Cross<TF>&, Dump<TF>&, Column<TF>&, const std::string&) = 0;
         virtual unsigned long get_time_limit(unsigned long, double) = 0;
 
-        virtual void exec(Thermo<TF>&, const double, Stats<TF>&) = 0;
+        virtual void exec(Thermo<TF>&, Timeloop<TF>&, Stats<TF>&) = 0;
         virtual void exec_stats(Stats<TF>&, Thermo<TF>&, const double) = 0; ///< Calculate the statistics
-        virtual void exec_column(Column<TF>&) = 0;
+        virtual void exec_column(Column<TF>&, Thermo<TF>&) = 0;
 
         virtual void exec_dump(Dump<TF>&, unsigned long) = 0;
-        virtual void exec_cross(Cross<TF>&, unsigned long) = 0;
+        virtual void exec_cross(Cross<TF>&, Thermo<TF>& thermo, unsigned long) = 0;
 
         virtual void get_mask(Stats<TF>&, std::string) = 0;
         virtual bool has_mask(std::string) = 0;
@@ -71,6 +76,9 @@ class Microphys
 
         virtual TF get_Nc0() = 0;
         virtual TF get_Ni0() = 0;
+        virtual Microphys_type get_swmicro() = 0;
+        virtual void get_radiation_fields(Thermo<TF>& thermo, Field3d<TF>&, Field3d<TF>&) const = 0;
+        virtual void get_radiation_columns(Thermo<TF>&, TF*, TF*, std::vector<int>&, std::vector<int>&) const = 0;
 
         // GPU functions and variables.
         #ifdef USECUDA
@@ -85,6 +93,7 @@ class Microphys
         Grid<TF>& grid;
         Fields<TF>& fields;
         Field3d_operators<TF> field3d_operators;
+        Timer<TF> timer;
 
         Microphys_type swmicrophys;
 };

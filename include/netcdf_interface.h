@@ -137,6 +137,11 @@ class Netcdf_handle
                 const float,
                 const int);
 
+        template<typename T>
+        T get_attribute(
+            const std::string&,
+            const std::string&);
+
         virtual int get_dim_id(const std::string&) = 0;
 
     protected:

@@ -146,7 +146,7 @@ crosslist=qlqi_path,qlqi_base,qlqi_top,qlqicore_max_thv_prime,sw_flux_dn,sw_flux
 
 [column]
 swcolumn=1
-sampletime=30
+sampletime=60
 coordinates[x]=None
 coordinates[y]=None
 

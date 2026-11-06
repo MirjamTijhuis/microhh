@@ -35,6 +35,7 @@
 #include "thermo.h"
 #include "thermo_moist_functions.h"
 #include "fast_math.h"
+#include "timeloop.h"
 
 #include "constants.h"
 #include "microphys.h"
@@ -116,7 +117,7 @@ namespace mp3d
                         const TF xc      = rho[k] * ql[ijk] / nc;    // Mean mass of cloud drops [kg]
                         const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk] + dsmall);    // SB06, Eq 5
                         const TF phi_au  = TF(600.) * pow(tau, TF(0.68)) * fm::pow3(TF(1.) - pow(tau, TF(0.68)));    // UCLA-LES
-                        const TF au_tend = rho_0<TF> * kccxs * fm::pow2(ql[ijk]) * fm::pow2(xc) *
+                        const TF au_tend = rho_0<TF> / fm::pow2(rho[k]) * kccxs * fm::pow2(ql[ijk]*rho[k]) * fm::pow2(xc) *
                                                (TF(1.) + phi_au / fm::pow2(TF(1.)-tau)); // SB06, eq 4
 
                         qrt[ijk]  += au_tend;
@@ -148,7 +149,7 @@ namespace mp3d
                     {
                         const TF tau     = TF(1.) - ql[ijk] / (ql[ijk] + qr[ijk]); // SB06, Eq 5
                         const TF phi_ac  = fm::pow4(tau / (tau + TF(5e-5))); // SB06, Eq 8
-                        const TF ac_tend = k_cr * ql[ijk] *  qr[ijk] * phi_ac * sqrt(rho_0<TF> / rho[k]); // SB06, Eq 7
+                        const TF ac_tend = k_cr * (ql[ijk]*rho[k]) *  (qr[ijk]*rho[k]) * phi_ac * sqrt(rho_0<TF> / rho[k]) / rho[k]; // SB06, Eq 7
 
                         qrt[ijk]  += ac_tend;
                         qtt[ijk]  -= ac_tend;
@@ -279,7 +280,8 @@ namespace mp2d
     void evaporation(TF* const restrict qrt, TF* const restrict nrt,
                      TF* const restrict qtt, TF* const restrict thlt,
                      const TF* const restrict qr, const TF* const restrict nr,
-                     const TF* const restrict ql, const TF* const restrict qt, const TF* const restrict thl,
+                     const TF* const restrict ql, const TF* const restrict T,
+                     const TF* const restrict qt, const TF* const restrict thl,
                      const TF* const restrict rho, const TF* const restrict exner, const TF* const restrict p,
                      const TF* const restrict rain_mass, const TF* const restrict rain_diameter,
                      const int istart, const int jstart, const int kstart,
@@ -297,22 +299,29 @@ namespace mp2d
 
                 if (qr[ijk] > qr_min<TF>)
                 {
-                    const TF mr  = rain_mass[ik];
-                    const TF dr  = rain_diameter[ik];
+                    // Supersaturation over water (-, KP97 Eq 4-37).
+                    const TF qv  = qt[ijk] - ql[ijk];
+                    const TF qs  = qsat_liq(p[k], T[ijk]);
+                    const TF S   = qv / qs - TF(1.);  // Saturation
 
-                    const TF T   = thl[ijk] * exner[k] + (Lv<TF> * ql[ijk]) / (cp<TF> * exner[k]); // Absolute temperature [K]
-                    const TF Glv = TF(1.) / (Rv<TF> * T / (esat_liq(T) * D_v<TF>) +
-                                       (Lv<TF> / (K_t<TF> * T)) * (Lv<TF> / (Rv<TF> * T) - TF(1.))); // Cond/evap rate (kg m-1 s-1)?
+                    if (S < TF(0))
+                    {
+                        const TF mr = rain_mass[ik];
+                        const TF dr = rain_diameter[ik];
 
-                    const TF S   = (qt[ijk] - ql[ijk]) / qsat_liq(p[k], T) - TF(1.); // Saturation
-                    const TF F   = 1.; // Evaporation excludes ventilation term from SB06 (like UCLA, unimportant term? TODO: test)
+                        const TF Glv = TF(1.) / (Rv<TF> * T[ijk] / (esat_liq(T[ijk]) * D_v<TF>) +
+                                                 (Lv<TF> / (K_t<TF> * T[ijk])) *
+                                                 (Lv<TF> / (Rv<TF> * T[ijk]) - TF(1.))); // Cond/evap rate (kg m-1 s-1)?
 
-                    const TF ev_tend = TF(2.) * pi<TF> * dr * Glv * S * F * nr[ijk] / rho[k];
+                        const TF F = 1.; // Evaporation excludes ventilation term from SB06 (like UCLA, unimportant term? TODO: test)
 
-                    qrt[ijk]  += ev_tend;
-                    nrt[ijk]  += lambda_evap * ev_tend * rho[k] / mr;
-                    qtt[ijk]  -= ev_tend;
-                    thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * ev_tend;
+                        const TF ev_tend = TF(2.) * Constants::pi<TF> * dr * Glv * S * F * nr[ijk] / rho[k];
+
+                        qrt[ijk] += ev_tend;
+                        nrt[ijk] += lambda_evap * ev_tend * rho[k] / mr;
+                        qtt[ijk] -= ev_tend;
+                        thlt[ijk] += Lv<TF> / (cp<TF> * exner[k]) * ev_tend;
+                    }
                 }
             }
     }
@@ -347,8 +356,9 @@ namespace mp2d
 
                     // Selfcollection
                     const TF sc_tend =
-                        -k_rr * nr[ijk] * qr[ijk]*rho[k] / fm::pow9(TF(1.) + kappa_rr /
-                        lambdar * pow(pirhow<TF>, TF(1.)/TF(3.))) * sqrt(rho_0<TF> / rho[k]);
+                        -k_rr * nr[ijk] * qr[ijk]*rho[k] /
+                        std::pow(TF(1.) + kappa_rr / lambdar * pow(pirhow<TF>, TF(1.)/TF(3.)), TF(-9))
+                        * sqrt(rho_0<TF> / rho[k]);
 
                     nrt[ijk] += sc_tend;
 
@@ -412,8 +422,8 @@ namespace mp2d
                 }
                 else
                 {
-                    w_qr[ik] = 0.;
-                    w_nr[ik] = 0.;
+                    w_qr[ik] = TF(0);
+                    w_nr[ik] = TF(0);
                 }
             }
         }
@@ -548,8 +558,8 @@ Microphys_2mom_warm<TF>::Microphys_2mom_warm(Master& masterin, Grid<TF>& gridin,
 
     // Read microphysics switches and settings
     swmicrobudget = inputin.get_item<bool>("micro", "swmicrobudget", "", false);
-    cflmax = inputin.get_item<TF>("micro", "cflmax", "", 2.);
-    Nc0 = inputin.get_item<TF>("micro", "Nc0", "");
+    cflmax        = inputin.get_item<TF>("micro", "cflmax", "", 2.);
+    Nc0           = inputin.get_item<TF>("micro", "Nc0", "");
 
     // Initialize the qr (rain water specific humidity) and nr (droplot number concentration) fields
     const std::string group_name = "thermo";
@@ -560,6 +570,12 @@ Microphys_2mom_warm<TF>::Microphys_2mom_warm(Master& masterin, Grid<TF>& gridin,
     // Load the viscosity for both fields.
     fields.sp.at("qr")->visc = inputin.get_item<TF>("fields", "svisc", "qr");
     fields.sp.at("nr")->visc = inputin.get_item<TF>("fields", "svisc", "nr");
+
+    // check if thldeep=0
+    const bool sw_thl_deep = inputin.get_item<bool>("thermo", "swthldeep", "", false);
+    if (sw_thl_deep)
+        throw std::runtime_error("2mom_warm microphysics has hardcode Betts thl, so deep convective thl (swthldeep=true) is not allowed");
+
 }
 
 template<typename TF>
@@ -580,8 +596,8 @@ void Microphys_2mom_warm<TF>::init(Thermo<TF>& thermo)
 
 template<typename TF>
 void Microphys_2mom_warm<TF>::create(
-        Input& inputin, Netcdf_handle& input_nc,
-        Stats<TF>& stats, Cross<TF>& cross, Dump<TF>& dump, Column<TF>& column)
+        Input& inputin, Netcdf_handle& input_nc, Timeloop<TF>& timeloop,
+        Stats<TF>& stats, Cross<TF>& cross, Dump<TF>& dump, Column<TF>& column, const std::string& sim_name)
 {
     const std::string group_name = "thermo";
 
@@ -593,6 +609,7 @@ void Microphys_2mom_warm<TF>::create(
     {
         // Time series
         stats.add_time_series("rr", "Mean surface rain rate", "kg m-2 s-1", group_name);
+        //stats.add_profs(*fields.sp.at("qr"), "z", {"frac", "path", "cover"}, group_name);
         stats.add_profs(*fields.sp.at("qr"), "z", {"frac", "cover"}, group_name);
 
         if (swmicrobudget)
@@ -639,9 +656,10 @@ void Microphys_2mom_warm<TF>::create(
 
 #ifndef USECUDA
 template<typename TF>
-void Microphys_2mom_warm<TF>::exec(Thermo<TF>& thermo, const double dt, Stats<TF>& stats)
+void Microphys_2mom_warm<TF>::exec(Thermo<TF>& thermo, Timeloop<TF>& timeloop, Stats<TF>& stats)
 {
     auto& gd = grid.get_grid_data();
+    const double dt = timeloop.get_sub_time_step();
 
     // Remove spurious negative values from qr and nr fields
     remove_negative_values(fields.sp.at("qr")->fld.data(), gd.istart, gd.jstart, gd.kstart,
@@ -652,6 +670,9 @@ void Microphys_2mom_warm<TF>::exec(Thermo<TF>& thermo, const double dt, Stats<TF
     // Get cloud liquid water specific humidity from thermodynamics
     auto ql = fields.get_tmp();
     thermo.get_thermo_field(*ql, "qlqi", false, false);
+
+    auto T = fields.get_tmp();
+    thermo.get_thermo_field(*T, "T", false, false);
 
     // Get pressure and exner function from thermodynamics
     std::vector<TF> p     = thermo.get_basestate_vector("p");
@@ -695,51 +716,93 @@ void Microphys_2mom_warm<TF>::exec(Thermo<TF>& thermo, const double dt, Stats<TF
     // ---------------------------------
 
     // Autoconversion; formation of rain drop by coagulating cloud droplets
-    mp3d::autoconversion(fields.st.at("qr")->fld.data(), fields.st.at("nr")->fld.data(), fields.st.at("qt")->fld.data(), fields.st.at("thl")->fld.data(),
-                         fields.sp.at("qr")->fld.data(), ql->fld.data(), fields.rhoref.data(), exner.data(), Nc0,
-                         gd.istart, gd.jstart, gd.kstart,
-                         gd.iend,   gd.jend,   gd.kend,
-                         gd.icells, gd.ijcells);
+    mp3d::autoconversion(
+            fields.st.at("qr")->fld.data(),
+            fields.st.at("nr")->fld.data(),
+            fields.st.at("qt")->fld.data(),
+            fields.st.at("thl")->fld.data(),
+            fields.sp.at("qr")->fld.data(),
+            ql->fld.data(),
+            fields.rhoref.data(),
+            exner.data(), Nc0,
+            gd.istart, gd.jstart, gd.kstart,
+            gd.iend,   gd.jend,   gd.kend,
+            gd.icells, gd.ijcells);
 
     // Accretion; growth of raindrops collecting cloud droplets
-    mp3d::accretion(fields.st.at("qr")->fld.data(), fields.st.at("qt")->fld.data(), fields.st.at("thl")->fld.data(),
-                    fields.sp.at("qr")->fld.data(), ql->fld.data(), fields.rhoref.data(), exner.data(),
-                    gd.istart, gd.jstart, gd.kstart,
-                    gd.iend,   gd.jend,   gd.kend,
-                    gd.icells, gd.ijcells);
+    mp3d::accretion(
+            fields.st.at("qr")->fld.data(),
+            fields.st.at("qt")->fld.data(),
+            fields.st.at("thl")->fld.data(),
+            fields.sp.at("qr")->fld.data(),
+            ql->fld.data(),
+            fields.rhoref.data(),
+            exner.data(),
+            gd.istart, gd.jstart, gd.kstart,
+            gd.iend,   gd.jend,   gd.kend,
+            gd.icells, gd.ijcells);
 
     // Rest of the microphysics is handled per XZ slice
     for (int j=gd.jstart; j<gd.jend; ++j)
     {
         // Prepare the XZ slices which are used in all routines
-        mp2d::prepare_microphysics_slice(rain_mass, rain_diam, mu_r, lambda_r,
-                                         fields.sp.at("qr")->fld.data(), fields.sp.at("nr")->fld.data(), fields.rhoref.data(),
-                                         gd.istart, gd.iend, gd.kstart, gd.kend, gd.icells, gd.ijcells, j);
+        mp2d::prepare_microphysics_slice(
+                rain_mass,
+                rain_diam,
+                mu_r,
+                lambda_r,
+                fields.sp.at("qr")->fld.data(),
+                fields.sp.at("nr")->fld.data(),
+                fields.rhoref.data(),
+                gd.istart, gd.iend,
+                gd.kstart, gd.kend,
+                gd.icells, gd.ijcells, j);
 
         // Evaporation; evaporation of rain drops in unsaturated environment
-        mp2d::evaporation(fields.st.at("qr")->fld.data(), fields.st.at("nr")->fld.data(),  fields.st.at("qt")->fld.data(), fields.st.at("thl")->fld.data(),
-                          fields.sp.at("qr")->fld.data(), fields.sp.at("nr")->fld.data(),  ql->fld.data(),
-                          fields.sp.at("qt")->fld.data(), fields.sp.at("thl")->fld.data(), fields.rhoref.data(), exner.data(), p.data(),
-                          rain_mass, rain_diam,
-                          gd.istart, gd.jstart, gd.kstart,
-                          gd.iend,   gd.jend,   gd.kend,
-                          gd.icells, gd.ijcells, j);
+        mp2d::evaporation(
+                fields.st.at("qr")->fld.data(),
+                fields.st.at("nr")->fld.data(),
+                fields.st.at("qt")->fld.data(),
+                fields.st.at("thl")->fld.data(),
+                fields.sp.at("qr")->fld.data(),
+                fields.sp.at("nr")->fld.data(),
+                ql->fld.data(),
+                T->fld.data(),
+                fields.sp.at("qt")->fld.data(),
+                fields.sp.at("thl")->fld.data(),
+                fields.rhoref.data(),
+                exner.data(), p.data(),
+                rain_mass, rain_diam,
+                gd.istart, gd.jstart, gd.kstart,
+                gd.iend,   gd.jend,   gd.kend,
+                gd.icells, gd.ijcells, j);
 
         // Self collection and breakup; growth of raindrops by mutual (rain-rain) coagulation, and breakup by collisions
-        mp2d::selfcollection_breakup(fields.st.at("nr")->fld.data(), fields.sp.at("qr")->fld.data(), fields.sp.at("nr")->fld.data(), fields.rhoref.data(),
-                                     rain_mass, rain_diam, lambda_r,
-                                     gd.istart, gd.jstart, gd.kstart,
-                                     gd.iend,   gd.jend,   gd.kend,
-                                     gd.icells, gd.ijcells, j);
+        mp2d::selfcollection_breakup(
+                fields.st.at("nr")->fld.data(),
+                fields.sp.at("qr")->fld.data(),
+                fields.sp.at("nr")->fld.data(),
+                fields.rhoref.data(),
+                rain_mass, rain_diam, lambda_r,
+                gd.istart, gd.jstart, gd.kstart,
+                gd.iend,   gd.jend,   gd.kend,
+                gd.icells, gd.ijcells, j);
 
         // Sedimentation; sub-grid sedimentation of rain
-        mp2d::sedimentation_ss08(fields.st.at("qr")->fld.data(), fields.st.at("nr")->fld.data(), rr_bot.data(),
-                                 w_qr, w_nr, c_qr, c_nr, slope_qr, slope_nr, flux_qr, flux_nr, mu_r, lambda_r,
-                                 fields.sp.at("qr")->fld.data(), fields.sp.at("nr")->fld.data(),
-                                 fields.rhoref.data(), fields.rhorefh.data(), gd.dzi.data(), gd.dz.data(), dt,
-                                 gd.istart, gd.jstart, gd.kstart,
-                                 gd.iend,   gd.jend,   gd.kend,
-                                 gd.icells, gd.kcells, gd.ijcells, j);
+        mp2d::sedimentation_ss08(
+                fields.st.at("qr")->fld.data(),
+                fields.st.at("nr")->fld.data(),
+                rr_bot.data(),
+                w_qr, w_nr, c_qr, c_nr, slope_qr,
+                slope_nr, flux_qr, flux_nr, mu_r, lambda_r,
+                fields.sp.at("qr")->fld.data(),
+                fields.sp.at("nr")->fld.data(),
+                fields.rhoref.data(),
+                fields.rhorefh.data(),
+                gd.dzi.data(), gd.dz.data(), dt,
+                gd.istart, gd.jstart, gd.kstart,
+                gd.iend,   gd.jend,   gd.kend,
+                gd.icells, gd.kcells, gd.ijcells, j);
     }
 
     // Release all local tmp fields in use
@@ -747,6 +810,7 @@ void Microphys_2mom_warm<TF>::exec(Thermo<TF>& thermo, const double dt, Stats<TF
         fields.release_tmp(it);
 
     fields.release_tmp(ql);
+    fields.release_tmp(T);
 
     stats.calc_tend(*fields.st.at("thl"), tend_name);
     stats.calc_tend(*fields.st.at("qt"),  tend_name);
@@ -774,7 +838,10 @@ void Microphys_2mom_warm<TF>::exec_stats(Stats<TF>& stats, Thermo<TF>& thermo, c
         // Get cloud liquid water specific humidity from thermodynamics
         auto ql = fields.get_tmp();
         ql->loc = gd.sloc;
-        thermo.get_thermo_field(*ql, "ql", false, false);
+        thermo.get_thermo_field(*ql, "ql", false, true);
+
+        auto T = fields.get_tmp();
+        thermo.get_thermo_field(*T, "T", false, true);
 
         // Get pressure and exner function from thermodynamics
         std::vector<TF> p     = thermo.get_basestate_vector("p");
@@ -873,7 +940,7 @@ void Microphys_2mom_warm<TF>::exec_stats(Stats<TF>& stats, Thermo<TF>& thermo, c
                                              gd.istart, gd.iend, gd.kstart, gd.kend, gd.icells, gd.ijcells, j);
 
             mp2d::evaporation(qrt->fld.data(), nrt->fld.data(),  qtt->fld.data(), thlt->fld.data(),
-                              fields.sp.at("qr")->fld.data(), fields.sp.at("nr")->fld.data(),  ql->fld.data(),
+                              fields.sp.at("qr")->fld.data(), fields.sp.at("nr")->fld.data(),  ql->fld.data(), T->fld.data(),
                               fields.sp.at("qt")->fld.data(), fields.sp.at("thl")->fld.data(), fields.rhoref.data(), exner.data(), p.data(),
                               rain_mass, rain_diam,
                               gd.istart, gd.jstart, gd.kstart,
@@ -933,6 +1000,7 @@ void Microphys_2mom_warm<TF>::exec_stats(Stats<TF>& stats, Thermo<TF>& thermo, c
             fields.release_tmp(it);
 
         fields.release_tmp(ql  );
+        fields.release_tmp(T   );
         fields.release_tmp(qrt );
         fields.release_tmp(nrt );
         fields.release_tmp(thlt);
@@ -942,7 +1010,7 @@ void Microphys_2mom_warm<TF>::exec_stats(Stats<TF>& stats, Thermo<TF>& thermo, c
 
 #ifndef USECUDA
 template<typename TF>
-void Microphys_2mom_warm<TF>::exec_column(Column<TF>& column)
+void Microphys_2mom_warm<TF>::exec_column(Column<TF>& column, Thermo<TF>& thermo)
 {
     const TF no_offset = 0.;
     column.calc_time_series("rr", rr_bot.data(), no_offset);
@@ -950,7 +1018,7 @@ void Microphys_2mom_warm<TF>::exec_column(Column<TF>& column)
 #endif
 
 template<typename TF>
-void Microphys_2mom_warm<TF>::exec_cross(Cross<TF>& cross, unsigned long iotime)
+void Microphys_2mom_warm<TF>::exec_cross(Cross<TF>& cross, Thermo<TF>& thermo, unsigned long iotime)
 {
     TF no_offset = 0.;
     if (cross.get_switch())
@@ -971,11 +1039,13 @@ unsigned long Microphys_2mom_warm<TF>::get_time_limit(unsigned long idt, const d
 
     // Calculate the maximum sedimentation CFL number
     auto w_qr = fields.get_tmp();
-    TF cfl = mp3d::calc_max_sedimentation_cfl(w_qr->fld.data(), fields.sp.at("qr")->fld.data(), fields.sp.at("nr")->fld.data(),
-                                              fields.rhoref.data(), gd.dzi.data(), dt,
-                                              gd.istart, gd.jstart, gd.kstart,
-                                              gd.iend,   gd.jend,   gd.kend,
-                                              gd.icells, gd.ijcells);
+    TF cfl = mp3d::calc_max_sedimentation_cfl(
+        w_qr->fld.data(), fields.sp.at("qr")->fld.data(), fields.sp.at("nr")->fld.data(),
+        fields.rhoref.data(), gd.dzi.data(), dt,
+        gd.istart, gd.jstart, gd.kstart,
+        gd.iend,   gd.jend,   gd.kend,
+        gd.icells, gd.ijcells);
+
     fields.release_tmp(w_qr);
 
     // Get maximum CFL across all MPI tasks

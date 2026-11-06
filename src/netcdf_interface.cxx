@@ -117,7 +117,6 @@ namespace
         return nc_put_vara_int(ncid, var_id, start.data(), count.data(), values.data());
     }
 
-
     template<typename TF>
     int nc_put_vara_wrapper(
             int, int, const std::vector<size_t>&, const std::vector<size_t>&, const TF);
@@ -141,6 +140,32 @@ namespace
             int ncid, int var_id, const std::vector<size_t>& start, const std::vector<size_t>& count, const int value)
     {
         return nc_put_vara_int(ncid, var_id, start.data(), count.data(), &value);
+    }
+
+    // Wrapper for the `nc_get_vara_TYPE` functions
+    template<typename TF>
+    int nc_get_att_wrapper(
+            int, int, const std::string&, std::vector<TF>&);
+
+    template<>
+    int nc_get_att_wrapper(
+            int ncid, int varid, const std::string& name, std::vector<double>& values)
+    {
+        return nc_get_att_double(ncid, varid, name.c_str(), values.data());
+    }
+
+    template<>
+    int nc_get_att_wrapper(
+            int ncid, int varid, const std::string& name, std::vector<float>& values)
+    {
+        return nc_get_att_float(ncid, varid, name.c_str(), values.data());
+    }
+
+    template<>
+    int nc_get_att_wrapper(
+            int ncid, int varid, const std::string& name, std::vector<int>& values)
+    {
+        return nc_get_att_int(ncid, varid, name.c_str(), values.data());
     }
 }
 
@@ -756,6 +781,40 @@ void Netcdf_variable<T>::add_attribute(const std::string& name, const float valu
     nc_handle.add_attribute(name, value, var_id);
 }
 
+template<typename TF>
+TF Netcdf_handle::get_attribute(
+        const std::string& attribute_name,
+        const std::string& variable_name)
+{
+    std::string message="Retrieving attribute from NetCDF: " + attribute_name;
+    master.print_message(message);
+
+    int nc_check_code = 0;
+    int var_id;
+
+    if (variable_name == "global")
+        var_id = NC_GLOBAL;
+    else
+    {
+        if (master.get_mpiid() == mpiid_to_write)
+            nc_check_code = nc_inq_varid(ncid, variable_name.c_str(), &var_id);
+        nc_check(master, nc_check_code, mpiid_to_write);
+    }
+
+    TF value = 0;
+    if (master.get_mpiid() == 0)
+    {
+        std::vector<TF> values(1);
+        nc_check_code = nc_get_att_wrapper(ncid, var_id, attribute_name, values);
+        value = values[0];
+    }
+
+    nc_check(master, nc_check_code, mpiid_to_write);
+    master.broadcast(&value, 1);
+
+    return value;
+}
+
 template class Netcdf_variable<double>;
 template class Netcdf_variable<float>;
 template class Netcdf_variable<int>;
@@ -787,3 +846,7 @@ template void Netcdf_handle::insert<int>   (const int,    const int, const std::
 template Netcdf_variable<double> Netcdf_handle::add_variable<double> (const std::string&, const std::vector<std::string>&);
 template Netcdf_variable<float>  Netcdf_handle::add_variable<float>  (const std::string&, const std::vector<std::string>&);
 template Netcdf_variable<int>    Netcdf_handle::add_variable<int>    (const std::string&, const std::vector<std::string>&);
+
+template double Netcdf_handle::get_attribute<double>(const std::string&, const std::string&);
+template float  Netcdf_handle::get_attribute<float>(const std::string&, const std::string&);
+template int    Netcdf_handle::get_attribute<int>(const std::string&, const std::string&);

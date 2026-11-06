@@ -73,6 +73,7 @@ class Thermo_dry : public Thermo<TF>
         bool check_field_exists(std::string name);
         void get_thermo_field(
                 Field3d<TF>&, const std::string&, const bool, const bool);
+        Satadjust_type get_swsatadjust() {throw std::runtime_error("Function get_swsatadjust not implemented"); };
         void get_buoyancy_surf(std::vector<TF>&, std::vector<TF>&, bool);
         void get_buoyancy_surf(std::vector<TF>&, std::vector<TF>&, std::vector<TF>&)
             { throw std::runtime_error("Function get_buoyancy_surf not implemented"); }
@@ -118,7 +119,7 @@ class Thermo_dry : public Thermo<TF>
             { throw std::runtime_error("Function get_radiation_fields not implemented"); }
         void get_radiation_fields(Field3d<TF>&, Field3d<TF>&, Field3d<TF>&, Field3d<TF>&, Field3d<TF>&, Field3d<TF>&) const
             { throw std::runtime_error("Function get_radiation_fields not implemented"); }
-        void get_radiation_columns(Field3d<TF>&, std::vector<int>&, std::vector<int>&) const
+        void get_radiation_columns(TF*, TF*, TF*, TF*, TF*, TF*, TF*, std::vector<int>&, std::vector<int>&) const
             { throw std::runtime_error("Function get_radiation_columns not implemented"); }
         void get_land_surface_fields(
                 std::vector<TF>&, std::vector<TF>&, std::vector<TF>&,

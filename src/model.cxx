@@ -283,7 +283,7 @@ void Model<TF>::load()
     aerosol->create(*input, *input_nc, *stats);
     background->create(*input, *input_nc, *stats);
 
-    microphys->create(*input, *input_nc, *stats, *cross, *dump, *column);
+    microphys->create(*input, *input_nc, *timeloop, *stats, *cross, *dump, *column, sim_name);
 
     // Radiation needs to be created after thermo as it needs base profiles.
     radiation->create(*input, *input_nc, *thermo, *stats, *column, *cross, *dump);
@@ -440,10 +440,6 @@ void Model<TF>::exec()
                 thermo->exec(timeloop->get_sub_time_step(), *stats);
                 check("thermo");
 
-                // Calculate the microphysics.
-                microphys->exec(*thermo, timeloop->get_dt(), *stats);
-                check("micro");
-
                 // Calculate the radiation fluxes and the related heating rate.
                 radiation->exec(*thermo, timeloop->get_time(), *timeloop, *stats, *aerosol, *background, *microphys);
                 check("radiation");
@@ -504,6 +500,10 @@ void Model<TF>::exec()
                 check("press");
                 boundary->set_ghost_cells_w(Boundary_w_type::Normal_type);
 
+                // Calculate the microphysics.
+                microphys->exec(*thermo, *timeloop, *stats);
+                check("micro");
+
                 // Apply the limiter as the last tendency.
                 limiter->limit_tendencies(timeloop->get_sub_time_step(), *stats);
                 check("limiter");
@@ -557,7 +557,7 @@ void Model<TF>::exec()
                         thermo   ->exec_column(*column);
                         radiation->exec_column(*column, *thermo, *timeloop);
                         boundary ->exec_column(*column, *thermo);
-                        microphys->exec_column(*column);
+                        microphys->exec_column(*column, *thermo);
 
                         #pragma omp critical
                         column   ->exec(iter, time, itime);
@@ -730,7 +730,7 @@ void Model<TF>::calculate_statistics(int iteration, double time, unsigned long i
 
         fields   ->exec_cross(*cross, iotime);
         thermo   ->exec_cross(*cross, iotime);
-        microphys->exec_cross(*cross, iotime);
+        microphys->exec_cross(*cross, *thermo, iotime);
         ib       ->exec_cross(*cross, iotime);
         boundary ->exec_cross(*cross, iotime);
     }

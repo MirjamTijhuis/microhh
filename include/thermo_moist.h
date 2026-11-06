@@ -40,12 +40,10 @@ template<typename> class Field3d;
 template<typename> class Timedep;
 template<typename> class Timeloop;
 
-
 /**
- * Class for the dry thermodynamics.
+ * Class for the moist thermodynamics.
  * This class is responsible for the computation of the right hand side term related to
- * the acceleration by buoyancy. In the dry thermodynamics temperature and buoyancy are
- * equivalent and no complex buoyancy function is required.
+ * the acceleration by buoyancy.
  */
 
 enum class Micro_type {disabled, two_mom_warm};
@@ -77,12 +75,11 @@ class Thermo_moist : public Thermo<TF>
         bool check_field_exists(std::string name);
         void get_thermo_field(Field3d<TF>&, const std::string&, const bool, const bool);
         void get_radiation_fields(
-                Field3d<TF>&, Field3d<TF>&, Field3d<TF>&, Field3d<TF>&, Field3d<TF>&) const;
-        void get_radiation_fields(
                 Field3d<TF>&, Field3d<TF>&, Field3d<TF>&, Field3d<TF>&, Field3d<TF>&, Field3d<TF>&) const;
-        void get_radiation_columns(Field3d<TF>&, std::vector<int>&, std::vector<int>&) const;
+        void get_radiation_columns(TF*, TF*, TF*, TF*, TF*, TF*, TF*, std::vector<int>&, std::vector<int>&) const;
         void get_land_surface_fields(
             std::vector<TF>&, std::vector<TF>&, std::vector<TF>&, std::vector<TF>&, std::vector<TF>&);
+        Satadjust_type get_swsatadjust() {return this->sw_satadjust;};
         void get_buoyancy_surf(std::vector<TF>&, std::vector<TF>&, bool);
         void get_buoyancy_surf(std::vector<TF>&, std::vector<TF>&, std::vector<TF>&);
         void get_buoyancy_fluxbot(std::vector<TF>&, bool);
@@ -136,6 +133,9 @@ class Thermo_moist : public Thermo<TF>
         Field3d_operators<TF> field3d_operators;
         Field3d_io<TF> field3d_io;
 
+        // Switches for saturation adjustment ql and qi.
+        Satadjust_type sw_satadjust;
+
         // cross sections
         std::vector<std::string> crosslist;        ///< List with all crosses from ini file
         bool swcross_b;
@@ -184,6 +184,7 @@ class Thermo_moist : public Thermo<TF>
             std::vector<TF> exnrefh;
             std::vector<TF> rhoref;
             std::vector<TF> rhorefh;
+            std::vector<TF> qhm0;
 
             // GPU functions and variables
             TF* thl0_g;

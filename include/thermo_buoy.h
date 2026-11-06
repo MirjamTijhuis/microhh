@@ -64,6 +64,7 @@ class Thermo_buoy : public Thermo<TF>
         void get_prog_vars(std::vector<std::string>&);  ///< Retrieve a list of prognostic variables.
         void get_thermo_field(
                 Field3d<TF>&, const std::string&, const bool, const bool); ///< Compute the buoyancy for usage in another routine.
+        Satadjust_type get_swsatadjust() {throw std::runtime_error("Function get_swsatadjust not implemented"); };
         TF get_db_ref() const { return bs.n2; }
         int get_bl_depth();
         TF get_buoyancy_diffusivity();
@@ -77,7 +78,7 @@ class Thermo_buoy : public Thermo<TF>
             { throw std::runtime_error("Function get_radiation_fields not implemented"); }
         void get_radiation_fields(Field3d<TF>&, Field3d<TF>&, Field3d<TF>&, Field3d<TF>&, Field3d<TF>&, Field3d<TF>&) const
             { throw std::runtime_error("Function get_radiation_fields not implemented"); }
-        void get_radiation_columns(Field3d<TF>&, std::vector<int>&, std::vector<int>&) const
+        void get_radiation_columns(TF*, TF*, TF*, TF*, TF*, TF*, TF*, std::vector<int>&, std::vector<int>&) const
             { throw std::runtime_error("Function get_radiation_columns not implemented"); }
         void get_land_surface_fields(
                 std::vector<TF>&, std::vector<TF>&, std::vector<TF>&,
