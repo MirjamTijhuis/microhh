@@ -2674,6 +2674,8 @@ void Thermo_moist<TF>::create_phydro_3d(Timeloop<TF>& timeloop)
                 gd.jstart, gd.jend,
                 gd.kstart, gd.kend,
                 gd.icells, gd.ijcells);
+
+        fields.release_tmp(qhm);
     }
 
     if (nerror > 0)
@@ -3203,6 +3205,8 @@ void Thermo_moist<TF>::exec_cross(Cross<TF>& cross, unsigned long iotime)
             else if (it == "zi")
                 cross.cross_plane(output->fld_top.data(), no_offset, "zi", iotime);
         }
+
+        fields.release_tmp(qhm);
     }
 
     for (auto& it : crosslist)
