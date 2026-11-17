@@ -3032,6 +3032,8 @@ void Thermo_moist<TF>::create_phydro_3d(Timeloop<TF>& timeloop)
             calc_phydro_3d_wrapper.template operator()<Satadjust_type::Liquid_ice_deep>();
         else
             calc_phydro_3d_wrapper.template operator()<Satadjust_type::Disabled>();
+
+        fields.release_tmp(qhm);
     }
 
     if (nerror > 0)
@@ -3607,6 +3609,8 @@ void Thermo_moist<TF>::exec_cross(Cross<TF>& cross, unsigned long iotime)
             else if (it == "zi")
                 cross.cross_plane(output->fld_top.data(), no_offset, "zi", iotime);
         }
+
+        fields.release_tmp(qhm);
     }
 
     for (auto& it : crosslist)
