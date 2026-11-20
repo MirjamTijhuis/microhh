@@ -505,8 +505,9 @@ namespace
                         ( flux_up[ijk_nogc+kk_nogc] - flux_up[ijk_nogc]
                         - flux_dn[ijk_nogc+kk_nogc] + flux_dn[ijk_nogc] );
 
-                    const Float qc = clwp[ijk_nogc] / dpg;
-                    const Float qi = ciwp[ijk_nogc] / dpg;
+                    // clwp and ciwp in g/m2, therefore convert to kg/m2
+                    const Float qc = clwp[ijk_nogc] / (dpg * Float(1000));
+                    const Float qi = ciwp[ijk_nogc] / (dpg * Float(1000));
                     const Float T_end = T_start[ijk_nogc] + Tt_rad * dt;
 
                     Float thl_start;
